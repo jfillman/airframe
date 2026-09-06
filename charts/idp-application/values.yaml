@@ -447,17 +447,27 @@ serviceMonitor:
 
 networkPolicy:
   enabled: true
+  # Gates the allow-rule for BOTH ingress: and httpRoute: below (same selector,
+  # same data-plane namespace either way) - not two separate toggles, since a
+  # release only ever runs one of the two in practice.
   allowIngressFromIngressController: true
   # NOT in §3's schema - §3 says "deny cross-namespace ingress except from the
-  # ingress controller" but never named which namespace/labels identify it. Was an
-  # unconfirmed `ingress-nginx` placeholder guess until 2026-08-13, when
-  # gitops-cluster-dev/10-crds-operators/contour/ was actually built and
-  # live-verified on kind-dev - the cluster's real ingress controller is Contour
-  # (namespace `projectcontour`), not ingress-nginx. Parameterized rather than
-  # hardcoded regardless, since a different cluster could still run something else.
+  # ingress controller" but never named which namespace/labels identify it.
+  # History: unconfirmed `ingress-nginx` guess -> live-verified 2026-08-13 as
+  # Contour (`projectcontour`) on kind-dev's then-current classic-Ingress setup
+  # -> **superseded 2026-09-06**: this fleet has since moved to Gateway API on
+  # every real cluster, via kiac's own bundled installation (Gateway `kiac`,
+  # GatewayClass `traefik`) - confirmed live and identical across kind-dev,
+  # kind-man, and kind-prod (see idp_session_gateway_api_ingress and each
+  # gitops-cluster-*'s own 50-/60-gateway-routes/). `projectcontour` was dead
+  # the moment that migration finished for any release actually relying on this
+  # default; caught live rolling out httpRoute: on checkout-api (see
+  # httproute.yaml/networkpolicy.yaml's own header for the fuller story).
+  # Parameterized rather than hardcoded regardless, since a different cluster
+  # could still run something else.
   ingressControllerNamespaceSelector:
     matchLabels:
-      kubernetes.io/metadata.name: projectcontour
+      kubernetes.io/metadata.name: kiac-gateway
 
   # NOT in §3's schema - added 2026-08-13. The raw escape hatch below
   # (extraIngressRules/extraEgressRules) requires knowing the actual K8s

@@ -273,9 +273,29 @@ wanted.
 - `helm lint`/`helm template` verified: default-off render is unchanged from
   before this pass (no `HTTPRoute` object, byte-identical otherwise), enabled
   render produces a correct `HTTPRoute`, and both fail-fast guards fire on a
-  missing `hostnames`/`parentRefs` - not live-cluster-verified yet as part of
-  this specific pass (see whichever app's `gitops-<app-name>` values.yaml
-  first turns this on for that).
+  missing `hostnames`/`parentRefs`.
+
+**Live-verified same day, real bug found and fixed**: rolling this out onto
+`checkout-api` (its first real HTTPRoute, both `staging`/`prod` on `kind-prod`)
+got the `HTTPRoute` itself `Accepted`/`ResolvedRefs` by the Gateway, but every
+real request 504'd. Root cause: `networkpolicy.yaml`'s ingress-controller
+allow-rule only ever checked `ingress.enabled` - a release with
+`httpRoute.enabled: true` and classic `ingress.enabled: false` (the default)
+never allow-listed the Gateway's own data-plane namespace at all, so real
+traffic hit the pod-level `NetworkPolicy` deny. Fixed by gating that rule on
+`ingress.enabled OR httpRoute.enabled` (same selector, same namespace either
+way - a release only ever uses one of the two in practice). While there, also
+fixed `networkPolicy.ingressControllerNamespaceSelector`'s default itself:
+still `projectcontour`, a live-verified value from 2026-08-13's classic-Ingress
+Contour setup that this fleet has since fully replaced with Gateway API on
+every real cluster (kiac's own bundled `kiac`/`kiac-gateway`/`traefik`,
+confirmed identical across kind-dev, kind-man, kind-prod) - dead the moment
+that migration finished for any release actually relying on the default, now
+`kiac-gateway`. Confirmed no other tenant on `kind-prod` was relying on the
+stale default (none currently set `ingress.enabled: true`), and re-verified
+`checkout-api.{staging,prod}.kiac.local` actually serve real traffic through
+the Gateway after the fix, not just that the `HTTPRoute`/`NetworkPolicy`
+objects looked right.
 
 ## Not built yet
 

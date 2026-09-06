@@ -235,6 +235,48 @@ networkPolicy:
   `allowEgressTo`-empty case is byte-identical to before this pass (no
   behavior change for existing releases that don't use the new fields).
 
+## Gateway API HTTPRoute (2026-09-06, eighth pass)
+
+`httpRoute:` (see `values.yaml`) - a Gateway API `HTTPRoute`, first-class
+alongside classic `ingress:` (`templates/networking/ingress.yaml`), not a
+replacement for it. Every real cluster in this fleet already runs Gateway API,
+not a classic Ingress controller (`idp_session_gateway_api_ingress`,
+`gitops-cluster-kind-prod/50-gateway-routes/`), so this is the mechanism most
+new callers actually want - `ingress:` stays available for whichever
+cluster/app still needs classic Ingress. Independent opt-in toggle, off by
+default, same Service/first `rollout.ports` entry as its target; enabling both
+on one release is allowed (they render independent objects) but almost never
+wanted.
+
+- **`httpRoute.hostnames`/`httpRoute.parentRefs` are both required or the
+  render fails fast** (same instinct as `componentKind`/`configMapObjectName`/
+  `resolveAs` elsewhere in this chart) - an `HTTPRoute` with no hostname or no
+  parent Gateway isn't a real, useful object, so there's no sane default to
+  silently fall back to.
+- **No default `parentRefs` value** - this platform's real Gateway (`kiac`,
+  namespace `kiac-gateway`, confirmed live) isn't hardcoded here, the same
+  reasoning `networkPolicy.ingressControllerNamespaceSelector` already
+  documents for its own cluster-specific guess: a different cluster could run
+  a differently-named or differently-placed Gateway.
+- **Renders in the release's own namespace, right alongside the Service it
+  targets** - Gateway API requires same-namespace `backendRefs` without a
+  `ReferenceGrant`, satisfied by construction. The cross-namespace
+  `parentRefs` case (the common one - the platform Gateway lives in its own
+  shared namespace, not this app's) needs no `ReferenceGrant` on this side;
+  it's gated by the Gateway's own listener `allowedRoutes` instead, confirmed
+  live against every existing HTTPRoute in this fleet
+  (`gitops-cluster-kind-prod/50-gateway-routes/*.yaml`, `backstage/httproute.yaml`).
+- **`httpRoute.pathType` is a different enum from `ingress.pathType`**
+  (`PathPrefix | Exact | RegularExpression`, not `Prefix | Exact |
+  ImplementationSpecific`) - different API, easy to typo across the two if
+  copy-pasting between them.
+- `helm lint`/`helm template` verified: default-off render is unchanged from
+  before this pass (no `HTTPRoute` object, byte-identical otherwise), enabled
+  render produces a correct `HTTPRoute`, and both fail-fast guards fire on a
+  missing `hostnames`/`parentRefs` - not live-cluster-verified yet as part of
+  this specific pass (see whichever app's `gitops-<app-name>` values.yaml
+  first turns this on for that).
+
 ## Not built yet
 
 - The XRDs themselves (`NodeJSApplication`, `SpringBootApplication`,

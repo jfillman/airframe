@@ -378,6 +378,48 @@ ingress:
              # §"10-crds-operators"). Off by default since not every env needs it.
   tlsSecretName: "" # defaults to "<release-name>-tls" when tls: true and this is empty
 
+# NOT in §3's schema - added 2026-09-06. Gateway API HTTPRoute, first-class
+# alongside classic ingress: above - independent opt-in toggle, same
+# Service/first rollout.ports target. Every real cluster in this fleet already
+# runs Gateway API (see idp_session_gateway_api_ingress,
+# gitops-cluster-kind-prod's 50-gateway-routes/), so this is the mechanism most
+# new callers actually want; ingress: stays for whichever cluster/app still
+# needs classic Ingress. Off by default - enabling both on the same release is
+# allowed (they render independent objects) but almost never wanted.
+httpRoute:
+  enabled: false
+  hostnames: [] # e.g. ["checkout-api.prod.kiac.local"] - required (fails fast)
+                # when enabled: true. This platform's convention is
+                # <app>.<cluster-or-env-qualifier>.kiac.local - see a live
+                # example in gitops-cluster-kind-prod/50-gateway-routes/; an app
+                # with more than one env on the SAME cluster needs the env, not
+                # just the cluster, as the qualifier (e.g. checkout-api.staging.
+                # kiac.local vs checkout-api.prod.kiac.local) so its own
+                # HTTPRoutes don't collide on hostname.
+  parentRefs: [] # required (fails fast) when enabled: true - the platform
+                  # Gateway(s) this route attaches to.
+  # - name: kiac              # this fleet's real Gateway name on every cluster
+  #                            # today (kiac-installed, GatewayClass traefik) -
+  #                            # NOT hardcoded as a default here, a different
+  #                            # cluster could run a different Gateway.
+  #   namespace: kiac-gateway  # optional - Gateway API defaults to this
+  #                            # HTTPRoute's own namespace when omitted; the
+  #                            # platform Gateway lives in its own shared
+  #                            # namespace, so almost every real caller sets
+  #                            # this explicitly. No ReferenceGrant needed for
+  #                            # this cross-namespace parentRef - only
+  #                            # cross-namespace backendRefs need one, and this
+  #                            # chart's own backendRef is always same-namespace
+  #                            # (see httproute.yaml's header comment).
+  #   sectionName: ""          # optional - target one specific listener by name
+  path: /
+  pathType: PathPrefix # PathPrefix | Exact | RegularExpression - Gateway API's
+                        # HTTPRouteMatch path.type. NOT the same enum as
+                        # ingress.pathType above (Prefix | Exact |
+                        # ImplementationSpecific) - different API, different
+                        # spelling, easy to typo across the two.
+  annotations: {}
+
 # NOT in §3's schema - added 2026-08-13. kube-prometheus-stack is already installed
 # cluster-side (idp_session_phase2_holmesgpt, namespace `observability`), so this is
 # near-zero-cost: every app gets Prometheus-scraped from its own declared

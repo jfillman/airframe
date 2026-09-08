@@ -1,4 +1,8 @@
-# Airframe
+<div align="center">
+  <img src="docs/brand/airframe-tile.svg" width="88" height="88" alt="Airframe mark" />
+  <h1>Airframe</h1>
+  <p><i>The structural core: what a compliant service is, defined once.</i></p>
+</div>
 
 Crossplane XRDs, Compositions, Composition Functions, and the
 `airframe-application` Helm chart for [Dream IDP](https://github.com/jfillman/idp)

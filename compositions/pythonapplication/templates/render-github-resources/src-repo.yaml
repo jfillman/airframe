@@ -244,7 +244,7 @@ spec:
 
       <<$description>>
 
-      Scaffolded by `PythonApplication` (idp-service-catalog). Python <<$pythonVersion>>,
+      Scaffolded by `PythonApplication` (Airframe). Python <<$pythonVersion>>,
       <<$packageManager>>.
 
       ```

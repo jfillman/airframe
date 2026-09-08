@@ -4,7 +4,7 @@
 # ai-rollout/crossplane/xrd/application.yaml's own note on why v1 is wrong here.
 #
 # Fields sit FLAT under spec.* (not nested under spec.parameters like the
-# ai-rollout prototype's Application XRD) because idp-application's own
+# ai-rollout prototype's Application XRD) because airframe-application's own
 # templates/attached/slos.yaml already toYaml's each `slos:` values entry
 # straight under spec:, alongside spec.environmentRef. kind/plural/group match
 # what _helpers.tpl already hardcodes (type: slo -> kind: SLO) and what

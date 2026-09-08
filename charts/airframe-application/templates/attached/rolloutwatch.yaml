@@ -1,0 +1,42 @@
+{{/*
+AI-triage redesign (2026-08-18) - one RolloutWatch XR per release, unconditionally
+whenever this release has a workload (airframe-application.hasRollout), same treatment as
+ServiceMonitor: not a developer-selected components:/slos: entry, wired in
+automatically. metadata.name is deliberately the SAME as the Rollout's own
+(workload/rollout.yaml) and this XR lives in the SAME namespace - the RolloutWatch XRD's
+own Composition relies on that identity to find the right Rollout via an extra-resources
+match_name lookup (no separate "which rollout" field needed). See
+Airframe's rolloutwatches.catalog.idp.io XRD/Composition for the rest of the
+mechanism.
+*/}}
+{{- if eq (include "airframe-application.hasRollout" .) "true" }}
+apiVersion: {{ .Values.attachedResourceApiVersion }}
+kind: RolloutWatch
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ include "airframe-application.namespace" . }}
+  labels:
+    {{- include "airframe-application.labels" . | nindent 4 }}
+    hangar.io/subcomponent: attached-rollout-watch
+  annotations:
+    # Backstage catalog taxonomy (idp/docs/backstage-design.md "Catalog ingestion") -
+    # "platform", matching the Kyverno-applied value every other auto-derived XRD gets
+    # (gitops-cluster-dev/30-policy/kyverno-policies/
+    # backstage-component-type-annotations.yaml). Set directly here, not via Kyverno,
+    # because this is the one XRD whose instances come from this chart rather than a
+    # GitOps xr-requests commit, and the one that also needs to work on kiac-prod,
+    # which has no Kyverno installed (confirmed live).
+    terasky.backstage.io/component-type: platform
+spec:
+  environmentRef:
+    name: {{ include "airframe-application.environmentRef" . }}
+  appName: {{ .Values.appName }}
+  cluster: {{ .Values.cluster }}
+  env: {{ .Values.envName }}
+  {{- if .Values.notifications.slack.enabled }}
+  notifications:
+    slack:
+      enabled: true
+      channel: {{ .Values.notifications.slack.channel | quote }}
+  {{- end }}
+{{- end }}

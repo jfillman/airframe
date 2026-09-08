@@ -142,9 +142,9 @@ spec:
                   # gitops-<<$xrName>>
 
                   GitOps deployment repo for `<<$xrName>>`, scaffolded by `SpringBootApplication`
-                  (idp-service-catalog). Empty until this app's first `ApplicationEnvironment`
+                  (Airframe). Empty until this app's first `ApplicationEnvironment`
                   resource is created - each environment gets its own `<cluster>/<env>/values.yaml`
-                  here, rendered by `idp-application` (idp-service-catalog's shared Helm chart).
+                  here, rendered by `airframe-application` (Airframe's shared Helm chart).
                 commitMessage: "SpringBootApplication scaffold: README.md"
             ---
             # Commits a "shared"-mode SecretStore XR manifest into
@@ -551,7 +551,7 @@ spec:
 
                   <<$description>>
 
-                  Scaffolded by `SpringBootApplication` (idp-service-catalog). Java <<$javaVersion>>,
+                  Scaffolded by `SpringBootApplication` (Airframe). Java <<$javaVersion>>,
                   <<$buildTool>>.
 
                   <<- if eq $buildTool "gradle">>

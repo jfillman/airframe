@@ -73,7 +73,7 @@ spec:
                   type: integer
                   description: >-
                     Port the boilerplate HTTP server listens on (also the
-                    Dockerfile's EXPOSE). Matches idp-application's own
+                    Dockerfile's EXPOSE). Matches airframe-application's own
                     rollout.ports default convention.
                   minimum: 1
                   maximum: 65535

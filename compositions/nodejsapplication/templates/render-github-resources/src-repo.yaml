@@ -256,7 +256,7 @@ spec:
 
       <<$description>>
 
-      Scaffolded by `NodeJSApplication` (idp-service-catalog). Node <<$nodeVersion>>,
+      Scaffolded by `NodeJSApplication` (Airframe). Node <<$nodeVersion>>,
       <<$packageManager>>.
 
       ```

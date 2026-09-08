@@ -1,7 +1,7 @@
-# idp-service-catalog
+# Airframe
 
 Crossplane XRDs, Compositions, Composition Functions, and the
-`idp-application` Helm chart for [Dream IDP](https://github.com/jfillman/idp)
+`airframe-application` Helm chart for [Dream IDP](https://github.com/jfillman/idp)
 — the service catalog a Backstage-driven Crossplane plugin turns into
 self-service templates. Design lives in `idp`'s
 [`docs/service-catalog-design.md`](https://github.com/jfillman/idp/blob/main/docs/service-catalog-design.md);
@@ -46,7 +46,7 @@ that indirection exists to let a resource land on a remote target cluster, which
 `cicd-onboarding-status` step now proxies `DevClusterReady`/`CicdOnboarded` from the
 composed child's own conditions, preserving the pre-extraction UX
 (`kubectl describe nodejsapplication/<app>` still shows both directly on the app).
-Rollout is two separate `idp-service-catalog` tags, not one: a `managementPolicies`
+Rollout is two separate `Airframe` tags, not one: a `managementPolicies`
 safety fix (excluding `Delete` from the identity.yaml `RepositoryFile`, `v0.3.43`,
 already live-verified on all three onboarded apps) landed first, so the second tag's
 orphaning of the old composition-resource-name deletes only the k8s CR, not the real
@@ -83,7 +83,7 @@ cluster-scoped resource directly from this namespaced XR - same fix
 `kind-dev`: real Infisical project + identity + Universal Auth credentials → a
 `Ready: True` `ClusterSecretStore` → a real secret written via Infisical's API →
 pulled by a real `ExternalSecret` into a real K8s Secret with the correct value.
-Also fixed a real, pre-existing bug this surfaced in `idp-application`'s own
+Also fixed a real, pre-existing bug this surfaced in `airframe-application`'s own
 `ExternalSecret` template (`remoteRef.property` broke every pull against
 Infisical).
 
@@ -109,7 +109,7 @@ multi-cluster revision) — done, live-verified end-to-end on both `kind-dev` an
    already-existing project plus a SEPARATE `ClusterSecretStore` narrowed to
    exactly one namespace - real per-environment isolation (proven live: a
    correctly-scoped `ExternalSecret` pulls the right value, a wrong-namespace one
-   hard-fails), not a `secretsPath` convention. `idp-application`'s own chart
+   hard-fails), not a `secretsPath` convention. `airframe-application`'s own chart
    (`templates/attached/secretstore.yaml`, always-on like `NetworkPolicy`) is what
    actually triggers this now, not `ApplicationEnvironment`'s Composition directly -
    `ApplicationEnvironment` and `NodeJSApplication` are both `provider-github`-only,
@@ -131,12 +131,12 @@ See `idp/docs/service-catalog-design.md` Item 8 for the full design writeup and
 `operators/infisical-secretstore-operator/README.md` for the operator-level detail.
 
 **SecretStore provisioning moved to the Bootstrap XRs (xr-requests), off
-idp-application's chart — done, live-verified against real existing apps on both
+airframe-application's chart — done, live-verified against real existing apps on both
 clusters 2026-08-18.** Real user objection to the above: an always-on chart
 template meant secrets infrastructure only existed once someone shipped an actual
 release, not when an app/env was onboarded. `NodeJSApplication` and
 `ApplicationEnvironment` now each commit a `SecretStore` XR manifest via
-`xr-requests` instead (`idp-application`'s `attached/secretstore.yaml` deleted
+`xr-requests` instead (`airframe-application`'s `attached/secretstore.yaml` deleted
 entirely) - real nuance recorded in the design doc: `NodeJSApplication` could have
 composed it directly (same-cluster), `ApplicationEnvironment` structurally can't
 (cross-cluster, the same "no cluster holds another's API credential" constraint
@@ -162,7 +162,7 @@ from the [`ai-rollout`](https://github.com/jfillman/ai-rollout) prototype
 [jfillman/idp#8](https://github.com/jfillman/idp/pull/8). See each
 function's own README for the full detail.
 
-**`idp-application` Helm chart — built, and as of 2026-08-13 live-verified
+**`airframe-application` Helm chart — built, and as of 2026-08-13 live-verified
 end-to-end on a real cluster, not just `helm lint`/`helm template`.** Renders
 §3's full schema (Argo Rollout, Service, ConfigMaps, ExternalSecret, PVCs, HPA,
 PodDisruptionBudget, NetworkPolicy, AnalysisTemplates, `components:`/`slos:` as
@@ -176,7 +176,7 @@ full test pass against real cluster state (NetworkPolicy enforcement,
 ServiceMonitor scraping, a real canary rollout with a Prometheus-backed
 AnalysisRun, checksum-triggered revisions) - found and fixed two real bugs
 (`rollout.canaryAnalysis` didn't exist at all; `analysisTemplates:` silently
-dropped `args:`). See `charts/idp-application/README.md` for the full detail
+dropped `args:`). See `charts/airframe-application/README.md` for the full detail
 of every pass, including the earlier fixture-only bugs (an `envName`/`env`
 naming collision, Sprig's `default` silently discarding explicit `false`/`0`).
 The ingress-controller namespace selector is resolved too now (Contour,
@@ -336,9 +336,11 @@ comments):
 
 **GitOps wiring — done, live-verified 2026-08-13.**
 `gitops-cluster-dev/20-service-catalog/idp-service-catalog/application.yaml`
-pins this repo to git tag `v0.1.0` via a directory-source Application (same
+(directory name unchanged in that repo — `gitops-cluster-dev` wasn't part of this
+rebrand, only the `repoURL`/`path` fields inside it that point at this repo were
+updated, in `apron`, not here) pins this repo to git tag `v0.1.0` via a directory-source Application (same
 pattern already proven for `10-crds-operators`/`40-observability`), syncing
-`xrds/*.yaml` + `compositions/*/composition.yaml` only. `charts/idp-application`
+`xrds/*.yaml` + `compositions/*/composition.yaml` only. `charts/airframe-application`
 stays un-synced here — it's rendered per app-release into `gitops-<app-name>`
 repos, not installed cluster-wide — and `functions/`'s packages stay
 registered by pinned OCI tag in `10-crds-operators/crossplane/functions.yaml`,
@@ -351,7 +353,7 @@ the `ClusterAnalysisTemplate` golden-path library and `argocd-cm` `Rollout`
 health-check config (§3 says these belong in `idp-cluster-baseline`), and a real
 platform default canary step sequence (§3 "Still open" item 3 — the chart ships a
 deliberately inert placeholder in the meantime, see its README). The rest of
-`idp-application`'s own coverage (Rollout/Service/etc.) remains fixture-only, not
+`airframe-application`'s own coverage (Rollout/Service/etc.) remains fixture-only, not
 live-verified against a real `ApplicationEnvironment`-provisioned env with a real
 `rollout.image` set yet — the live-verification pass above used a direct `helm
 install`, not a real `ApplicationEnvironment` XR (that XRD didn't exist yet at the
@@ -364,7 +366,7 @@ functions/
   function-rollout-watcher/    Composition Function: watches Rollout, dispatches diagnosis
   diagnosis-holmes-dispatch/   Thin Job: hands the investigation off to HolmesGPT
 charts/
-  idp-application/             §3's Embedded+Attached tier chart - one release per (app, cluster, env)
+  airframe-application/        §3's Embedded+Attached tier chart - one release per (app, cluster, env)
 xrds/
   nodejsapplication.yaml        NodeJSApplication XRD (catalog.idp.io/v1alpha1)
   applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.idp.io/v1alpha1)

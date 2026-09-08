@@ -159,9 +159,9 @@ spec:
                   # gitops-<<$xrName>>
 
                   GitOps deployment repo for `<<$xrName>>`, scaffolded by `NodeJSApplication`
-                  (idp-service-catalog). Empty until this app's first `ApplicationEnvironment`
+                  (Airframe). Empty until this app's first `ApplicationEnvironment`
                   resource is created - each environment gets its own `<cluster>/<env>/values.yaml`
-                  here, rendered by `idp-application` (idp-service-catalog's shared Helm chart).
+                  here, rendered by `airframe-application` (Airframe's shared Helm chart).
                 commitMessage: "NodeJSApplication scaffold: README.md"
             ---
             # Commits a "shared"-mode SecretStore XR manifest into
@@ -173,7 +173,7 @@ spec:
             #
             # Real, deliberate correction of the original design (idp/docs/
             # service-catalog-design.md Item 8's second multi-cluster revision): secrets
-            # infrastructure used to be an emergent side effect of idp-application's own
+            # infrastructure used to be an emergent side effect of airframe-application's own
             # chart rendering an always-on SecretStore XR the first time some env actually
             # got deployed - meant "when does this exist" wasn't discoverable from the
             # Bootstrap XRD list at all, and tied provisioning to "someone happened to ship
@@ -478,7 +478,7 @@ spec:
 
                   <<$description>>
 
-                  Scaffolded by `NodeJSApplication` (idp-service-catalog). Node <<$nodeVersion>>,
+                  Scaffolded by `NodeJSApplication` (Airframe). Node <<$nodeVersion>>,
                   <<$packageManager>>.
 
                   ```

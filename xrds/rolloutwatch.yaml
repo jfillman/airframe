@@ -7,9 +7,9 @@
 # this catalog's general "real namespaced-XR support" reasoning applies identically
 # here, not repeated per-XRD.
 #
-# idp-application's own chart renders exactly one of these per release, unconditionally
+# airframe-application's own chart renders exactly one of these per release, unconditionally
 # whenever rollout: is set (same treatment as ServiceMonitor - see
-# charts/idp-application/templates/attached/rolloutwatch.yaml), metadata.name equal to
+# charts/airframe-application/templates/attached/rolloutwatch.yaml), metadata.name equal to
 # .Values.appName - the SAME name the chart's own Rollout gets (workload/rollout.yaml),
 # in the SAME namespace. That's deliberate, not incidental: function-rollout-watcher's
 # Composition never gets told a separate "which Rollout" identity - it derives the
@@ -68,12 +68,12 @@ spec:
                 appName:
                   type: string
                   description: >-
-                    The app this watches - also idp-application's own release name,
+                    The app this watches - also airframe-application's own release name,
                     the Rollout's metadata.name in this XR's own namespace (extra-
                     resources match_name), and the GitHub repo name (gitops-<appName>
                     / <appName>) the Composition derives GitOps/source coordinates
                     from. Always equal to this XR's own metadata.name in practice
-                    (idp-application's chart sets both identically) but declared
+                    (airframe-application's chart sets both identically) but declared
                     explicitly rather than re-derived from metadata.name, so the
                     Composition never has to assume that invariant holds.
                   minLength: 1
@@ -93,7 +93,7 @@ spec:
                     Which environment within that cluster - e.g. "prod"/"staging".
                     Same DNS-1123-pattern convention as ApplicationEnvironment's own
                     spec.env (not repeated here as a literal pattern - this field is
-                    only ever chart-templated from idp-application's own .Values.envName,
+                    only ever chart-templated from airframe-application's own .Values.envName,
                     which ApplicationEnvironment's XRD already validates upstream).
                   minLength: 1
 
@@ -103,7 +103,7 @@ spec:
                     Where a completed diagnosis gets reported, beyond the XR's own
                     status/events (function-rollout-watcher's own README) and
                     whatever HolmesGPT did on its own (GitHub PR, if it opened one).
-                    Optional and omitted entirely by idp-application's chart unless a
+                    Optional and omitted entirely by airframe-application's chart unless a
                     developer set notifications.slack.enabled: true in their
                     values.yaml - same shape/opt-in convention as platform-cicd's own
                     cicd.yaml notifications.slack.{enabled,channel}, deliberately not

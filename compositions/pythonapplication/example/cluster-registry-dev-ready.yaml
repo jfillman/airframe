@@ -8,7 +8,7 @@ metadata:
   name: kind-dev
   namespace: crossplane-system
   labels:
-    platform.io/cluster-registry: "true"
+    hangar.io/cluster-registry: "true"
 data:
   type: dev
   cicdReady: "true"

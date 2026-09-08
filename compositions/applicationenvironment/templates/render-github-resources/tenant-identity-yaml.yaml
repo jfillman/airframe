@@ -1,7 +1,7 @@
 # Commits tenants/<appName>/<env>/identity.yaml into that cluster's own
 # gitops-cluster-<cluster>-tenants - read by that repo's tenant-onboarding
 # ApplicationSet (git generator over tenants/*/*/identity.yaml) to render the real
-# deployment Application via idp-application. Matches
+# deployment Application via airframe-application. Matches
 # gitops-cluster-dev-tenants/README.md's own documented identity.yaml shape exactly
 # (appName/gitopsRepoUrl/githubOwner/env) - deliberately duplicating the sibling
 # per-app tenants/<appName>/identity.yaml's own gitopsRepoUrl/githubOwner rather than

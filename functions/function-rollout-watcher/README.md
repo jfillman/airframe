@@ -8,7 +8,7 @@ redesign history" below. Today it's the sole pipeline step on the
 
 1. Requests the live, Helm-created Argo `Rollout` as a Crossplane
    extra-resources requirement (matched by name + namespace — same name as
-   this XR, same namespace, `idp-application`'s own naming convention) and
+   this XR, same namespace, `airframe-application`'s own naming convention) and
    reads its *observed* status from there.
 2. The first time it's `Degraded`/`Error` for a revision it hasn't handled
    yet, composes a diagnosis `Job` (see
@@ -50,7 +50,7 @@ Rollout.** Redesign 1 still watched `req.observed.resources["rollout"]` — a
 Rollout composed by *step 1 of this function's own Composition pipeline*
 (`function-go-templating`, rendering the `Application` XRD's Rollout/Service/
 AnalysisTemplate directly, ported from `ai-rollout`). But the real deployment
-path that got built since — the `idp-application` Helm chart, deployed per
+path that got built since — the `airframe-application` Helm chart, deployed per
 cluster by ArgoCD — never gives Crossplane a hand in creating the Rollout at
 all. There was nothing left for that mechanism to attach to (a known gap this
 README itself used to flag as "Phase 2 TODO").

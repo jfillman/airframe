@@ -383,7 +383,7 @@ spec:
             # Real, deliberate correction of the original design (idp/docs/
             # service-catalog-design.md Item 8's second multi-cluster revision - see
             # nodejsapplication's own secretstore-xr.yaml for the full "why", same reasoning
-            # applies here): this used to be idp-application's own always-on chart resource,
+            # applies here): this used to be airframe-application's own always-on chart resource,
             # meaning secrets infrastructure for an upper-cluster env didn't exist until
             # someone actually shipped a real release through it. Now it exists the moment
             # THIS XR reconciles - a pure git commit, same as everything else this XRD
@@ -473,7 +473,7 @@ spec:
             # Commits tenants/<appName>/<env>/identity.yaml into that cluster's own
             # gitops-cluster-<cluster>-tenants - read by that repo's tenant-onboarding
             # ApplicationSet (git generator over tenants/*/*/identity.yaml) to render the real
-            # deployment Application via idp-application. Matches
+            # deployment Application via airframe-application. Matches
             # gitops-cluster-dev-tenants/README.md's own documented identity.yaml shape exactly
             # (appName/gitopsRepoUrl/githubOwner/env) - deliberately duplicating the sibling
             # per-app tenants/<appName>/identity.yaml's own gitopsRepoUrl/githubOwner rather than
@@ -548,7 +548,7 @@ spec:
             # rollout: null - the initial bootstrap scaffold only, not an ongoing default. This
             # platform's CICD pipeline (and a developer directly) is expected to edit this file's
             # real content afterward (image tag, ports, ...) as normal GitOps - see
-            # idp-application's chart for what rollout: null itself fixture-tests cleanly (no
+            # airframe-application's chart for what rollout: null itself fixture-tests cleanly (no
             # Rollout/Service/HPA/PDB rendered, just NetworkPolicy/ServiceAccount) as the safe
             # starting state before any of that happens.
             #

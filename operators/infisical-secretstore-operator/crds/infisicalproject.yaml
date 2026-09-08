@@ -1,6 +1,6 @@
 # InfisicalProject - the CRD this operator reconciles. One per (app, cluster) pair,
 # per service-catalog-design.md Item 8's scope decision - created by the SecretStore
-# XRD's Composition (idp-service-catalog/compositions/secretstore/), never directly by
+# XRD's Composition (Airframe/compositions/secretstore/), never directly by
 # a developer.
 #
 # Namespaced (not cluster-scoped) - matches every other XR/composed-resource

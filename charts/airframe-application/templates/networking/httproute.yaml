@@ -1,0 +1,60 @@
+{{/*
+Gateway API HTTPRoute, first-class alongside classic Ingress (ingress.yaml) - both
+are independent opt-in toggles off the same Service/first rollout.ports entry, a
+caller picks whichever its cluster's ingress mechanism actually is. Every real
+cluster in this fleet already runs Gateway API, not classic Ingress controllers
+(see idp_session_gateway_api_ingress, gitops-cluster-kind-prod's own
+50-gateway-routes/), so httpRoute is the one most new callers actually want -
+ingress.yaml is kept for whichever cluster/app still needs classic Ingress.
+
+Gateway API requires same-namespace backendRefs without a ReferenceGrant - this
+renders in the release's own namespace (airframe-application.namespace) right alongside
+the Service it targets, so that's satisfied by construction. parentRefs crossing
+into the Gateway's own namespace (the common case - the platform Gateway lives in
+a shared namespace like kiac-gateway, not this app's) is fine on the *parentRef*
+side with no ReferenceGrant needed, as long as the Gateway's own listener
+allowedRoutes permits it - confirmed live, every existing HTTPRoute in this fleet
+already crosses namespaces this same way (grafana-httproute.yaml et al.).
+*/}}
+{{- if and .Values.httpRoute.enabled (eq (include "airframe-application.hasRollout" .) "true") }}
+{{- if not .Values.httpRoute.hostnames }}
+{{- fail "httpRoute.enabled is true but httpRoute.hostnames is empty - at least one hostname is required" }}
+{{- end }}
+{{- if not .Values.httpRoute.parentRefs }}
+{{- fail "httpRoute.enabled is true but httpRoute.parentRefs is empty - at least one parentRef (the platform Gateway) is required" }}
+{{- end }}
+{{- $firstPort := index .Values.rollout.ports 0 }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.appName }}
+  namespace: {{ include "airframe-application.namespace" . }}
+  labels:
+    {{- include "airframe-application.labels" . | nindent 4 }}
+    hangar.io/subcomponent: networking
+  {{- with .Values.httpRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  parentRefs:
+    {{- range .Values.httpRoute.parentRefs }}
+    - name: {{ .name }}
+      {{- if .namespace }}
+      namespace: {{ .namespace }}
+      {{- end }}
+      {{- if .sectionName }}
+      sectionName: {{ .sectionName }}
+      {{- end }}
+    {{- end }}
+  hostnames:
+    {{- toYaml .Values.httpRoute.hostnames | nindent 4 }}
+  rules:
+    - matches:
+        - path:
+            type: {{ .Values.httpRoute.pathType }}
+            value: {{ .Values.httpRoute.path }}
+      backendRefs:
+        - name: {{ .Values.appName }}
+          port: {{ $firstPort.containerPort }}
+{{- end }}

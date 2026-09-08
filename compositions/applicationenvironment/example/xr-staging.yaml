@@ -4,7 +4,7 @@
 # path renders correctly. See ../xrds/applicationenvironment.yaml for the schema.
 #
 # metadata.name follows the documented (not enforced) <appName>-<cluster>-<env>
-# convention - the same deterministic string idp-application's own environmentRef
+# convention - the same deterministic string airframe-application's own environmentRef
 # helper independently computes for any Attached-tier XR in this env.
 #
 # cluster: kind-prod, not kind-dev - this XRD structurally rejects type: dev

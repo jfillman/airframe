@@ -361,7 +361,7 @@ spec:
 
       <<$description>>
 
-      Scaffolded by `SpringBootApplication` (idp-service-catalog). Java <<$javaVersion>>,
+      Scaffolded by `SpringBootApplication` (Airframe). Java <<$javaVersion>>,
       <<$buildTool>>.
 
       <<- if eq $buildTool "gradle">>

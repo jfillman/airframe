@@ -9,7 +9,7 @@ Config is env-var driven, one NOTIFY_<BACKEND>_ENABLED flag per backend plus
 whatever else that backend needs (e.g. Slack's NOTIFY_SLACK_CHANNEL,
 SLACK_WEBHOOK_URL) - set by function-rollout-watcher's build_diagnosis_job()
 from the RolloutWatch XR's own spec.notifications, which in turn comes from
-idp-application's chart values (notifications.slack.*), mirroring
+airframe-application's chart values (notifications.slack.*), mirroring
 platform-cicd's own cicd.yaml notifications.slack.{enabled,channel} shape -
 see that project's docs/archive/2026-08-18-pre-refactor/notifications.md.
 

@@ -213,7 +213,7 @@ spec:
 
       <<$description>>
 
-      Scaffolded by `GoApplication` (idp-service-catalog). Go <<$goVersion>>.
+      Scaffolded by `GoApplication` (Airframe). Go <<$goVersion>>.
 
       ```
       go run .

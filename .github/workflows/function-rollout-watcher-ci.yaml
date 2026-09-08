@@ -4,7 +4,7 @@ name: function-rollout-watcher-ci
 # (vendored from the Crossplane function-template-python scaffold, which assumes
 # the function is its OWN top-level repo) has never actually run - GitHub Actions
 # only discovers workflow files under the REPO ROOT's .github/workflows/, and this
-# function lives as a subdirectory of the idp-service-catalog monorepo. Confirmed
+# function lives as a subdirectory of the Airframe monorepo. Confirmed
 # live 2026-09-02: `gh run list` for that nested path 404s ("workflow ... not found
 # on the default branch"), and the currently-installed package
 # (ghcr.io/jfillman/function-rollout-watcher:v0.2.4) is a genuine single-platform

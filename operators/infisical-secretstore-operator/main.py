@@ -588,7 +588,7 @@ def on_delete(status: dict, logger, **_):
 # InfisicalProject == one project + one identity + one "shared" environment, but
 # Option 2 (idp/docs/service-catalog-design.md Item 8's multi-cluster revision) needs
 # N additional environments in that SAME project, one per ApplicationEnvironment on
-# an upper cluster - rendered by idp-application's own attached/secretstore.yaml,
+# an upper cluster - rendered by airframe-application's own attached/secretstore.yaml,
 # alongside a per-env ClusterSecretStore pointed at this environment's slug.
 ENV_PLURAL = "infisicalenvironments"
 

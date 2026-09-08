@@ -35,7 +35,7 @@ in-cluster Service - see "Two auth methods" below for why that's not just a deta
 create/resume: looks up the ALREADY-existing project by slug (waits, doesn't create
 one, if not found yet), ensures one additional environment exists inside it. On
 delete: removes just that one environment, never the project. Exists because
-`idp-application`'s own chart (`templates/attached/secretstore.yaml`) renders one of
+`airframe-application`'s own chart (`templates/attached/secretstore.yaml`) renders one of
 these per `ApplicationEnvironment` on an upper cluster, alongside a `ClusterSecretStore`
 narrowed to exactly that environment - real per-environment isolation (a
 wrong-namespace `ExternalSecret` hard-fails, doesn't just fail an authorization check),

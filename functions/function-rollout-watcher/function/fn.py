@@ -6,18 +6,18 @@ one swaps *how the Rollout is observed*.
 
 Originally this function watched a Rollout composed by step 1 of its own
 pipeline (function-go-templating, ported from the ai-rollout prototype). But
-the real deployment path that got built since — the `idp-application` Helm
+the real deployment path that got built since — the `airframe-application` Helm
 chart, deployed per cluster by ArgoCD — never gives Crossplane a hand in
 creating the Rollout at all. There's no composed resource for this function
 to read.
 
 So this function now runs alone in a single-step Composition pipeline (see
 compositions/rolloutwatch/composition.yaml), on a `RolloutWatch` XR that
-`idp-application` renders unconditionally (same treatment as ServiceMonitor)
+`airframe-application` renders unconditionally (same treatment as ServiceMonitor)
 alongside the real Rollout. It does exactly two things:
   1. Requests the live, Helm-created Rollout as an extra/required resource
      (matched by name + namespace — same name as this XR, same namespace,
-     idp-application's own naming convention) and reads its *observed*
+     airframe-application's own naming convention) and reads its *observed*
      status from there.
   2. The first time it's Degraded/Error for a given revision (tracked via
      the XR's own status.lastDiagnosisRevision), composes a Kubernetes Job
@@ -156,9 +156,9 @@ def build_diagnosis_job(job_name, xr_namespace, diagnosis_image, xr_name, gitops
     str}), already resolved from the XR's own spec.notifications by the caller -
     this function only builds env vars from it, no XR/spec knowledge here. The
     webhook URL itself is deliberately never passed as a plain value - it's a
-    credential, sourced via secretKeyRef from notify-secrets (idp-application's
+    credential, sourced via secretKeyRef from notify-secrets (airframe-application's
     chart renders that ExternalSecret whenever notifications.slack.enabled is
-    set - see charts/idp-application/templates/config/notify-external-secret.yaml).
+    set - see charts/airframe-application/templates/config/notify-external-secret.yaml).
     Job creation still succeeds even if that Secret hasn't synced yet (unlike the
     ServiceAccount case above, a secretKeyRef env var only blocks the *container*
     from starting, with a clear "secret not found" pod event - not resource
@@ -259,9 +259,9 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         rsp.desired.resources["diagnosis-dispatch-sa"].ready = fnv1.READY_TRUE
 
         # --- Watch the observed (live) Rollout status ---
-        # idp-application's Helm chart renders the real Rollout directly
+        # airframe-application's Helm chart renders the real Rollout directly
         # (never through this Composition) with the same name as this XR and
-        # in the same namespace — see charts/idp-application/templates/
+        # in the same namespace — see charts/airframe-application/templates/
         # workload/rollout.yaml. Always declare this requirement every
         # reconcile (not just once) — Crossplane treats requirements as
         # stable once they stop changing between calls, and the first

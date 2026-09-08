@@ -13,7 +13,7 @@
 # rollout: null - the initial bootstrap scaffold only, not an ongoing default. This
 # platform's CICD pipeline (and a developer directly) is expected to edit this file's
 # real content afterward (image tag, ports, ...) as normal GitOps - see
-# idp-application's chart for what rollout: null itself fixture-tests cleanly (no
+# airframe-application's chart for what rollout: null itself fixture-tests cleanly (no
 # Rollout/Service/HPA/PDB rendered, just NetworkPolicy/ServiceAccount) as the safe
 # starting state before any of that happens.
 #

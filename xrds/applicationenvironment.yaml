@@ -3,7 +3,7 @@
 # <cluster>/<env>/values.yaml into the app's own gitops-<appName> repo and a
 # tenants/<appName>/<env>/identity.yaml entry into gitops-cluster-dev-tenants - read by
 # that repo's tenant-onboarding ApplicationSet to render the real deployment
-# Application via idp-application (idp-service-catalog's shared chart). Pure
+# Application via airframe-application (Airframe's shared chart). Pure
 # provider-github, no live cluster credential - same mechanism as NodeJSApplication.
 #
 # apiextensions.crossplane.io/v2 (not v1) for real namespaced-XR support, same as
@@ -34,8 +34,8 @@
 # Naming convention (not CEL-enforced, matching NodeJSApplication's precedent of not
 # enforcing any naming relationship between an XR and what it creates): name this XR
 # <appName>-<cluster>-<env> - the exact deterministic string every Attached-tier XR
-# (SLO today; future Redis/OAuthServer) independently computes via idp-application's
-# own environmentRef helper (charts/idp-application/templates/_helpers.tpl) when
+# (SLO today; future Redis/OAuthServer) independently computes via airframe-application's
+# own environmentRef helper (charts/airframe-application/templates/_helpers.tpl) when
 # stamping spec.environmentRef.name onto itself. spec.appName/spec.env stay the real
 # source of truth the Composition reads - this XR's own metadata.name is never parsed
 # back apart.

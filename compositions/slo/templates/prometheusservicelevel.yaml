@@ -51,14 +51,38 @@
 # this template report real readiness instead: True once Sloth's own
 # generation status confirms success, False (not simply absent) beforehand so
 # a slow first reconcile still reports Creating rather than a false-positive
-# Ready. dig's default-false fallback covers the first reconcile, where this
-# resource doesn't exist in .observed.resources yet at all.
+# Ready.
+#
+# NOT a single `dig ... false .observed.resources` call (v0.3.60's original
+# form) - Sprig's dig only degrades gracefully to its default when a KEY is
+# entirely ABSENT at some level; if an intermediate level is PRESENT but nil
+# (confirmed live 2026-09-13 on checkout-api-readiness-latency: 36 identical
+# failures over 16 minutes, every single reconcile, not a one-off first-pass
+# race - checkout-api-liveness-latency happened not to hit this timing, not
+# proof it can't), dig's internal type-assert to map[string]interface{}
+# panics instead of falling through. Walked one level at a time with `index`
+# + an `if` truthiness check instead - a nil value at any level is simply
+# falsy in a Go template `if`, no panic, same end result ($promSLReady stays
+# false) for the genuinely-doesn't-exist-yet case this was originally meant
+# to cover.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $service := $spec.service >>
 <<- $indicator := $spec.indicator >>
 <<- $objective := $spec.objective >>
-<<- $promSLReady := dig "prometheusservicelevel" "resource" "status" "promOpRulesGenerated" false .observed.resources >>
+<<- $promSLReady := false >>
+<<- $obsPromSL := index .observed.resources "prometheusservicelevel" >>
+<<- if $obsPromSL >>
+  <<- $obsPromSLResource := $obsPromSL.resource >>
+  <<- if $obsPromSLResource >>
+    <<- $obsPromSLStatus := $obsPromSLResource.status >>
+    <<- if $obsPromSLStatus >>
+      <<- if $obsPromSLStatus.promOpRulesGenerated >>
+        <<- $promSLReady = true >>
+      <<- end >>
+    <<- end >>
+  <<- end >>
+<<- end >>
 
 <<- if eq $indicator.type "availability" >>
   <<- if not $indicator.errorFilter >>

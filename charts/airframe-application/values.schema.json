@@ -1,0 +1,436 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "airframe-application values",
+  "description": "Structural validation for this chart's values.yaml, matching the schema documented inline in values.yaml (idp/docs/service-catalog-design.md §3 plus this chart's own additions). Deliberately loose (additionalProperties: true / bare object|array) on every field that's an intentional raw passthrough escape hatch in the chart itself - rollout.steps, rollout.canaryAnalysis, rollout.blueGreen, rollout.podSpec, rollout.extraContainers, cronJobs[].*, jobs[].*, extraManifests, components[].spec - since those are meant to accept arbitrary shapes the chart doesn't validate either. Everything else is validated as strictly as the chart's own comments document it.",
+  "type": "object",
+  "properties": {
+    "appName": { "type": "string" },
+    "appType": { "type": "string", "enum": ["app", "infra"] },
+    "cluster": { "type": "string" },
+    "envName": { "type": "string" },
+    "devClusterName": { "type": "string" },
+
+    "namespace": {
+      "type": "object",
+      "properties": {
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+
+    "releaseTracking": {
+      "description": "Written by platform-cicd's open-release-pr.yaml, not hand-authored. Opaque/loose by design.",
+      "type": ["object", "null"]
+    },
+
+    "serviceAccount": {
+      "type": "object",
+      "properties": {
+        "create": { "type": "boolean" },
+        "name": { "type": "string" },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "imagePullSecrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": { "name": { "type": "string", "minLength": 1 } }
+          }
+        }
+      }
+    },
+
+    "platformSecretStore": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "type": "string" }
+      }
+    },
+
+    "rollout": {
+      "type": ["object", "null"],
+      "description": "Set to null for an infra-type release with no custom workload.",
+      "properties": {
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" }
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 0 },
+        "resources": {
+          "type": "object",
+          "properties": {
+            "requests": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "cpu": { "type": "string" },
+                "memory": { "type": "string" }
+              }
+            }
+          }
+        },
+        "strategy": { "type": "string", "enum": ["canary", "blueGreen"] },
+        "steps": {
+          "description": "Escape hatch - a raw Argo Rollouts canary/blueGreen step list. Tower's Config tab offers a structured builder for the common {setWeight}/{pause}/{analysis} shapes but falls back to raw YAML for anything else, matching this schema's own looseness here.",
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "canaryAnalysis": {
+          "description": "Raw passthrough - spec.strategy.canary.analysis. Typical shape: {templates: [{templateName}], args: [...], startingStep}.",
+          "type": "object"
+        },
+        "blueGreen": {
+          "description": "Raw passthrough - the blueGreen strategy block minus activeService/previewService (chart-owned).",
+          "type": "object"
+        },
+        "command": { "type": "array", "items": { "type": "string" } },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "containerPort"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "containerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+              "protocol": { "type": "string", "enum": ["TCP", "UDP", "SCTP"] }
+            }
+          }
+        },
+        "livenessProbe": { "$ref": "#/definitions/probe" },
+        "readinessProbe": { "$ref": "#/definitions/probe" },
+        "podSecurityContext": { "type": "object" },
+        "containerSecurityContext": { "type": "object" },
+        "extraContainers": { "type": "array", "items": { "type": "object" } },
+        "podSpec": {
+          "description": "Raw map, deep-merged onto .spec.template.spec last - not for containers[0] or additional containers.",
+          "type": "object"
+        }
+      }
+    },
+
+    "analysisTemplates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": { "name": { "type": "string", "minLength": 1 } }
+            }
+          },
+          "metrics": { "type": "array", "items": { "type": "object" } }
+        }
+      }
+    },
+
+    "env": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "value": { "type": "string" }
+        }
+      }
+    },
+
+    "configMaps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "as": { "type": "string", "enum": ["env", "volume", "both"] },
+          "mountPath": { "type": "string" },
+          "data": { "type": "object", "additionalProperties": { "type": "string" } },
+          "existingConfigMap": { "type": "string" }
+        },
+        "not": { "required": ["data", "existingConfigMap"] },
+        "anyOf": [{ "required": ["data"] }, { "required": ["existingConfigMap"] }]
+      }
+    },
+
+    "secrets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "as": { "type": "string", "enum": ["env", "volume", "both"] },
+          "key": { "type": "string" },
+          "mountPath": { "type": "string" },
+          "shared": { "type": "boolean" }
+        }
+      }
+    },
+
+    "notifications": {
+      "type": "object",
+      "properties": {
+        "slack": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "channel": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "volumes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "size", "mountPath"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$" },
+          "storageClassName": { "type": "string" },
+          "accessModes": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] }
+          },
+          "mountPath": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+
+    "cronJobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "schedule"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "schedule": { "type": "string", "minLength": 1 },
+          "concurrencyPolicy": { "type": "string", "enum": ["Forbid", "Allow", "Replace"] },
+          "suspend": { "type": "boolean" },
+          "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+          "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
+          "backoffLimit": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+
+    "jobs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "hook": { "type": "boolean" },
+          "backoffLimit": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+
+    "autoscaling": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "min": { "type": "integer", "minimum": 1 },
+        "max": { "type": "integer", "minimum": 1 },
+        "targetCPUPercent": { "type": "integer", "minimum": 1, "maximum": 100 }
+      }
+    },
+
+    "podDisruptionBudget": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "minAvailable": { "type": ["string", "integer", "null"] },
+        "maxUnavailable": { "type": ["string", "integer", "null"] }
+      }
+    },
+
+    "ingress": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "host": { "type": "string" },
+        "path": { "type": "string", "minLength": 1 },
+        "pathType": { "type": "string", "enum": ["Prefix", "Exact", "ImplementationSpecific"] },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "tls": { "type": "boolean" },
+        "tlsSecretName": { "type": "string" }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "properties": { "host": { "type": "string", "minLength": 1 } }, "required": ["host"] }
+    },
+
+    "httpRoute": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "hostnames": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "parentRefs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "namespace": { "type": "string" },
+              "sectionName": { "type": "string" }
+            }
+          }
+        },
+        "path": { "type": "string", "minLength": 1 },
+        "pathType": { "type": "string", "enum": ["PathPrefix", "Exact", "RegularExpression"] },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": {
+        "properties": {
+          "hostnames": { "type": "array", "minItems": 1 },
+          "parentRefs": { "type": "array", "minItems": 1 }
+        },
+        "required": ["hostnames", "parentRefs"]
+      }
+    },
+
+    "serviceMonitor": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "path": { "type": "string", "minLength": 1 },
+        "port": { "type": "string" },
+        "interval": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
+        "additionalLabels": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "allowIngressFromIngressController": { "type": "boolean" },
+        "ingressControllerNamespaceSelector": { "type": "object" },
+        "allowIngressFrom": { "type": "array", "items": { "$ref": "#/definitions/networkPolicyPeer" } },
+        "allowEgressTo": { "type": "array", "items": { "$ref": "#/definitions/networkPolicyPeer" } },
+        "extraIngressRules": { "type": "array", "items": { "type": "object" } },
+        "extraEgressRules": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "name"],
+        "properties": {
+          "type": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "minLength": 1 },
+          "spec": { "type": "object" }
+        }
+      }
+    },
+
+    "slos": {
+      "description": "Mirrors airframe/xrds/slo.yaml's own spec schema exactly.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "service", "objective", "indicator"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "service": { "type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_.-]+$" },
+          "objective": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+          "indicator": {
+            "type": "object",
+            "required": ["type", "metric", "totalFilter"],
+            "properties": {
+              "type": { "type": "string", "enum": ["availability", "latency"] },
+              "metric": { "type": "string", "minLength": 1 },
+              "totalFilter": { "type": "string", "minLength": 1 },
+              "errorFilter": { "type": "string", "minLength": 1 },
+              "latencyThreshold": { "type": "string", "minLength": 1 }
+            },
+            "allOf": [
+              {
+                "if": { "properties": { "type": { "const": "availability" } } },
+                "then": { "required": ["errorFilter"] }
+              },
+              {
+                "if": { "properties": { "type": { "const": "latency" } } },
+                "then": { "required": ["latencyThreshold"] }
+              }
+            ]
+          }
+        }
+      }
+    },
+
+    "attachedResourceApiVersion": { "type": "string" },
+    "componentKinds": { "type": "object", "additionalProperties": { "type": "string" } },
+
+    "extraManifests": {
+      "description": "Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is.",
+      "type": "array",
+      "items": { "type": "object" }
+    }
+  },
+
+  "definitions": {
+    "probe": {
+      "type": "object",
+      "description": "Empty object ({}) means no probe of this kind is set - the chart doesn't render one at all. Exactly one of httpGet/tcpSocket/exec when non-empty.",
+      "properties": {
+        "httpGet": {
+          "type": "object",
+          "required": ["path", "port"],
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "port": { "type": ["integer", "string"] }
+          }
+        },
+        "tcpSocket": {
+          "type": "object",
+          "required": ["port"],
+          "properties": { "port": { "type": ["integer", "string"] } }
+        },
+        "exec": {
+          "type": "object",
+          "required": ["command"],
+          "properties": { "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 } }
+        },
+        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
+        "periodSeconds": { "type": "integer", "minimum": 1 },
+        "timeoutSeconds": { "type": "integer", "minimum": 1 },
+        "successThreshold": { "type": "integer", "minimum": 1 },
+        "failureThreshold": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "networkPolicyPeer": {
+      "type": "object",
+      "description": "Exactly one of namespace/cidr (mutually exclusive peer kinds).",
+      "properties": {
+        "namespace": { "type": "string" },
+        "podLabels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "cidr": { "type": "string" },
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+      },
+      "not": { "required": ["namespace", "cidr"] }
+    }
+  }
+}

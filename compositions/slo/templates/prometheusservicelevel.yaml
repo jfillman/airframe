@@ -39,11 +39,26 @@
 # Prometheus pod lagged ~35 minutes on this cluster before the rules actually
 # appeared in Prometheus's own /api/v1/rules - not a bug in this template, but
 # worth knowing before assuming a fresh SLO isn't working.)
+#
+# Explicit readiness: Sloth's PrometheusServiceLevel never sets
+# status.conditions[type=Ready] (confirmed live - it only sets its own custom
+# status fields, e.g. promOpRulesGenerated), so function-auto-ready's default
+# "no Ready condition = not ready" fallback leaves the parent SLO XR stuck at
+# Ready=False/Creating forever, even once Sloth has actually finished
+# generating the PrometheusRule. The gotemplating.fn.crossplane.io/ready
+# annotation (read by function-go-templating itself, honored by
+# function-auto-ready as an explicit override for this named resource) lets
+# this template report real readiness instead: True once Sloth's own
+# generation status confirms success, False (not simply absent) beforehand so
+# a slow first reconcile still reports Creating rather than a false-positive
+# Ready. dig's default-false fallback covers the first reconcile, where this
+# resource doesn't exist in .observed.resources yet at all.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $service := $spec.service >>
 <<- $indicator := $spec.indicator >>
 <<- $objective := $spec.objective >>
+<<- $promSLReady := dig "prometheusservicelevel" "resource" "status" "promOpRulesGenerated" false .observed.resources >>
 
 <<- if eq $indicator.type "availability" >>
   <<- if not $indicator.errorFilter >>
@@ -75,6 +90,7 @@ metadata:
     release: kube-prometheus-stack
   annotations:
     <<setResourceNameAnnotation "prometheusservicelevel">>
+    gotemplating.fn.crossplane.io/ready: <<if $promSLReady>>"True"<<else>>"False"<<end>>
 spec:
   service: <<$service | toJson>>
   slos:

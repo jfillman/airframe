@@ -247,14 +247,16 @@ spec:
             <<- $indicator := $spec.indicator >>
             <<- $objective := $spec.objective >>
             <<- $promSLReady := false >>
-            <<- $obsPromSL := index .observed.resources "prometheusservicelevel" >>
-            <<- if $obsPromSL >>
-              <<- $obsPromSLResource := $obsPromSL.resource >>
-              <<- if $obsPromSLResource >>
-                <<- $obsPromSLStatus := $obsPromSLResource.status >>
-                <<- if $obsPromSLStatus >>
-                  <<- if $obsPromSLStatus.promOpRulesGenerated >>
-                    <<- $promSLReady = true >>
+            <<- if .observed.resources >>
+              <<- $obsPromSL := index .observed.resources "prometheusservicelevel" >>
+              <<- if $obsPromSL >>
+                <<- $obsPromSLResource := $obsPromSL.resource >>
+                <<- if $obsPromSLResource >>
+                  <<- $obsPromSLStatus := $obsPromSLResource.status >>
+                  <<- if $obsPromSLStatus >>
+                    <<- if $obsPromSLStatus.promOpRulesGenerated >>
+                      <<- $promSLReady = true >>
+                    <<- end >>
                   <<- end >>
                 <<- end >>
               <<- end >>

@@ -1,11 +1,22 @@
 {{/*
-templates/release-tracking/hooks.yaml - ArgoCD PostSync (Succeeded) / SyncFail
-(Failed) sync-hook Jobs that report a confirmed release outcome back to
-platform-cicd's dev-cluster relay (argocd-outcome-relay) over HTTP with a per-app
-shared secret - see platform-cicd/docs/multi-cluster.md and platform-cicd/catalog/
-lib/argocd-outcome-hook.sh (the script both Jobs run, baked into the toolbox image
-referenced below, not embedded here). Only rendered when releaseTracking: is set -
-see values.yaml's own header on that field for why and how it gets there.
+templates/release-tracking/hooks.yaml - ArgoCD PreSync (Syncing) / PostSync
+(Succeeded) / SyncFail (Failed) sync-hook Jobs that report this release's
+progress back to platform-cicd's dev-cluster relay (argocd-outcome-relay) over
+HTTP with a per-app shared secret - see platform-cicd/docs/multi-cluster.md and
+platform-cicd/catalog/lib/argocd-outcome-hook.sh (the script all three Jobs run,
+baked into the toolbox image referenced below, not embedded here). Only
+rendered when releaseTracking: is set - see values.yaml's own header on that
+field for why and how it gets there.
+
+PreSync (added 2026-09-14): fires once ArgoCD actually starts applying this
+sync, before it's confirmed healthy either way - closes the "PR merged, but is
+it actually deploying yet?" gap between a release PR's own notification (which
+only confirms the PR was opened) and PostSync/SyncFail's confirmed outcome. The
+hook script maps PHASE=Syncing to a distinct CDEvent type
+(dev.cdevents.environment.deploying, not a third status value on the existing
+environment.deployed type) specifically so nothing on the terminal-outcome
+consumer side (release-outcome-notify's Pipeline/Trigger) needs to change -
+see that Trigger's own header.
 
 Ported 2026-08-17 from platform-cicd's own now-removed per-release GitOps writer
 (open-release-pr.yaml used to write these same two Jobs itself, into a SECOND
@@ -19,9 +30,9 @@ competing manifest.
 hook-delete-policy: BeforeHookCreation is load-bearing, not cleanup - a Job with
 unchanged content across releases wouldn't be re-applied at all (nothing for ArgoCD
 to diff), so without this the hook would only ever fire on the FIRST sync to this
-env and silently never again. PHASE is the one thing that differs between the two
-Jobs - which hook ran already tells the relay the outcome, no live status read
-needed by the hook itself.
+env and silently never again. PHASE is the one thing that differs between the
+three Jobs - which hook ran already tells the relay the outcome (or, for PreSync,
+that a sync just started), no live status read needed by the hook itself.
 
 CLUSTER (added alongside this chart's own bump, see Chart.yaml) is new: the script
 now builds the full CDEvent itself (source/id embed the cluster name) instead of
@@ -48,7 +59,7 @@ unrelated to whatever RBAC the app's own workload needs.
 */}}
 {{- if .Values.releaseTracking }}
 {{- $rt := .Values.releaseTracking }}
-{{- range list (dict "file" "postsync" "hookType" "PostSync" "phase" "Succeeded") (dict "file" "syncfail" "hookType" "SyncFail" "phase" "Failed") }}
+{{- range list (dict "file" "presync" "hookType" "PreSync" "phase" "Syncing") (dict "file" "postsync" "hookType" "PostSync" "phase" "Succeeded") (dict "file" "syncfail" "hookType" "SyncFail" "phase" "Failed") }}
 apiVersion: batch/v1
 kind: Job
 metadata:

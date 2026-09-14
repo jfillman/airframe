@@ -67,6 +67,7 @@
 # to cover.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $service := $spec.service >>
 <<- $indicator := $spec.indicator >>
 <<- $objective := $spec.objective >>
@@ -122,6 +123,26 @@ spec:
   slos:
     - name: <<$xrName>>
       objective: <<$objective>>
+      # 2026-09-15: an SLO's own name+service are chosen by whoever authors
+      # the SLO XR, and are (deliberately - see the XRD's own comment on why
+      # we don't force uniqueness) commonly IDENTICAL across environments,
+      # e.g. the same "checkout-api-liveness-latency"/"checkout-api" promoted
+      # to both prod and a new proofing env. Without a per-namespace label
+      # here, Sloth stamps every generated recording/alert rule with only
+      # sloth_service/sloth_slo/sloth_id - identical between environments -
+      # so two independently-evaluated PrometheusRule objects (one per
+      # namespace) write to what Prometheus sees as the SAME series, and
+      # whichever rule last evaluates silently wins. Confirmed live
+      # 2026-09-15 against kiac-prod's real checkout-api SLOs in
+      # app-checkout-api-prod/app-checkout-api-proofing before this fix.
+      # `labels` here (Sloth's own field - "Labels are the Prometheus labels
+      # that will have all the recording and alerting rules for this
+      # specific SLO", confirmed against the live PrometheusServiceLevel CRD
+      # schema) is the real fix: namespace is the one value already
+      # guaranteed unique per environment by Kubernetes itself, not a
+      # naming convention anyone could still collide on by accident.
+      labels:
+        namespace: <<$xrNamespace | toJson>>
       sli:
         events:
           errorQuery: <<$errorQuery | toJson>>

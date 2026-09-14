@@ -35,16 +35,31 @@
 # in particular replaces a hand-rolled formula the previous (pre-Sloth)
 # version of this template computed itself.
 #
+# $slothSlo (2026-09-15) is `<xrName>/<namespace>`, not the bare xrName -
+# see prometheusservicelevel.yaml's own comment for why: the SLO's name is
+# commonly identical across environments by design, so the PrometheusServiceLevel
+# template suffixes its own `slos[].name` (what actually becomes the
+# sloth_slo label) the same way, to stay inside Sloth's own
+# on(sloth_id,sloth_service,sloth_slo) match set rather than bolting on an
+# extra label its internal ratio rules don't know to match on. This
+# dashboard's queries have to use the identical suffixed value or they'd
+# match nothing. $uid is namespace-suffixed too - Grafana dashboard UIDs are
+# global (the kube-prometheus-stack sidecar's searchNamespace is ALL, not
+# per-namespace), so two same-named SLOs in different namespaces would
+# otherwise collide there as well.
+#
 # Datasource `uid: "prometheus"` confirmed live against a real Grafana
 # instance (kube-prometheus-stack's bundled default datasource).
 <<- $spec := .observed.composite.resource.spec >>
 <<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $service := $spec.service >>
-<<- $sliExpr := printf "(1 - slo:sli_error:ratio_rate5m{sloth_slo=%q,sloth_service=%q}) * 100" $xrName $service >>
-<<- $objectiveExpr := printf "slo:objective:ratio{sloth_slo=%q,sloth_service=%q} * 100" $xrName $service >>
-<<- $budgetExpr := printf "slo:period_error_budget_remaining:ratio{sloth_slo=%q,sloth_service=%q} * 100" $xrName $service >>
-<<- $title := printf "SLO: %s (%s)" $service $xrName >>
-<<- $uid := printf "slo-%s" $xrName >>
+<<- $slothSlo := printf "%s/%s" $xrName $xrNamespace >>
+<<- $sliExpr := printf "(1 - slo:sli_error:ratio_rate5m{sloth_slo=%q,sloth_service=%q}) * 100" $slothSlo $service >>
+<<- $objectiveExpr := printf "slo:objective:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>
+<<- $budgetExpr := printf "slo:period_error_budget_remaining:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>
+<<- $title := printf "SLO: %s (%s) [%s]" $service $xrName $xrNamespace >>
+<<- $uid := printf "slo-%s-%s" $xrName $xrNamespace >>
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -90,16 +90,31 @@ spec:
             # in particular replaces a hand-rolled formula the previous (pre-Sloth)
             # version of this template computed itself.
             #
+            # $slothSlo (2026-09-15) is `<xrName>/<namespace>`, not the bare xrName -
+            # see prometheusservicelevel.yaml's own comment for why: the SLO's name is
+            # commonly identical across environments by design, so the PrometheusServiceLevel
+            # template suffixes its own `slos[].name` (what actually becomes the
+            # sloth_slo label) the same way, to stay inside Sloth's own
+            # on(sloth_id,sloth_service,sloth_slo) match set rather than bolting on an
+            # extra label its internal ratio rules don't know to match on. This
+            # dashboard's queries have to use the identical suffixed value or they'd
+            # match nothing. $uid is namespace-suffixed too - Grafana dashboard UIDs are
+            # global (the kube-prometheus-stack sidecar's searchNamespace is ALL, not
+            # per-namespace), so two same-named SLOs in different namespaces would
+            # otherwise collide there as well.
+            #
             # Datasource `uid: "prometheus"` confirmed live against a real Grafana
             # instance (kube-prometheus-stack's bundled default datasource).
             <<- $spec := .observed.composite.resource.spec >>
             <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $service := $spec.service >>
-            <<- $sliExpr := printf "(1 - slo:sli_error:ratio_rate5m{sloth_slo=%q,sloth_service=%q}) * 100" $xrName $service >>
-            <<- $objectiveExpr := printf "slo:objective:ratio{sloth_slo=%q,sloth_service=%q} * 100" $xrName $service >>
-            <<- $budgetExpr := printf "slo:period_error_budget_remaining:ratio{sloth_slo=%q,sloth_service=%q} * 100" $xrName $service >>
-            <<- $title := printf "SLO: %s (%s)" $service $xrName >>
-            <<- $uid := printf "slo-%s" $xrName >>
+            <<- $slothSlo := printf "%s/%s" $xrName $xrNamespace >>
+            <<- $sliExpr := printf "(1 - slo:sli_error:ratio_rate5m{sloth_slo=%q,sloth_service=%q}) * 100" $slothSlo $service >>
+            <<- $objectiveExpr := printf "slo:objective:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>
+            <<- $budgetExpr := printf "slo:period_error_budget_remaining:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>
+            <<- $title := printf "SLO: %s (%s) [%s]" $service $xrName $xrNamespace >>
+            <<- $uid := printf "slo-%s-%s" $xrName $xrNamespace >>
             apiVersion: v1
             kind: ConfigMap
             metadata:
@@ -297,28 +312,47 @@ spec:
             spec:
               service: <<$service | toJson>>
               slos:
-                - name: <<$xrName>>
+                # 2026-09-15: an SLO's own name+service are chosen by whoever authors the
+                # SLO XR, and are (deliberately - see the XRD's own comment on why we
+                # don't force uniqueness) commonly IDENTICAL across environments, e.g.
+                # the same "checkout-api-liveness-latency"/"checkout-api" promoted to
+                # both prod and a new proofing env. Without something making this value
+                # differ per environment, Sloth's generated recording/alert rules carry
+                # only sloth_service/sloth_slo/sloth_id - identical between environments
+                # - so two independently-evaluated PrometheusRule objects (one per
+                # namespace) write to what Prometheus sees as the SAME series, whichever
+                # evaluates last silently winning. Confirmed live 2026-09-15 against
+                # kiac-prod's real checkout-api SLOs in app-checkout-api-prod/
+                # app-checkout-api-proofing before this fix.
+                #
+                # FIRST attempt at this fix (same day) added a `labels: {namespace:
+                # ...}` block instead of touching `name` here - Sloth's own field for
+                # exactly this ("Labels are the Prometheus labels that will have all the
+                # recording and alerting rules for this specific SLO", confirmed against
+                # the live CRD schema). That fixed the leaf recording rules (each
+                # correctly showed its own namespace and its own correct value) but
+                # broke every rule Sloth computes by DIVIDING two of its own recording
+                # rules together (slo:current_burn_rate:ratio, slo:sli_error:
+                # ratio_rate30d) - confirmed live: both went health=err, "found
+                # duplicate series for the match group {sloth_id=..., sloth_service=...,
+                # sloth_slo=...}... many-to-many matching not allowed". Sloth's own
+                # generated PromQL joins strictly `on(sloth_id, sloth_service,
+                # sloth_slo)` - a label OUTSIDE that fixed set doesn't disambiguate its
+                # OWN internal arithmetic, it just adds an extra tag riding along on
+                # what Prometheus still sees as two equally-valid matches for that
+                # three-label key, once both environments' rules share that same key.
+                #
+                # Real fix: make the value INSIDE that fixed match key differ per
+                # environment, not add a label outside it. `name` (which sloth_slo and
+                # sloth_id are both built from) is the natural place - `/` as the
+                # separator because it's guaranteed never to appear in a Kubernetes
+                # object name (DNS-1123), so it can never collide with a legitimately
+                # hyphenated XR name the way another `-` might. dashboard-
+                # configmap.yaml's own sloth_slo-matching queries need this exact same
+                # suffix convention (see that file's own comment) - as does Tower's
+                # query-building (SlosTab.tsx's selectorFor, sloTransitionPoll.ts).
+                - name: <<printf "%s/%s" $xrName $xrNamespace | toJson>>
                   objective: <<$objective>>
-                  # 2026-09-15: an SLO's own name+service are chosen by whoever authors
-                  # the SLO XR, and are (deliberately - see the XRD's own comment on why
-                  # we don't force uniqueness) commonly IDENTICAL across environments,
-                  # e.g. the same "checkout-api-liveness-latency"/"checkout-api" promoted
-                  # to both prod and a new proofing env. Without a per-namespace label
-                  # here, Sloth stamps every generated recording/alert rule with only
-                  # sloth_service/sloth_slo/sloth_id - identical between environments -
-                  # so two independently-evaluated PrometheusRule objects (one per
-                  # namespace) write to what Prometheus sees as the SAME series, and
-                  # whichever rule last evaluates silently wins. Confirmed live
-                  # 2026-09-15 against kiac-prod's real checkout-api SLOs in
-                  # app-checkout-api-prod/app-checkout-api-proofing before this fix.
-                  # `labels` here (Sloth's own field - "Labels are the Prometheus labels
-                  # that will have all the recording and alerting rules for this
-                  # specific SLO", confirmed against the live PrometheusServiceLevel CRD
-                  # schema) is the real fix: namespace is the one value already
-                  # guaranteed unique per environment by Kubernetes itself, not a
-                  # naming convention anyone could still collide on by accident.
-                  labels:
-                    namespace: <<$xrNamespace | toJson>>
                   sli:
                     events:
                       errorQuery: <<$errorQuery | toJson>>

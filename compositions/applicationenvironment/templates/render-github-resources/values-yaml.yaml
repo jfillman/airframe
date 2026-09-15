@@ -17,18 +17,45 @@
 # Rollout/Service/HPA/PDB rendered, just NetworkPolicy/ServiceAccount) as the safe
 # starting state before any of that happens.
 #
-# managementPolicies (no "Update") - real bug hit live 2026-08-18: without this,
-# the provider's default "*" policy drift-corrects any post-bootstrap edit
-# (checkout-api-kind-prod-prod's real rollout.image/ports config) back to this
-# static rollout: null on the next reconcile - confirmed via the file's own git
-# history, a "Bootstrap prod environment" commit reverting the developer's "update
-# app config" commit ~17 minutes later. Same fix, same reasoning, as
-# nodejsapplication's src-repo.yaml already applied to package.json/index.js/
-# Dockerfile/.gitignore/README.md - this file is exactly that same category
-# (scaffold once, developer/CI owns it after), just missed when that fix was made
-# since it lives in a different Composition. Deliberately different from THIS
-# Composition's own cluster-identity-yaml.yaml, which keeps full management (including
-# Update) because nothing but the Composition should ever touch that one.
+# managementPolicies (no "Update", and - 2026-09-16 - no "Delete" either):
+#
+# No "Update": real bug hit live 2026-08-18: without this, the provider's default
+# "*" policy drift-corrects any post-bootstrap edit (checkout-api-kind-prod-prod's
+# real rollout.image/ports config) back to this static rollout: null on the next
+# reconcile - confirmed via the file's own git history, a "Bootstrap prod
+# environment" commit reverting the developer's "update app config" commit ~17
+# minutes later. Same fix, same reasoning, as nodejsapplication's src-repo.yaml
+# already applied to package.json/index.js/Dockerfile/.gitignore/README.md - this
+# file is exactly that same category (scaffold once, developer/CI owns it after),
+# just missed when that fix was made since it lives in a different Composition.
+# Deliberately different from THIS Composition's own cluster-identity-yaml.yaml,
+# which keeps full management (including Update) because nothing but the
+# Composition should ever touch that one.
+#
+# No "Delete" either: a THIRD occurrence of the same class of bug, live-confirmed
+# 2026-09-15 on order-api - the real, already-deployed prod release
+# (rollout.image + the full releaseTracking block, tag 0.1.4-d3c2570) got wiped
+# back to this bootstrap rollout: null, ~18 minutes after pre-prod was onboarded
+# as a brand-new sibling env on the SAME cluster. Root cause: this resource is
+# gated behind `<<- if $clusterOk >>` (00-cluster-gate.yaml), and $clusterOk is
+# computed from an ExtraResources lookup of ONE ConfigMap shared by every
+# ApplicationEnvironment XR targeting the same cluster (matched by cluster name
+# alone, not by env) - that file's own header already documents this lookup as
+# having a normal "not found yet on the first pass" transient-false window. When
+# that window lands on an EXISTING env's reconcile (not just a brand-new XR's
+# first pass) while a sibling env's onboarding is in flight, this resource
+# briefly drops out of the desired set; with Delete allowed, Crossplane actually
+# deleted the real GitHub file, and the very next reconcile (once $clusterOk goes
+# true again) re-Created it via overwriteOnCreate: true with the bootstrap
+# content, since Crossplane's own record of ever having managed it was gone.
+# cluster-identity-yaml.yaml already excludes Delete for a related reason (a
+# shared per-cluster file mustn't vanish when one sibling env's XR is deleted) -
+# same remedy applies here for a different trigger (a transient gate flap, not a
+# deliberate XR deletion): losing Delete means a real env's decommission leaves
+# its values.yaml orphaned in gitops-<app> until a human cleans it up - a
+# deliberate, accepted tradeoff, the same one already made for the shared files,
+# and clearly preferable to silently destroying a live, deployed release's
+# config out from under it.
 #
 # crossplane.io/external-name added, format "<repo>:<file>:" - same class of bug as the
 # 2026-08-18 Update-policy fix above, hit again live 2026-09-02 via a different trigger:
@@ -52,7 +79,7 @@ metadata:
     <<setResourceNameAnnotation "values-yaml">>
     crossplane.io/external-name: "<<printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

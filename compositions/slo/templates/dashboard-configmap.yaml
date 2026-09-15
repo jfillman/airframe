@@ -35,18 +35,24 @@
 # in particular replaces a hand-rolled formula the previous (pre-Sloth)
 # version of this template computed itself.
 #
-# $slothSlo (2026-09-15) is `<xrName>/<namespace>`, not the bare xrName -
-# see prometheusservicelevel.yaml's own comment for why: the SLO's name is
-# commonly identical across environments by design, so the PrometheusServiceLevel
-# template suffixes its own `slos[].name` (what actually becomes the
-# sloth_slo label) the same way, to stay inside Sloth's own
-# on(sloth_id,sloth_service,sloth_slo) match set rather than bolting on an
-# extra label its internal ratio rules don't know to match on. This
-# dashboard's queries have to use the identical suffixed value or they'd
-# match nothing. $uid is namespace-suffixed too - Grafana dashboard UIDs are
-# global (the kube-prometheus-stack sidecar's searchNamespace is ALL, not
-# per-namespace), so two same-named SLOs in different namespaces would
-# otherwise collide there as well.
+# $slothSlo (2026-09-15) is `<xrName>_<namespace>`, not the bare xrName -
+# see prometheusservicelevel.yaml's own comment for the full story: the
+# SLO's name is commonly identical across environments by design, so the
+# PrometheusServiceLevel template suffixes its own `slos[].name` (what
+# actually becomes the sloth_slo label) the same way, to stay inside
+# Sloth's own on(sloth_id,sloth_service,sloth_slo) match set rather than
+# bolting on an extra label its internal ratio rules don't know to match
+# on. `_`, not `/` - a first version of this used `/` (safe against
+# Kubernetes' own naming rules) but Sloth v0.16.0 rejects `/` in its own
+# SLO name validation ("name must start and end with an alphanumeric and
+# can only contain alphanumeric, '.', '_', and '-'"), confirmed live: every
+# SLO using it got stuck at Ready: False, promOpRulesGenerated: false.
+# This dashboard's queries have to use the identical suffixed value or
+# they'd match nothing. $uid is namespace-suffixed too (plain `-`, no
+# charset concerns there - Grafana UIDs aren't Sloth's to validate) -
+# Grafana dashboard UIDs are global (the kube-prometheus-stack sidecar's
+# searchNamespace is ALL, not per-namespace), so two same-named SLOs in
+# different namespaces would otherwise collide there as well.
 #
 # Datasource `uid: "prometheus"` confirmed live against a real Grafana
 # instance (kube-prometheus-stack's bundled default datasource).
@@ -54,7 +60,7 @@
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $service := $spec.service >>
-<<- $slothSlo := printf "%s/%s" $xrName $xrNamespace >>
+<<- $slothSlo := printf "%s_%s" $xrName $xrNamespace >>
 <<- $sliExpr := printf "(1 - slo:sli_error:ratio_rate5m{sloth_slo=%q,sloth_service=%q}) * 100" $slothSlo $service >>
 <<- $objectiveExpr := printf "slo:objective:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>
 <<- $budgetExpr := printf "slo:period_error_budget_remaining:ratio{sloth_slo=%q,sloth_service=%q} * 100" $slothSlo $service >>

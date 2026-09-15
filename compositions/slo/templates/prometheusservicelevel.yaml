@@ -153,14 +153,30 @@ spec:
     #
     # Real fix: make the value INSIDE that fixed match key differ per
     # environment, not add a label outside it. `name` (which sloth_slo and
-    # sloth_id are both built from) is the natural place - `/` as the
-    # separator because it's guaranteed never to appear in a Kubernetes
-    # object name (DNS-1123), so it can never collide with a legitimately
-    # hyphenated XR name the way another `-` might. dashboard-
-    # configmap.yaml's own sloth_slo-matching queries need this exact same
-    # suffix convention (see that file's own comment) - as does Tower's
-    # query-building (SlosTab.tsx's selectorFor, sloTransitionPoll.ts).
-    - name: <<printf "%s/%s" $xrName $xrNamespace | toJson>>
+    # sloth_id are both built from) is the natural place.
+    #
+    # SECOND attempt at this fix (same day) used `/` as the separator
+    # (`<xrName>/<namespace>`) - reasonable against Kubernetes' own naming
+    # rules (a namespace can never contain `/`, so it can't collide with a
+    # legitimately-named XR), but Sloth v0.16.0 validates its OWN SLO name
+    # against a stricter charset than Kubernetes does: confirmed live, every
+    # SLO using a `/`-suffixed name got rejected at Sloth's controller
+    # ("invalid SLO ID: name must start and end with an alphanumeric and can
+    # only contain alphanumeric, '.', '_', and '-'"), leaving
+    # promOpRulesGenerated: false and the SLO stuck at Ready: False
+    # (Creating) - a harder failure than the first attempt's (that one at
+    # least generated rules, just ambiguous ones; this one generates
+    # nothing).
+    #
+    # `_` is in Sloth's own allowed set AND (like `/`) is guaranteed never to
+    # appear in a Kubernetes namespace name (DNS-1123 label: lowercase
+    # alphanumeric and `-` only, no underscores) - satisfies both
+    # constraints at once, unlike `/` which only satisfied the Kubernetes
+    # one. dashboard-configmap.yaml's own sloth_slo-matching queries need
+    # this exact same suffix convention (see that file's own comment) - as
+    # does Tower's query-building (SlosTab.tsx's selectorFor,
+    # sloTransitionPoll.ts).
+    - name: <<printf "%s_%s" $xrName $xrNamespace | toJson>>
       objective: <<$objective>>
       sli:
         events:

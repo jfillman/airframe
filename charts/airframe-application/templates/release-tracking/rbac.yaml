@@ -12,11 +12,10 @@ platform-cicd/hack/bootstrap-upper-cluster.sh - never committed to git, never
 passed through this chart. This identity can read that one Secret's one value,
 nothing else - no wildcard get-on-all-secrets.
 
-argocd.argoproj.io/hook: PreSync,PostSync,SyncFail (added 2026-09-14, alongside
-the new PreSync outcome-hook Job in hooks.yaml; widened from PreSync-only to all
-three phases the same day) is load-bearing, not incidental: these three resources
-used to be plain (non-hook) manifests, applied during ArgoCD's regular Sync phase -
-fine for PostSync/SyncFail on their own, which both run AFTER Sync, but a real
+argocd.argoproj.io/hook: PreSync (added 2026-09-14, alongside the new PreSync
+outcome-hook Job in hooks.yaml) is load-bearing, not incidental: these three
+resources used to be plain (non-hook) manifests, applied during ArgoCD's regular
+Sync phase - fine for PostSync/SyncFail, which both run AFTER Sync, but a real
 deadlock for PreSync, which runs BEFORE it. Confirmed live 2026-09-14 on
 checkout-api's brand-new `proofing` env on kiac-prod: the PreSync hook Job's own
 Pod creation failed with "serviceaccount platform-outcome-hook not found" on that
@@ -24,22 +23,38 @@ env's very first-ever sync (an already-onboarded env never hit this - its
 ServiceAccount already existed from a prior sync, so the ordering bug was
 invisible there), and since a failed PreSync hook blocks the Sync phase from ever
 starting, the whole Application got stuck OutOfSync with no path to create the
-very ServiceAccount it was waiting on.
+very ServiceAccount it was waiting on. Making these three PreSync hooks too (no
+hook-delete-policy set, so - unlike hooks.yaml's own Jobs - they're created once
+and left in place, never deleted) puts them in the SAME phase as the outcome-hook
+Jobs; the explicit sync-wave below (more negative than hooks.yaml's own
+Jobs, which are left at the implicit default of "0") is what then guarantees
+these apply BEFORE those Jobs within that shared phase - same-wave hooks have no
+guaranteed ordering against each other.
 
-Originally shipped as PreSync-only, on the reasoning that no hook-delete-policy
-means these are created once and left in place, never deleted, so being present
-for PreSync implied being present for PostSync/SyncFail too. Widened to all three
-phases the same day on a live report of platform-outcome-postsync itself failing
-with the identical "serviceaccount ... not found" error, in what live sync-result
-history showed was actually a fully successful run once checked - most likely two
-overlapping sync operations racing (this incident involved a lot of manual
-argocd.argoproj.io/refresh nudging on top of automated selfHeal retries). Rather
-than rely on "no delete-policy should mean it persists" holding across every
-timing edge case, each phase that genuinely needs this identity now re-asserts it
-directly - the only guarantee that can't be raced. The explicit sync-wave below
-(more negative than hooks.yaml's own Jobs, left at the implicit default of "0")
-still guarantees these apply before those Jobs within whichever shared phase is
-running - same-wave hooks have no guaranteed ordering against each other.
+REVERTED 2026-09-15 from a same-day PreSync,PostSync,SyncFail widening: that
+change was a misdiagnosis. Its own commit message already suspected the truth
+("most likely two overlapping sync operations racing") but "fixed" it by
+re-asserting this identity in all three phases instead of addressing the
+overlap - which made the real problem WORSE. Live-confirmed via
+argocd-apps-application-controller-0's logs on checkout-api's `proofing` env:
+a single git-triggered release fired FOUR overlapping sync operations within
+~4 seconds (syncId 00558 through 00561), because every hook resource this
+chart re-creates emits "Requesting app refresh caused by object update", and
+with selfHeal:true each of those refreshes can itself queue a brand-new
+top-level sync on top of the one still running - the widening tripled that
+churn by having THIS resource re-created in PostSync and SyncFail too, not
+just PreSync. hooks.yaml's own Jobs (hook-delete-policy: BeforeHookCreation)
+each genuinely ran and succeeded on every one of those four overlapping
+operations ("Reached expected number of succeeded pods", confirmed in the
+same logs) - but each new operation's BeforeHookCreation deletes the prior
+operation's Job before recreating its own, and when the last of several
+racing operations doesn't cleanly finish its own recreate step, the net
+result is zero persisted Job objects even though the outcome relay was
+notified correctly (redundantly) every time. PreSync-only is the original,
+narrower fix for the actual ordering deadlock; it doesn't reintroduce that
+bug (a brand-new namespace's first-ever sync still creates this before
+hooks.yaml's PreSync Job runs) and it removes 2 of these 3 resources' worth
+of avoidable churn per sync going forward.
 */}}
 {{- if .Values.releaseTracking }}
 apiVersion: v1
@@ -48,7 +63,7 @@ metadata:
   name: platform-outcome-hook
   namespace: {{ include "airframe-application.namespace" . }}
   annotations:
-    argocd.argoproj.io/hook: PreSync,PostSync,SyncFail
+    argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: "-5"
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
@@ -60,7 +75,7 @@ metadata:
   name: platform-outcome-hook
   namespace: {{ include "airframe-application.namespace" . }}
   annotations:
-    argocd.argoproj.io/hook: PreSync,PostSync,SyncFail
+    argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: "-5"
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
@@ -77,7 +92,7 @@ metadata:
   name: platform-outcome-hook
   namespace: {{ include "airframe-application.namespace" . }}
   annotations:
-    argocd.argoproj.io/hook: PreSync,PostSync,SyncFail
+    argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/sync-wave: "-5"
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}

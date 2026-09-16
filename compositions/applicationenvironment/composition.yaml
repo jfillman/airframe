@@ -572,7 +572,7 @@ spec:
             # (rollout.image + the full releaseTracking block, tag 0.1.4-d3c2570) got wiped
             # back to this bootstrap rollout: null, ~18 minutes after pre-prod was onboarded
             # as a brand-new sibling env on the SAME cluster. Root cause: this resource is
-            # gated behind `<<- if $clusterOk >>` (00-cluster-gate.yaml), and $clusterOk is
+            # gated behind the "if $clusterOk" conditional (00-cluster-gate.yaml), and $clusterOk is
             # computed from an ExtraResources lookup of ONE ConfigMap shared by every
             # ApplicationEnvironment XR targeting the same cluster (matched by cluster name
             # alone, not by env) - that file's own header already documents this lookup as

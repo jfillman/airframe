@@ -20,22 +20,45 @@
 # name) can compute the identical project slug its "shared" sibling already created,
 # with no ExtraResources lookup needed either way.
 #
-# authMethod: now an ExtraResources cluster-registry lookup after all (2026-08-18) -
-# a real reversal of this file's own prior reasoning. That reasoning was "which
-# cluster hosts Infisical is a static topology fact (today: only ever kind-dev)" -
-# true only as long as exactly one dev cluster could ever exist. The fleet now
-# supports multiple; a second dev cluster is still type: dev but does NOT physically
-# run Infisical (idp/docs/service-catalog-design.md Item 8 deliberately keeps one
-# shared Infisical instance, not one per dev cluster), so "is this cluster dev-typed"
-# and "does this cluster host Infisical" are no longer the same fact - see
-# 00-infisical-host-gate.yaml (same pipeline step) for the live lookup against the
-# registry's own `infisicalHost` field, and kind-dev.yaml's own header for why that's
-# a separate field from `type`. See idp/docs/service-catalog-design.md Item 8's
-# multi-cluster revision for the original reasoning this builds on (Kubernetes Auth
-# needs Infisical and the workload on the SAME cluster; every cluster that isn't the
-# Infisical host needs Universal Auth instead - Gateway mode, the alternative, is
-# Enterprise-only).
+# authMethod: an ExtraResources cluster-registry lookup (00-infisical-host-gate.yaml,
+# same pipeline step) against the registry's own `infisicalHost` field - see that
+# file's own header for the full multi-cluster reasoning.
+#
+# 2026-09-18 MIGRATION, kubernetes-auth branch only, NOT YET LIVE-CUT-OVER:
+# replaces the hand-rolled infisical-secretstore-operator's single InfisicalProject
+# CR (which atomically did project+shared-env+identity+auth-config+membership-grant+
+# credentials-write as one hand-written REST call chain) with the real
+# github.com/jfillman/provider-infisical resource chain - Project, ProjectEnvironment,
+# Identity, IdentityKubernetesAuth, ProjectIdentity, plus a synthetic identityId
+# Secret (wrapped in provider-kubernetes' Object, same reasoning
+# clustersecretstore.yaml's own header already documents - Crossplane v2 needs a
+# recognized managed-resource family to compose, a raw core/v1 Secret has no
+# controller of its own). ProjectIdentity's adoptExisting: true is the native,
+# upstream-supported fix for the old operator's own known non-idempotent
+# ensure_project_membership() bug - a live 400 on retry, see
+# project_kiac_dev_provider_github_bugs's sibling memory on this operator.
+#
+# The universal-auth branch (every cluster OTHER than the one hosting Infisical,
+# e.g. kind-prod) deliberately still renders the OLD InfisicalProject CR, unchanged -
+# universal auth depends on IdentityUniversalAuthClientSecret, which hits a real bug
+# in terraform-provider-infisical's own Go SDK
+# (GetIdentityUniversalAuthClientSecretResponse.clientSecretData unmarshals an array
+# into a single-object struct field) that blocks its Observe path before Create ever
+# runs - not usable today. Revisit once that's fixed upstream.
+#
+# NOT YET WIRED INTO THE LIVE CLUSTER'S REAL SECRETSTORE XRS: this Composition
+# change, once merged to main, would immediately re-render EVERY existing
+# kubernetes-auth SecretStore XR under the new resource chain - Crossplane would
+# garbage-collect the old (real, already-provisioned) InfisicalProject objects for
+# every already-onboarded app on kiac-dev the moment this syncs, issuing new
+# credentials and orphaning the old Infisical projects. Verified in isolation first
+# (a throwaway (app,cluster) pair, applied directly, not through this XRD) before
+# any real per-app cutover - see the session notes for how that cutover should
+# actually happen (recreate credentials per app, re-point each ClusterSecretStore,
+# verify, clean up the old project - one app at a time, not a blanket Composition
+# flip). Kept on a feature branch, not main, until that per-app plan exists.
 <<- $spec := .observed.composite.resource.spec >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $appName := $spec.appRef.name >>
 <<- $envSlug := $spec.environmentSlug | default "shared" >>
 <<- $projectSlug := printf "%s-%s" $appName $spec.cluster >>
@@ -43,7 +66,148 @@
 <<- if $isInfisicalHost >>
   <<- $authMethod = "kubernetes" >>
 <<- end >>
+<<- /* Hardcoded, matching this Composition's own existing convention of hardcoding
+     cluster-specific infra addresses directly (hostAPI, in clustersecretstore.yaml/
+     per-env-secretstore.yaml) rather than a live lookup - the org that hosts every
+     app's project is a static fact of this Infisical instance, not something that
+     varies per-cluster the way infisicalHost does. Matches the current operator's
+     own INFISICAL_ORG_ID env var value exactly (confirmed live via `kubectl get
+     deployment infisical-secretstore-operator -o jsonpath=...`). */ >>
+<<- $infisicalOrgId := "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
 <<- if eq $envSlug "shared" >>
+  <<- if eq $authMethod "kubernetes" >>
+apiVersion: project.infisical.m.hangar.io/v1alpha1
+kind: Project
+metadata:
+  name: <<$projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-project">>
+spec:
+  forProvider:
+    name: <<$projectSlug>>
+    slug: <<$projectSlug>>
+    shouldCreateDefaultEnvs: false
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+---
+apiVersion: project.infisical.m.hangar.io/v1alpha1
+kind: ProjectEnvironment
+metadata:
+  name: <<printf "%s-shared" $projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-project-shared-env">>
+spec:
+  forProvider:
+    name: shared
+    slug: shared
+    projectIdRef:
+      name: <<$projectSlug>>
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+---
+apiVersion: identity.infisical.m.hangar.io/v1alpha1
+kind: Identity
+metadata:
+  name: <<$projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-identity">>
+spec:
+  forProvider:
+    name: <<$projectSlug>>
+    orgId: <<$infisicalOrgId | toJson>>
+    role: no-access
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+---
+apiVersion: identity.infisical.m.hangar.io/v1alpha1
+kind: IdentityKubernetesAuth
+metadata:
+  name: <<$projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-identity-k8s-auth">>
+spec:
+  forProvider:
+    identityIdRef:
+      name: <<$projectSlug>>
+    kubernetesHost: "https://kubernetes.default.svc.cluster.local"
+    kubernetesCaCertificate: <<$k8sCaCert | toJson>>
+    tokenReviewerJwt: <<$k8sReviewerJwt | toJson>>
+    tokenReviewerMode: api
+    # Scoped to ESO's own controller ServiceAccount only - it presents its own
+    # in-pod projected token, matching clustersecretstore.yaml's own "zero
+    # persisted credential" posture, same ESO_SERVICEACCOUNT_NAMESPACE/
+    # ESO_SERVICEACCOUNT_NAME the current operator already restricts to.
+    allowedNamespaces:
+      - external-secrets
+    allowedServiceAccountNames:
+      - external-secrets
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+---
+apiVersion: project.infisical.m.hangar.io/v1alpha1
+kind: ProjectIdentity
+metadata:
+  name: <<$projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-project-identity">>
+spec:
+  forProvider:
+    adoptExisting: true
+    projectIdRef:
+      name: <<$projectSlug>>
+    identityIdRef:
+      name: <<$projectSlug>>
+    roles:
+      # "viewer" here, not "no-access" - matches the current operator's own
+      # ensure_project_membership(role="viewer") exactly (confirmed against its
+      # source, main.py). "no-access" is correct at the ORG level for the Identity
+      # itself (above) but would leave ESO unable to read any secret through this
+      # store at all - hit live: ESO authenticated successfully via kubernetes
+      # auth, then got a real 403 "not allowed to describeSecret" back from
+      # Infisical with the project-level role wrongly set to no-access too.
+      - roleSlug: viewer
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+---
+    <<- $identityId := "" >>
+    <<- if .observed.resources >>
+      <<- $obsIdentity := index .observed.resources "infisical-identity" >>
+      <<- if $obsIdentity >>
+        <<- if $obsIdentity.resource >>
+          <<- if $obsIdentity.resource.metadata >>
+            <<- if $obsIdentity.resource.metadata.annotations >>
+              <<- $identityId = index $obsIdentity.resource.metadata.annotations "crossplane.io/external-name" | default "" >>
+            <<- end >>
+          <<- end >>
+        <<- end >>
+      <<- end >>
+    <<- end >>
+    <<- if ne $identityId "" >>
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: <<printf "%s-identity-secret" $projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-identity-secret">>
+spec:
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: <<printf "%s-infisical-creds" $projectSlug>>
+        namespace: <<$xrNamespace>>
+      stringData:
+        identityId: <<$identityId | toJson>>
+  managementPolicies: ["*"]
+---
+    <<- end >>
+  <<- else >>
 apiVersion: secrets.idp.io/v1alpha1
 kind: InfisicalProject
 metadata:
@@ -56,5 +220,6 @@ spec:
   environmentSlug: shared
   credentialsSecretName: <<printf "%s-infisical-creds" $projectSlug>>
   authMethod: <<$authMethod>>
-<<- end >>
 ---
+  <<- end >>
+<<- end >>

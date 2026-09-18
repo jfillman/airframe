@@ -1,0 +1,70 @@
+# The ONE repo InfraService creates - gitops-infra-<name>, serving a dual role
+# unique to this XRD (see xrds/infraservice.yaml's own header for the full
+# reasoning): it's both the real deploy-target repo (its own
+# <cluster>/<env>/values.yaml per environment, exactly like any app's own
+# gitops-<appName> repo) AND the technical anchor for cicd-yaml-stub.yaml's trivial
+# cicd.yaml, which is what lets tenant-onboarding-applicationset.yaml's own
+# structurally-required $appsrc source resolve to something real instead of a
+# nonexistent src repo.
+#
+# Otherwise a straight copy of nodejsapplication's own gitops-repo.yaml - same
+# crossplane.io/external-name fix (a cluster rebuild's fresh Repository MR has no
+# external-name, so provider-github tries to Create a repo that already exists on
+# GitHub and 422s), same reasoning.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $visibility := $spec.visibility >>
+<<- $description := $spec.description | default (printf "%s - a standalone shared infrastructure service" $xrName) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: Repository
+metadata:
+  name: <<$xrName>>-gitops-infra
+  annotations:
+    <<setResourceNameAnnotation "gitops-repo">>
+    crossplane.io/external-name: <<printf "gitops-infra-%s" $xrName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    name: <<printf "gitops-infra-%s" $xrName>>
+    description: <<$description | toJson>>
+    visibility: <<$visibility>>
+    autoInit: true
+    securityAndAnalysis:
+      - secretScanning:
+          - status: disabled
+        secretScanningPushProtection:
+          - status: disabled
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-gitops-infra-readme
+  annotations:
+    <<setResourceNameAnnotation "gitops-repo-readme">>
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<printf "gitops-infra-%s" $xrName>>
+    file: README.md
+    overwriteOnCreate: true
+    content: |
+      # gitops-infra-<<$xrName>>
+
+      GitOps deployment repo for `<<$xrName>>`, a standalone shared infrastructure
+      service scaffolded by `InfraService` (Airframe). Empty until this service's
+      first `ApplicationEnvironment` resource is created - each environment gets its
+      own `<cluster>/<env>/values.yaml` here, rendered by `airframe-application`
+      (Airframe's shared Helm chart), typically containing only a `components:`
+      block with this service itself as the sole entry (`appType: infra`,
+      service-catalog-design.md Item 7).
+
+      This repo also carries a trivial, zero-stage `cicd.yaml` at its root - not a
+      real CI/CD pipeline (this service has no source code to build), but the
+      structural anchor platform-cicd's tenant-onboarding mechanism needs. See that
+      file's own comment for why.
+    commitMessage: "InfraService scaffold: README.md"

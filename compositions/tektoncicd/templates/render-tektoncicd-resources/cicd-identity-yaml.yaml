@@ -15,8 +15,12 @@
 # xrds/tektoncicd.yaml's own header gives for not exposing it as a spec
 # field: it's a ProviderConfig-wide setting, not a per-app one.
 #
-# type: app (not infra), catalogNamespace: platform-catalog - fixed platform
-# convention, matches every other tenant's identity.yaml (platform-cicd/docs/
+# $spec.type/$spec.registerPipelinesAsCode (2026-09-18, InfraService's own build -
+# service-catalog-design.md Item 7) - real XR spec fields now, both schema-defaulted
+# to today's exact hardcoded behavior ("app"/true) so every existing caller
+# (NodeJSApplication/SpringBootApplication/GoApplication/PythonApplication) is
+# byte-for-byte unaffected. catalogNamespace: platform-catalog stays a fixed
+# literal - unlike type, nothing yet needs it to vary (platform-cicd/docs/
 # onboarding.md step 3).
 #
 # managementPolicies excluding "Delete" (matches applicationenvironment's own
@@ -59,11 +63,12 @@ spec:
     content: |
       platformIdentity:
         appName: <<$xrName>>
-        type: app
+        type: <<$spec.type>>
         gitopsRepoUrl: <<$spec.gitopsRepoUrl>>
         appRepoUrl: <<$spec.appRepoUrl>>
         githubOwner: <<$platformOwner>>
         catalogNamespace: platform-catalog
+        registerPipelinesAsCode: <<$spec.registerPipelinesAsCode>>
       <<- if $spec.extraGitopsRepos >>
         extraGitopsRepos:
         <<- range $spec.extraGitopsRepos >>

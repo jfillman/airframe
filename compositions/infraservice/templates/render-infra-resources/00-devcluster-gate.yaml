@@ -1,0 +1,34 @@
+# Real Crossplane extra-resources lookup against the cluster registry
+# (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
+# moved verbatim (mechanism unchanged) from nodejsapplication's own
+# 00-devcluster-gate.yaml. See that file's own comments for the full "why" behind
+# each piece ($tenantsRepo as registry data not a hardcoded literal, the
+# single-YAML-document structure, etc.) - not re-explained here since the mechanism
+# is identical, just reused for a different XRD.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $devCluster := $spec.devCluster >>
+<<- $allExtra := .extraResources | default dict >>
+<<- $entry := index $allExtra "devcluster-registry-entry" | default dict >>
+<<- $items := index $entry "items" | default list >>
+<<- $clusterOk := false >>
+<<- $clusterType := "" >>
+<<- $cicdReady := "" >>
+<<- $tenantsRepo := "" >>
+<<- if gt (len $items) 0 >>
+  <<- $cm := (index $items 0).resource >>
+  <<- $clusterType = $cm.data.type >>
+  <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
+  <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+  <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
+    <<- $clusterOk = true >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  devcluster-registry-entry:
+    apiVersion: v1
+    kind: ConfigMap
+    namespace: crossplane-system
+    matchName: <<$devCluster>>

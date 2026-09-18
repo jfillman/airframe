@@ -69,6 +69,40 @@ spec:
                     inferred from metadata.name and must be passed explicitly -
                     it's what tenants/<appName>/identity.yaml is keyed on.
                   minLength: 1
+                type:
+                  type: string
+                  description: >-
+                    platformIdentity.type in the rendered identity.yaml - naming-
+                    conventions.md's real app|infra distinction, read by BOTH
+                    consuming ApplicationSets (platform-cicd's own
+                    <type>-<appName>-cicd namespace convention already keys off this
+                    exact field, glidepath-control-plane/templates/argocd/
+                    tenant-onboarding-applicationset.yaml). Added for InfraService
+                    (service-catalog-design.md Item 7's missing Bootstrap XRD) - a
+                    standalone shared component (Redis, Postgres, ...) has no source
+                    code to build, so it onboards with type: infra and
+                    registerPipelinesAsCode: false rather than the CI/CD pipeline
+                    machinery every type: app tenant gets. Every existing caller
+                    (NodeJSApplication/SpringBootApplication/GoApplication/
+                    PythonApplication) omits this field and keeps today's hardcoded
+                    "app" behavior via the default - zero behavior change for any
+                    already-onboarded app.
+                  enum: [app, infra]
+                  default: app
+                registerPipelinesAsCode:
+                  type: boolean
+                  description: >-
+                    platformIdentity.registerPipelinesAsCode in the rendered
+                    identity.yaml - an existing, already-designed-for
+                    glidepath-app chart override (charts/glidepath-app/templates/
+                    pipelines-as-code/repository.yaml and hooks/
+                    onboarding-resync-bootstrap.yaml are both already gated on this
+                    exact value, "overridable per-app to deregister a repo" per
+                    that chart's own header) - not new chart behavior, just the
+                    first XRD-level caller to actually set it to false. An
+                    InfraService's appRepoUrl has no real source to register PaC
+                    against or bootstrap a resync hook for.
+                  default: true
                 gitopsRepoUrl:
                   type: string
                   description: >-

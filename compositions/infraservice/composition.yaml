@@ -1,0 +1,336 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks
+# below. Edit templates/render-infra-resources/*.yaml or
+# templates/cicd-onboarding-status/*.yaml instead, then run ./build-composition.sh to
+# regenerate this file.
+#
+# Two function-go-templating steps, not one (compositions/nodejsapplication's own
+# pattern, copied here): render-infra-resources composes the real provider-github
+# managed resources plus the composed TektonCICD child, cicd-onboarding-status
+# patches the XR's own status afterward to proxy DevClusterReady/CicdOnboarded from
+# that child. Both share the ONE already-installed function-go-templating Function
+# via source: Inline - registering a second Function package pointing at the same
+# reference corrupted Crossplane's shared dependency-lock graph cluster-wide, a real
+# bug hit live building the SLO Composition (see compositions/slo/build-composition.sh's
+# own header) - never repeat that here.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition
+# in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: infraservices.catalog.idp.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: InfraService
+  mode: Pipeline
+  pipeline:
+    - step: render-infra-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Real Crossplane extra-resources lookup against the cluster registry
+            # (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
+            # moved verbatim (mechanism unchanged) from nodejsapplication's own
+            # 00-devcluster-gate.yaml. See that file's own comments for the full "why" behind
+            # each piece ($tenantsRepo as registry data not a hardcoded literal, the
+            # single-YAML-document structure, etc.) - not re-explained here since the mechanism
+            # is identical, just reused for a different XRD.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $devCluster := $spec.devCluster >>
+            <<- $allExtra := .extraResources | default dict >>
+            <<- $entry := index $allExtra "devcluster-registry-entry" | default dict >>
+            <<- $items := index $entry "items" | default list >>
+            <<- $clusterOk := false >>
+            <<- $clusterType := "" >>
+            <<- $cicdReady := "" >>
+            <<- $tenantsRepo := "" >>
+            <<- if gt (len $items) 0 >>
+              <<- $cm := (index $items 0).resource >>
+              <<- $clusterType = $cm.data.type >>
+              <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
+              <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+              <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
+                <<- $clusterOk = true >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              devcluster-registry-entry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchName: <<$devCluster>>
+            ---
+            # Commits a trivial, zero-stage cicd.yaml into gitops-infra-<name> (the SAME repo
+            # gitops-repo.yaml just scaffolded) - not a real CI/CD pipeline declaration, this
+            # service has no source code to build. Exists purely to satisfy a real structural
+            # requirement of glidepath-control-plane's tenant-onboarding-applicationset.yaml:
+            # its ArgoCD Application always declares a source pointed at
+            # platformIdentity.appRepoUrl and reads $appsrc/cicd.yaml as a Helm valueFiles entry
+            # - that source has to resolve to a real repo with a real file at that path, or the
+            # whole Application fails to generate manifests at all (repo/file not found), not
+            # just degrade gracefully. There is no way to omit that source conditionally via
+            # ArgoCD ApplicationSet's own goTemplate substitution (confirmed against that
+            # file's own documented limit - see xrds/infraservice.yaml's header for the
+            # citation), so tekton-cicd-child.yaml (this same directory) points
+            # spec.appRepoUrl at gitops-infra-<name> itself rather than at a separate,
+            # nonexistent src repo.
+            #
+            # `apiVersion`/`kind`/`build.agent` are the only fields schemas/cicd.schema.json
+            # actually requires (verified against that file directly, not assumed) - `build`
+            # itself is otherwise inert since no stage in `pipelines` ever references it, and
+            # `pipelines` is deliberately omitted entirely so the chart's own values.yaml
+            # default (`pipelines: {}` - zero declared flows) applies, which is exactly what
+            # makes every stage-gated template in glidepath-app (deploy-rbac, release-
+            # application, testkube, pipelines-as-code/repository's OWN trigger wiring, ...)
+            # render nothing for this tenant. `build.agent: nodejs-20` is an arbitrary valid
+            # enum member, never actually used (no build stage ever runs) - schema validity is
+            # the only reason it's here.
+            #
+            # Not gated on $clusterOk (unlike cicd-identity-yaml.yaml/secretstore-xr.yaml) -
+            # same reasoning as gitops-repo.yaml (this same directory), which this file always
+            # follows: neither commits into $tenantsRepo or needs any devCluster registry data
+            # to resolve, so there's nothing for the gate to actually protect here.
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-gitops-infra-cicd-yaml
+              annotations:
+                <<setResourceNameAnnotation "cicd-yaml-stub">>
+            spec:
+              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<printf "gitops-infra-%s" $xrName>>
+                file: cicd.yaml
+                overwriteOnCreate: true
+                content: |
+                  apiVersion: platform/v1
+                  kind: PipelineConfig
+                  build:
+                    agent: nodejs-20
+                commitMessage: "InfraService scaffold: cicd.yaml (no pipeline stages - this service has no source code)"
+            ---
+            # The ONE repo InfraService creates - gitops-infra-<name>, serving a dual role
+            # unique to this XRD (see xrds/infraservice.yaml's own header for the full
+            # reasoning): it's both the real deploy-target repo (its own
+            # <cluster>/<env>/values.yaml per environment, exactly like any app's own
+            # gitops-<appName> repo) AND the technical anchor for cicd-yaml-stub.yaml's trivial
+            # cicd.yaml, which is what lets tenant-onboarding-applicationset.yaml's own
+            # structurally-required $appsrc source resolve to something real instead of a
+            # nonexistent src repo.
+            #
+            # Otherwise a straight copy of nodejsapplication's own gitops-repo.yaml - same
+            # crossplane.io/external-name fix (a cluster rebuild's fresh Repository MR has no
+            # external-name, so provider-github tries to Create a repo that already exists on
+            # GitHub and 422s), same reasoning.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $visibility := $spec.visibility >>
+            <<- $description := $spec.description | default (printf "%s - a standalone shared infrastructure service" $xrName) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: Repository
+            metadata:
+              name: <<$xrName>>-gitops-infra
+              annotations:
+                <<setResourceNameAnnotation "gitops-repo">>
+                crossplane.io/external-name: <<printf "gitops-infra-%s" $xrName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                name: <<printf "gitops-infra-%s" $xrName>>
+                description: <<$description | toJson>>
+                visibility: <<$visibility>>
+                autoInit: true
+                securityAndAnalysis:
+                  - secretScanning:
+                      - status: disabled
+                    secretScanningPushProtection:
+                      - status: disabled
+            ---
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-gitops-infra-readme
+              annotations:
+                <<setResourceNameAnnotation "gitops-repo-readme">>
+            spec:
+              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<printf "gitops-infra-%s" $xrName>>
+                file: README.md
+                overwriteOnCreate: true
+                content: |
+                  # gitops-infra-<<$xrName>>
+
+                  GitOps deployment repo for `<<$xrName>>`, a standalone shared infrastructure
+                  service scaffolded by `InfraService` (Airframe). Empty until this service's
+                  first `ApplicationEnvironment` resource is created - each environment gets its
+                  own `<cluster>/<env>/values.yaml` here, rendered by `airframe-application`
+                  (Airframe's shared Helm chart), typically containing only a `components:`
+                  block with this service itself as the sole entry (`appType: infra`,
+                  service-catalog-design.md Item 7).
+
+                  This repo also carries a trivial, zero-stage `cicd.yaml` at its root - not a
+                  real CI/CD pipeline (this service has no source code to build), but the
+                  structural anchor platform-cicd's tenant-onboarding mechanism needs. See that
+                  file's own comment for why.
+                commitMessage: "InfraService scaffold: README.md"
+            ---
+            # Straight copy of nodejsapplication's own secretstore-xr.yaml - same mechanism,
+            # same reasoning (see that file's own header for the full history). A standalone
+            # infra service is exactly as entitled to its own (service, cluster)-scoped
+            # Infisical project/ClusterSecretStore as any app - e.g. a standalone Postgres
+            # needs somewhere to keep its own admin credentials before any consuming app's
+            # ExternalSecret can reference them.
+            <<- if $clusterOk >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-secretstore-xr
+              annotations:
+                <<setResourceNameAnnotation "secretstore-xr">>
+            spec:
+              managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$tenantsRepo>>
+                file: <<printf "tenants/%s/xr-requests/secretstore.yaml" $xrName>>
+                overwriteOnCreate: true
+                content: |
+                  apiVersion: catalog.idp.io/v1alpha1
+                  kind: SecretStore
+                  metadata:
+                    name: <<printf "%s-%s" $xrName $devCluster>>
+                  spec:
+                    appRef:
+                      name: <<$xrName>>
+                    cluster: <<$devCluster>>
+                commitMessage: <<printf "Onboard %s: add tenants/%s/xr-requests/secretstore.yaml" $xrName $xrName | toJson>>
+            <<- end >>
+            ---
+            # Composes a TektonCICD child XR directly, same pattern as
+            # nodejsapplication's own tekton-cicd-child.yaml - see that file's own header for
+            # why this is a direct composed child, not a GitOps xr-requests commit (TektonCICD
+            # only calls the GitHub API, cluster-agnostic, no cross-cluster-credential
+            # blocker).
+            #
+            # type: infra, registerPipelinesAsCode: false - the two fields tektoncicd.yaml
+            # gained specifically for this XRD (2026-09-18). Every other Bootstrap-tier caller
+            # (NodeJSApplication/SpringBootApplication/GoApplication/PythonApplication) omits
+            # both and keeps today's "app"/true defaults; InfraService is the first (and so
+            # far only) caller that sets them explicitly.
+            #
+            # gitopsRepoUrl == appRepoUrl, both pointing at gitops-infra-<name> - unlike a real
+            # app (separate src and gitops repos), InfraService has exactly one repo, playing
+            # both roles. See cicd-yaml-stub.yaml (this same directory) and
+            # xrds/infraservice.yaml's own header for why appRepoUrl has to point at a real,
+            # existing repo at all even though this service has no source code to build.
+            <<- $platformOwner := "jfillman" >>
+            apiVersion: catalog.idp.io/v1alpha1
+            kind: TektonCICD
+            metadata:
+              name: <<$xrName>>-tektoncicd
+              annotations:
+                <<setResourceNameAnnotation "tektoncicd">>
+            spec:
+              appName: <<$xrName>>
+              type: infra
+              registerPipelinesAsCode: false
+              gitopsRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
+              appRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
+              devCluster: <<$devCluster>>
+            ---
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: cicd-onboarding-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
+            # child's own status.conditions onto this XR's status - identical mechanism to
+            # nodejsapplication's own copy of this file (see that file's own header for the
+            # full explanation). "CicdOnboarded" is a slightly misleading name for an infra
+            # service with no CI/CD pipeline, but it's the same real underlying signal (has
+            # tenants/<name>/identity.yaml been committed and picked up) every other
+            # Bootstrap-tier XRD already exposes under this name - kept as-is rather than
+            # inventing an infra-specific condition name for the same fact.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $allObserved := .observed.resources | default dict >>
+            <<- $childRes := index $allObserved "tektoncicd" | default dict >>
+            <<- $childXR := index $childRes "resource" | default dict >>
+            <<- $childStatus := index $childXR "status" | default dict >>
+            <<- $childConditions := index $childStatus "conditions" | default list >>
+            <<- $devClusterCondition := dict >>
+            <<- $cicdOnboardedCondition := dict >>
+            <<- range $childConditions >>
+              <<- if eq .type "DevClusterReady" >>
+                <<- $devClusterCondition = . >>
+              <<- else if eq .type "CicdOnboarded" >>
+                <<- $cicdOnboardedCondition = . >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+            <<- if $devClusterCondition >>
+              - type: DevClusterReady
+                status: <<$devClusterCondition.status | toJson>>
+                reason: <<$devClusterCondition.reason>>
+                message: <<$devClusterCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: DevClusterReady
+                status: "False"
+                reason: DevClusterNotReady
+                message: >-
+                  Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+                  its own DevClusterReady condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
+            <<- if $cicdOnboardedCondition >>
+              - type: CicdOnboarded
+                status: <<$cicdOnboardedCondition.status | toJson>>
+                reason: <<$cicdOnboardedCondition.reason>>
+                message: <<$cicdOnboardedCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: CicdOnboarded
+                status: "False"
+                reason: CicdOnboardingPending
+                message: >-
+                  Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+                  its own CicdOnboarded condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

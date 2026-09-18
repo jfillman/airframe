@@ -1,0 +1,32 @@
+# Composes a TektonCICD child XR directly, same pattern as
+# nodejsapplication's own tekton-cicd-child.yaml - see that file's own header for
+# why this is a direct composed child, not a GitOps xr-requests commit (TektonCICD
+# only calls the GitHub API, cluster-agnostic, no cross-cluster-credential
+# blocker).
+#
+# type: infra, registerPipelinesAsCode: false - the two fields tektoncicd.yaml
+# gained specifically for this XRD (2026-09-18). Every other Bootstrap-tier caller
+# (NodeJSApplication/SpringBootApplication/GoApplication/PythonApplication) omits
+# both and keeps today's "app"/true defaults; InfraService is the first (and so
+# far only) caller that sets them explicitly.
+#
+# gitopsRepoUrl == appRepoUrl, both pointing at gitops-infra-<name> - unlike a real
+# app (separate src and gitops repos), InfraService has exactly one repo, playing
+# both roles. See cicd-yaml-stub.yaml (this same directory) and
+# xrds/infraservice.yaml's own header for why appRepoUrl has to point at a real,
+# existing repo at all even though this service has no source code to build.
+<<- $platformOwner := "jfillman" >>
+apiVersion: catalog.idp.io/v1alpha1
+kind: TektonCICD
+metadata:
+  name: <<$xrName>>-tektoncicd
+  annotations:
+    <<setResourceNameAnnotation "tektoncicd">>
+spec:
+  appName: <<$xrName>>
+  type: infra
+  registerPipelinesAsCode: false
+  gitopsRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
+  appRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
+  devCluster: <<$devCluster>>
+---

@@ -1,0 +1,88 @@
+# First real Component XRD - Item 7's Sequencing step 3
+# (service-catalog-design.md), "ship redis first (Dedicated only,
+# provider-helm) - lowest risk, proves the wrapped-chart pattern end to end".
+# Attached-tier, per the Framework table - a `components:` entry in some env's
+# `values.yaml`, rendered by `airframe-application`'s existing generic
+# `templates/attached/components.yaml` (already built, already has `redis: Redis`
+# in its componentKinds lookup - this XRD is the first thing that table has ever
+# pointed at something real). apiextensions.crossplane.io/v2, scope: Namespaced -
+# matches every other XRD in this catalog.
+#
+# Dedicated mode only, per Item 7's own Round 2026-09-17 table ("Redis: N/A - a
+# dedicated-cache use case, not a multi-tenant-within-one-instance sharing
+# question the way Postgres/Mongo/RabbitMQ/OAuth are... Unchanged: provider-helm
+# Release, one per XR"). No `mode: create | attach` field - that distinction only
+# exists for services where "attach to an already-shared instance" is a real,
+# separate provisioning path; it isn't one here.
+#
+# Schema deliberately small, matching Item 7's own example almost verbatim
+# ("a Redis XRD with a real schema (size: small|medium|large, persistence: bool)
+# gives a legible Backstage form and platform-controlled defaults") - the curated
+# fields exist so a developer never sees or sets raw Helm values, and Backstage's
+# eventual form only ever needs to render two fields for this component type.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: redis.catalog.idp.io
+spec:
+  group: catalog.idp.io
+  names:
+    kind: Redis
+    plural: redis
+    singular: redis
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - environmentRef
+              properties:
+                environmentRef:
+                  type: object
+                  description: >-
+                    Names the owning ApplicationEnvironment XR (app+cluster+env
+                    identity) this Redis instance belongs to. Labeling/audit
+                    only - not a live lookup, same convention as every other
+                    Attached-tier XRD in this catalog (see xrds/slo.yaml's own
+                    copy of this field). Auto-stamped by
+                    airframe-application's own components.yaml renderer - a
+                    developer adding `- type: redis` to a `components:` list
+                    never types this by hand.
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                size:
+                  type: string
+                  description: >-
+                    Maps directly onto the wrapped Bitnami redis chart's own
+                    `master.resourcesPreset`/`replica.resourcesPreset` fields
+                    (compositions/redis's own values mapping) - reusing
+                    Bitnami's own vetted cpu/memory presets rather than this
+                    catalog inventing its own numbers. `large` is the biggest
+                    exposed here deliberately (bigger presets exist upstream -
+                    xlarge/2xlarge - but nothing in this catalog's real usage
+                    has asked for them yet; widen the enum, don't bypass it,
+                    if that changes).
+                  enum: [small, medium, large]
+                  default: small
+                persistence:
+                  type: boolean
+                  description: >-
+                    Whether Redis data survives a pod restart (a real PVC) vs.
+                    pure in-memory cache semantics (emptyDir-equivalent,
+                    `persistence.enabled: false` on the wrapped chart - data
+                    is lost on every restart/reschedule). Default true matches
+                    the wrapped chart's own upstream default, not a platform
+                    override.
+                  default: true
+          required: ["spec"]

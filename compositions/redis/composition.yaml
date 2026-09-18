@@ -1,0 +1,174 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template`
+# block below. Edit templates/*.yaml instead, then run ./build-composition.sh
+# to regenerate this file.
+#
+# First real Component XRD's Composition - Item 7 Sequencing step 3
+# (service-catalog-design.md). Single function-go-templating step: renders
+# a provider-helm Release wrapping Bitnami's own redis chart - see
+# templates/release.yaml's own header for the full mapping/reasoning.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other
+# Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: redis.catalog.idp.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: Redis
+  mode: Pipeline
+  pipeline:
+    - step: render-redis-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Wraps Bitnami's own `redis` chart via provider-helm's namespaced Release
+            # (helm.m.crossplane.io/v1beta1 - confirmed NAMESPACED=true live via `kubectl
+            # api-resources` when provider-helm was installed, Item 7 Sequencing step 1;
+            # see providers.yaml's own header in gitops-cluster-dev for the full
+            # discovery). No separate published "component-redis" wrapper chart artifact -
+            # this Composition itself is the thin wrapper Item 7 describes, translating
+            # spec.size/spec.persistence into the real upstream chart's own values
+            # directly. Deliberate scope call for this first Component XRD: a real,
+            # separately-packaged/published wrapper chart is a genuine future option if
+            # reuse or complexity grows, but it needs its own OCI-chart-publishing
+            # infrastructure this catalog doesn't have yet (the ghcr.io/jfillman usage so
+            # far is container images and Crossplane provider packages, not plain Helm
+            # charts) - not worth building for the lowest-risk first Component XRD.
+            #
+            # repository: https://charts.bitnami.com/bitnami, version 28.2.1 - version
+            # verified against the real index (charts.bitnami.com/bitnami/index.yaml,
+            # which 302-redirects to repo.broadcom.com/bitnami-files post-acquisition but
+            # is otherwise the same live, actively-published classic Helm-repo channel -
+            # NOT Bitnami's separate OCI distribution, which currently only publishes
+            # opaque sha256-digest tags rather than clean semver ones under this same
+            # migration). Same "verify against the actual registry, not just a git tag"
+            # discipline provider-github's v0.20.0 trap already taught this catalog.
+            #
+            # architecture: standalone (not the chart's own default of "replication",
+            # 1 master + 3 replicas) - deliberate: this XRD's whole framing is "a
+            # dedicated cache," and a 4-pod topology isn't the sane default for that.
+            # Not exposed as a spec field for v1 (Item 7's own schema is just
+            # size/persistence) - widen the XRD schema first if replication is ever
+            # needed, don't bypass it.
+            #
+            # skipCreateNamespace: true - the SAME structural finding from Item 7
+            # Sequencing step 1's own smoke test (provider-helm's ServiceAccount has no
+            # RBAC to create namespaces, deliberately not granted - see
+            # provider-helm-config.yaml's own header in gitops-cluster-dev). Always true
+            # here specifically: an Attached-tier Component only ever renders into an
+            # app's own already-provisioned env namespace (airframe-application's
+            # components.yaml renderer places it there), never a namespace this
+            # Composition would need to create itself.
+            #
+            # master.resourcesPreset/replica.resourcesPreset both set from spec.size -
+            # reuses Bitnami's own vetted cpu/memory presets (checked live against
+            # charts/common/templates/_resources.tpl) rather than this catalog inventing
+            # its own numbers - replica.resourcesPreset is inert in standalone mode
+            # (no replica pods render at all) but harmless to set for consistency if
+            # architecture ever becomes a real spec field later.
+            #
+            # connectionDetails/writeConnectionSecretToRef - Crossplane's own native
+            # connection-secret mechanism (same pattern already proven for SecretStore/
+            # provider-infisical's Identity resource), not a hand-rolled equivalent.
+            # host is the master Service's own metadata.name (Bitnami's
+            # common.names.fullname + "-master", confirmed live via `helm template`) -
+            # a short, same-namespace-resolvable DNS name, matching how every Attached-
+            # tier Component is actually consumed (same namespace as the app that
+            # declared it). Wiring this connection secret into a CONSUMING app's own
+            # Embedded-tier `secrets:` block is real, separate, not-yet-built work
+            # (service-catalog-design.md's own "Consumer access... not wired up
+            # automatically" note) - this just makes the raw secret available.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+            <<- $spec := .observed.composite.resource.spec >>
+            # hasKey below, not a bare `$spec.persistence | default true` - Sprig's
+            # `default` treats an explicit `false` exactly like "unset" and silently
+            # substitutes the default anyway, a real bug this catalog already hit once
+            # (service-catalog-design.md's `jobs:`/`hook: false` writeup) - deliberately
+            # not repeated here: `persistence: false` must render as false, not get
+            # quietly overridden back to true. (Plain YAML # comment, not a Go-template
+            # block-comment action, for the same reason this catalog avoids those
+            # generally - a stray space before its closing delimiter breaks the lexer,
+            # a real bug hit live building provider-infisical's own Composition. Note
+            # for the next editor: even describing that delimiter pair in prose, as
+            # literal characters, is enough to retrigger it - the lexer scans raw text
+            # for the pair regardless of surrounding YAML comment syntax. This
+            # parenthetical is deliberately paraphrased instead of quoting the actual
+            # syntax for exactly that reason.)
+            <<- $size := $spec.size | default "small" >>
+            <<- $persistence := true >>
+            <<- if hasKey $spec "persistence" >>
+              <<- $persistence = $spec.persistence >>
+            <<- end >>
+            apiVersion: helm.m.crossplane.io/v1beta1
+            kind: Release
+            metadata:
+              name: <<$xrName>>
+              annotations:
+                <<setResourceNameAnnotation "release">>
+            spec:
+              forProvider:
+                namespace: <<$xrNamespace>>
+                skipCreateNamespace: true
+                chart:
+                  name: redis
+                  repository: https://charts.bitnami.com/bitnami
+                  version: 28.2.1
+                values:
+                  architecture: standalone
+                  auth:
+                    enabled: true
+                  master:
+                    resourcesPreset: <<$size>>
+                    persistence:
+                      enabled: <<$persistence>>
+                  replica:
+                    resourcesPreset: <<$size>>
+                    persistence:
+                      enabled: <<$persistence>>
+              connectionDetails:
+                - apiVersion: v1
+                  kind: Service
+                  name: <<printf "%s-master" $xrName>>
+                  namespace: <<$xrNamespace>>
+                  fieldPath: metadata.name
+                  toConnectionSecretKey: host
+                - apiVersion: v1
+                  kind: Service
+                  name: <<printf "%s-master" $xrName>>
+                  namespace: <<$xrNamespace>>
+                  fieldPath: spec.ports[0].port
+                  toConnectionSecretKey: port
+                - apiVersion: v1
+                  kind: Secret
+                  name: <<$xrName>>
+                  namespace: <<$xrNamespace>>
+                  fieldPath: data.redis-password
+                  toConnectionSecretKey: password
+              writeConnectionSecretToRef:
+                # No `namespace` field - confirmed live against the real
+                # releases.helm.m.crossplane.io CRD schema (`namespace not declared in
+                # schema`, hit live): unlike the Cluster-scoped Release's own
+                # writeConnectionSecretToRef (name+namespace, since a cluster-scoped
+                # resource can write anywhere), the namespaced variant implicitly writes
+                # into its own namespace - the same namespace this Release itself lives
+                # in, i.e. $xrNamespace, with no way to say otherwise.
+                name: <<printf "%s-connection" $xrName>>
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+            ---
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready

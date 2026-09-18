@@ -1,0 +1,79 @@
+# Fifth Bootstrap-tier XRD, and Item 7's own missing piece
+# (service-catalog-design.md "A missing Bootstrap XRD: standalone shared infra has no
+# source code to scaffold" + "Handoff: Item 7's build is now unblocked" 2026-09-18).
+# apiextensions.crossplane.io/v2, scope: Namespaced - matches every sibling Bootstrap
+# XRD (NodeJSApplication/SpringBootApplication/GoApplication/PythonApplication).
+#
+# NodeJSApplication minus the src-repo/boilerplate step, per the design doc's own
+# framing - but "minus src-repo" turned out to mean more than just skipping five
+# RepositoryFile templates: the live tenant-onboarding mechanism it still needs
+# (glidepath-control-plane's tenant-onboarding-applicationset.yaml) structurally
+# requires an app repo with a real cicd.yaml as one of its ArgoCD Application
+# sources - there's no way to omit that source via ArgoCD ApplicationSet's own
+# goTemplate substitution (confirmed against that file's own documented limitation:
+# "goTemplate's per-string-field substitution... can only ever produce scalar
+# values, not dynamically generate array items" - the same constraint that already
+# forced identity.yaml to be read as a raw valueFile instead of forwarded through
+# valuesObject). Reusing gitops-infra-<name> as BOTH the deploy-target repo (its own
+# <cluster>/<env>/values.yaml, same as any app's gitops repo) AND the technical
+# anchor for a trivial, zero-stage cicd.yaml (compositions/infraservice/templates/
+# render-infra-resources/cicd-yaml-stub.yaml) satisfies that structural requirement
+# without inventing a third repo or touching the live glidepath chart at all - every
+# stage-gated template in glidepath-app (deploy-rbac, release-application, testkube,
+# ...) already renders nothing for a cicd.yaml with zero declared stages, so this is
+# reusing an already-proven mechanism, not new chart behavior.
+#
+# XR's own metadata.name IS the service name (no separate spec.name) - matches
+# NodeJSApplication's own convention.
+#
+# No nodeVersion/packageManager/port - there is no application language or runtime
+# here, only infrastructure. No visibility default of "private" removed either -
+# still real, since the (empty) gitops-infra-<name> repo is a real GitHub repo like
+# any other.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: infraservices.catalog.idp.io
+  annotations:
+    terasky.backstage.io/add-to-catalog: "true"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests/infraservice.yaml"
+spec:
+  group: catalog.idp.io
+  names:
+    kind: InfraService
+    plural: infraservices
+    singular: infraservice
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                devCluster:
+                  type: string
+                  description: >-
+                    Which dev cluster this standalone service is onboarded onto -
+                    same meaning, same live cluster-registry gate, as
+                    NodeJSApplication's own spec.devCluster. An InfraService is
+                    pinned to exactly one, same as any app.
+                  minLength: 1
+                description:
+                  type: string
+                  description: >-
+                    Free-text description - used as the gitops-infra-<name> repo's
+                    GitHub description. Optional; omitted renders a generic
+                    placeholder instead.
+                  minLength: 1
+                visibility:
+                  type: string
+                  description: GitHub visibility for the gitops-infra-<name> repo.
+                  enum: [private, public]
+                  default: private
+              required: ["devCluster"]
+          required: ["spec"]

@@ -1,0 +1,51 @@
+# Commits a trivial, zero-stage cicd.yaml into gitops-infra-<name> (the SAME repo
+# gitops-repo.yaml just scaffolded) - not a real CI/CD pipeline declaration, this
+# service has no source code to build. Exists purely to satisfy a real structural
+# requirement of glidepath-control-plane's tenant-onboarding-applicationset.yaml:
+# its ArgoCD Application always declares a source pointed at
+# platformIdentity.appRepoUrl and reads $appsrc/cicd.yaml as a Helm valueFiles entry
+# - that source has to resolve to a real repo with a real file at that path, or the
+# whole Application fails to generate manifests at all (repo/file not found), not
+# just degrade gracefully. There is no way to omit that source conditionally via
+# ArgoCD ApplicationSet's own goTemplate substitution (confirmed against that
+# file's own documented limit - see xrds/infraservice.yaml's header for the
+# citation), so tekton-cicd-child.yaml (this same directory) points
+# spec.appRepoUrl at gitops-infra-<name> itself rather than at a separate,
+# nonexistent src repo.
+#
+# `apiVersion`/`kind`/`build.agent` are the only fields schemas/cicd.schema.json
+# actually requires (verified against that file directly, not assumed) - `build`
+# itself is otherwise inert since no stage in `pipelines` ever references it, and
+# `pipelines` is deliberately omitted entirely so the chart's own values.yaml
+# default (`pipelines: {}` - zero declared flows) applies, which is exactly what
+# makes every stage-gated template in glidepath-app (deploy-rbac, release-
+# application, testkube, pipelines-as-code/repository's OWN trigger wiring, ...)
+# render nothing for this tenant. `build.agent: nodejs-20` is an arbitrary valid
+# enum member, never actually used (no build stage ever runs) - schema validity is
+# the only reason it's here.
+#
+# Not gated on $clusterOk (unlike cicd-identity-yaml.yaml/secretstore-xr.yaml) -
+# same reasoning as gitops-repo.yaml (this same directory), which this file always
+# follows: neither commits into $tenantsRepo or needs any devCluster registry data
+# to resolve, so there's nothing for the gate to actually protect here.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-gitops-infra-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "cicd-yaml-stub">>
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<printf "gitops-infra-%s" $xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: true
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+      build:
+        agent: nodejs-20
+    commitMessage: "InfraService scaffold: cicd.yaml (no pipeline stages - this service has no source code)"

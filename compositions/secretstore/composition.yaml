@@ -327,13 +327,13 @@ spec:
             <<- if $isInfisicalHost >>
               <<- $authMethod = "kubernetes" >>
             <<- end >>
-            <<- /* Hardcoded, matching this Composition's own existing convention of hardcoding
-                 cluster-specific infra addresses directly (hostAPI, in clustersecretstore.yaml/
-                 per-env-secretstore.yaml) rather than a live lookup - the org that hosts every
-                 app's project is a static fact of this Infisical instance, not something that
-                 varies per-cluster the way infisicalHost does. Matches the current operator's
-                 own INFISICAL_ORG_ID env var value exactly (confirmed live via `kubectl get
-                 deployment infisical-secretstore-operator -o jsonpath=...`). */ >>
+            # Hardcoded, matching this Composition's own existing convention of hardcoding
+            # cluster-specific infra addresses directly (hostAPI, in clustersecretstore.yaml/
+            # per-env-secretstore.yaml) rather than a live lookup - the org that hosts every
+            # app's project is a static fact of this Infisical instance, not something that
+            # varies per-cluster the way infisicalHost does. Matches the current operator's
+            # own INFISICAL_ORG_ID env var value exactly (confirmed live via kubectl get
+            # deployment infisical-secretstore-operator -o jsonpath=...).
             <<- $infisicalOrgId := "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
             <<- if eq $envSlug "shared" >>
               <<- if eq $authMethod "kubernetes" >>

@@ -1,0 +1,19 @@
+# appName/cluster/envName are always supplied by the ApplicationSet's
+# helm.valuesObject (see gitops-cluster-<cluster>/02-argocd-apps/tenant-identity/
+# applicationset.yaml) - no real default, just documents the expected shape.
+appName: ""
+cluster: ""
+envName: ""
+
+# releaseTracking - same gate airframe-application's own release-tracking
+# templates use (see that chart's values.yaml). Only rendered when set; sourced
+# from the same per-env gitops-<app-name>/<cluster>/<env>/values.yaml file both
+# charts read via the ApplicationSet's $appsrc valueFiles ref, so a tenant's
+# releaseTracking block never needs to be declared twice.
+releaseTracking: null
+
+# platformSecretStore - this cluster's own platform-cicd Infisical
+# ClusterSecretStore, same default airframe-application's values.yaml declares.
+platformSecretStore:
+  name: platform-secret-store
+  kind: ClusterSecretStore

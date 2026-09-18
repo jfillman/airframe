@@ -53,9 +53,24 @@ hostAliases entries too. Only rendered when relayHostAliasIP is set, so a
 bare-IP relayUrl (no hostname to alias) still renders a valid Job.
 
 Deliberately NOT using airframe-application.serviceAccountName / the shared app
-ServiceAccount (rbac.yaml, this same directory, provisions platform-outcome-hook
-instead) - this is its own narrowly-scoped identity (get on exactly one Secret),
-unrelated to whatever RBAC the app's own workload needs.
+ServiceAccount - this is its own narrowly-scoped identity (get on exactly one
+Secret), unrelated to whatever RBAC the app's own workload needs.
+
+platform-outcome-hook's ServiceAccount/Role/RoleBinding + the
+platform-outcome-relay-token ExternalSecret it reads used to be rendered by THIS
+chart too (release-tracking/rbac.yaml, release-tracking/relay-token-external-secret.yaml
+- both removed 2026-09-18). Moved to a separate chart/Application, charts/
+airframe-identity (installed by the same tenant-onboarding generator, see
+gitops-cluster-<cluster>/02-argocd-apps/tenant-identity/applicationset.yaml),
+because ArgoCD's operation-retry logic deletes every argocd.argoproj.io/hook-
+annotated resource before retrying a failed sync - independent of that resource's
+own hook-delete-policy - so keeping the identity a PreSync hook of THIS chart's own
+Application meant every retry of a release sync (however caused) could delete the
+ServiceAccount out from under a still-in-flight PostSync Job. Confirmed live on
+checkout-api-pre-prod/kiac-prod: ~19 retried sync operations in under an hour, each
+wiping and racing to recreate the identity. A plain resource in a genuinely separate
+Application is immune to that sweep; see airframe-identity/Chart.yaml for the full
+incident and the residual first-sync-ordering tradeoff this introduces instead.
 */}}
 {{- if .Values.releaseTracking }}
 {{- $rt := .Values.releaseTracking }}

@@ -1,0 +1,63 @@
+{{/*
+templates/rbac.yaml - narrow identity for airframe-application's release-tracking
+PreSync/PostSync/SyncFail outcome-hook Jobs (charts/airframe-application/templates/
+release-tracking/hooks.yaml): get-only on exactly the platform-outcome-relay-token
+Secret this app's own namespace holds. Split out of airframe-application itself
+into this separate chart/Application on 2026-09-18 - see this chart's own Chart.yaml
+header for the full incident (ArgoCD's operation-retry logic deletes any
+argocd.argoproj.io/hook-annotated resource before retrying a failed sync,
+independent of that resource's own hook-delete-policy, which kept deleting this
+identity out from under a still-in-flight PostSync Job on checkout-api-pre-prod/
+kiac-prod).
+
+Deliberately plain resources, no hook annotation at all - that's the entire point
+of this being a separate chart/Application rather than a template inside
+airframe-application. Applied once at tenant onboarding by this chart's own
+ApplicationSet-managed Application, then reconciled like any ordinary resource
+(idempotent re-apply on an unrelated release's sync, no per-sync recreation, so
+nothing here ever triggers - or is vulnerable to - the hook-retry-deletion churn
+airframe-application's own release syncs go through.
+
+Secret name (platform-outcome-relay-token) is hardcoded, not a values.yaml field -
+same reasoning as airframe-application's old rbac.yaml: it has to match
+glidepath/catalog/lib/argocd-outcome-hook.sh's own hardcoded read, and that script
+is baked into an image this chart doesn't control.
+*/}}
+{{- if .Values.releaseTracking }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: platform-outcome-hook
+  namespace: {{ include "airframe-identity.namespace" . }}
+  labels:
+    {{- include "airframe-identity.labels" . | nindent 4 }}
+    hangar.io/subcomponent: outcome-hook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: platform-outcome-hook
+  namespace: {{ include "airframe-identity.namespace" . }}
+  labels:
+    {{- include "airframe-identity.labels" . | nindent 4 }}
+    hangar.io/subcomponent: outcome-hook
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["platform-outcome-relay-token"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: platform-outcome-hook
+  namespace: {{ include "airframe-identity.namespace" . }}
+  labels:
+    {{- include "airframe-identity.labels" . | nindent 4 }}
+    hangar.io/subcomponent: outcome-hook
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: platform-outcome-hook }
+subjects:
+  - kind: ServiceAccount
+    name: platform-outcome-hook
+    namespace: {{ include "airframe-identity.namespace" . }}
+{{- end }}

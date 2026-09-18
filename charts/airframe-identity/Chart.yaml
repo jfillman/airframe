@@ -1,0 +1,35 @@
+apiVersion: v2
+name: airframe-identity
+description: >-
+  One Helm release per (app, cluster, env), installed by the SAME tenant-onboarding
+  ApplicationSet as airframe-application but as a SEPARATE ArgoCD Application/sync
+  unit. Renders the platform-outcome-hook ServiceAccount/Role/RoleBinding and the
+  platform-outcome-relay-token ExternalSecret that release-tracking's PreSync/
+  PostSync/SyncFail Jobs (airframe-application's templates/release-tracking/
+  hooks.yaml) need to already exist by the time those hooks run.
+
+  Deliberately NOT part of airframe-application's own chart: ArgoCD's operation-retry
+  logic deletes every argocd.argoproj.io/hook-annotated resource before retrying a
+  failed sync, REGARDLESS of that resource's own hook-delete-policy (confirmed live
+  on checkout-api-pre-prod/kiac-prod, 2026-09-18 - see airframe-application's
+  release-tracking/rbac.yaml header for the incident this chart was split out to
+  fix). Plain (non-hook) resources are immune to that sweep, but a plain resource
+  can't apply before a PreSync hook within the SAME Application (Sync phase always
+  runs after PreSync, regardless of sync-wave) - that was the original 2026-09-14
+  ordering deadlock these resources were made hooks to solve in the first place.
+  A genuinely separate Application sidesteps both failure modes at once: this
+  release's own resources are plain (so release-tracking's retries never delete
+  them), and because they're a different Application with their own independent
+  sync history, they're already live in the namespace by the time
+  airframe-application's PreSync hooks run on any subsequent sync - the only
+  remaining gap is a brand-new tenant's very first-ever sync, where the
+  ApplicationSet creates both Applications together and their initial syncs aren't
+  ordered against each other. Unlike the old single-Application deadlock, this
+  isn't permanent: if airframe-application's first attempt beats this chart's own
+  first sync, its PreSync hook Job fails, but selfHeal keeps retrying that
+  Application on its own schedule independent of this one, so it self-resolves
+  once this chart's Application finishes creating the ServiceAccount - no hook on
+  either side is gated on the other's completion.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

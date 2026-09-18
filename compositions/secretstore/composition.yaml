@@ -463,8 +463,15 @@ spec:
                   metadata:
                     name: <<printf "%s-infisical-creds" $projectSlug>>
                     namespace: <<$xrNamespace>>
-                  stringData:
-                    identityId: <<$identityId | toJson>>
+                  # data (base64), not stringData: the API server converts stringData to data
+                  # server-side and never persists a stringData field, so provider-kubernetes'
+                  # managedFields-based Observe (which extracts only the fields it owns) finds
+                  # nothing at the stringData path and panics converting a nil into a map -
+                  # confirmed live (ReconcileError: "unable to convert managed fields ...
+                  # expected map, got <nil>") on every one of this migration's Object/Secret
+                  # resources the moment they hit their first real Observe pass.
+                  data:
+                    identityId: <<$identityId | b64enc>>
               managementPolicies: ["*"]
             ---
                 <<- end >>

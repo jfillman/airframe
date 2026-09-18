@@ -141,6 +141,14 @@ spec:
             # shared environment for the dev cluster" scope. $clusterOk/$tenantsRepo come from
             # 00-devcluster-gate.yaml (same pipeline step), which also validates spec.devCluster
             # live against the cluster registry before this resource renders at all.
+            # managementPolicies (no "Delete") - added 2026-09-16 after a live $clusterOk/
+            # devcluster-gate-flap deletion of this exact resource's ApplicationEnvironment-tier
+            # sibling (secretstore-xrs.yaml) caused real Infisical project/secret loss
+            # (checkout-api-kind-prod, order-api-kind-prod - no managementPolicies field meant
+            # the provider default "*" allowed it). This file has no managementPolicies either,
+            # and is gated by the same class of transient-false ExtraResources lookup
+            # (00-devcluster-gate.yaml) on every reconcile, not just this XR's first pass - the
+            # same race is possible here even though there's only ever one owner, not siblings.
             <<- if $clusterOk >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
@@ -149,6 +157,7 @@ spec:
               annotations:
                 <<setResourceNameAnnotation "secretstore-xr">>
             spec:
+              managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default

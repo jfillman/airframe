@@ -34,6 +34,15 @@
 # as this composition's own cluster-identity-yaml.yaml (see that file's header): avoids
 # an unnecessary re-Create/re-commit of this platform-owned, self-healing file every
 # rebuild.
+#
+# managementPolicies (no "Delete") - added 2026-09-16 alongside the same fix on
+# secretstore-xrs.yaml/values-yaml.yaml in this same directory, after a live
+# $clusterOk-gate-flap deletion of the LATTER caused real Infisical project/secret
+# loss (checkout-api-kind-prod, order-api-kind-prod). This file is exactly as exposed
+# to that same race (single-owner per env, no managementPolicies = provider default
+# "*") and its blast radius is worse if hit: this is the file the tenant-onboarding
+# ApplicationSet's git generator reads to render the env's Application at all - losing
+# it would prune the entire deployed workload for that env, not just its config.
 <<- if $clusterOk >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
@@ -43,6 +52,7 @@ metadata:
     <<setResourceNameAnnotation "tenant-identity-yaml">>
     crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/%s/identity.yaml" $appName $env)>>"
 spec:
+  managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

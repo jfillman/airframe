@@ -415,6 +415,22 @@ spec:
             # values-yaml.yaml. Deterministic, platform-owned content here (no developer edits to
             # stomp), so the stakes are an unneeded re-commit, not data loss - fixed anyway for
             # consistent adopt-not-recreate behavior across every RepositoryFile in this catalog.
+            #
+            # managementPolicies (no "Delete") - REAL DATA LOSS, live-confirmed 2026-09-16: this
+            # file had none (defaulting to the provider's "*"), and secretstore-shared-xr is
+            # EXACTLY cluster-identity-yaml.yaml's own "N siblings, one shared file" shape this
+            # comment already claimed to follow - but never got that file's actual Delete-policy
+            # fix. The same $clusterOk transient-false window landing on an EXISTING sibling env's
+            # reconcile (not just a brand-new XR's first pass) while other envs were being
+            # onboarded on the same cluster dropped this resource from that one sibling's desired
+            # set; with Delete allowed, Crossplane deleted the real tenants/<app>/xr-requests/
+            # secretstore-shared.yaml file even though every OTHER sibling env still wanted it -
+            # which cascaded (ArgoCD pruned the SecretStore XR that file declares -> Crossplane
+            # deleted its InfisicalProject) into real, unrecoverable Infisical project + secret
+            # deletion for checkout-api-kind-prod and order-api-kind-prod. secretstore-env-xr gets
+            # the same fix even though it's single-owner (1:1, not shared) - the values-yaml.yaml
+            # bug this exact class was first fixed for was ALSO single-owner, so "not shared"
+            # provides no actual protection against the same gate-flap race.
             <<- if $clusterOk >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
@@ -424,6 +440,7 @@ spec:
                 <<setResourceNameAnnotation "secretstore-shared-xr">>
                 crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-shared.yaml" $appName)>>"
             spec:
+              managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
@@ -450,6 +467,7 @@ spec:
                 <<setResourceNameAnnotation "secretstore-env-xr">>
                 crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-%s.yaml" $appName $env)>>"
             spec:
+              managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
@@ -506,6 +524,15 @@ spec:
             # as this composition's own cluster-identity-yaml.yaml (see that file's header): avoids
             # an unnecessary re-Create/re-commit of this platform-owned, self-healing file every
             # rebuild.
+            #
+            # managementPolicies (no "Delete") - added 2026-09-16 alongside the same fix on
+            # secretstore-xrs.yaml/values-yaml.yaml in this same directory, after a live
+            # $clusterOk-gate-flap deletion of the LATTER caused real Infisical project/secret
+            # loss (checkout-api-kind-prod, order-api-kind-prod). This file is exactly as exposed
+            # to that same race (single-owner per env, no managementPolicies = provider default
+            # "*") and its blast radius is worse if hit: this is the file the tenant-onboarding
+            # ApplicationSet's git generator reads to render the env's Application at all - losing
+            # it would prune the entire deployed workload for that env, not just its config.
             <<- if $clusterOk >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
@@ -515,6 +542,7 @@ spec:
                 <<setResourceNameAnnotation "tenant-identity-yaml">>
                 crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/%s/identity.yaml" $appName $env)>>"
             spec:
+              managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default

@@ -1,0 +1,16 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: airframe
+  description: >-
+    Crossplane XRDs, Compositions, and the airframe-application Helm chart for
+    Hangar's service catalog. See docs/user/ for the developer guide and
+    docs/admin/architecture.md for the as-built reference.
+  annotations:
+    github.com/project-slug: jfillman/airframe
+    backstage.io/techdocs-ref: dir:.
+spec:
+  type: library
+  owner: crossfader@gmail.com
+  lifecycle: experimental
+  system: hangar

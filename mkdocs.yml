@@ -1,0 +1,14 @@
+site_name: 'Airframe'
+site_description: 'Hangar''s Crossplane-based service catalog'
+
+nav:
+  - Home: index.md
+  - User guide:
+      - Overview: user/README.md
+      - Quickstart: user/quickstart.md
+  - Admin guide:
+      - Overview: admin/README.md
+      - Architecture: admin/architecture.md
+
+plugins:
+  - techdocs-core

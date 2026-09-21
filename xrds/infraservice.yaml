@@ -36,7 +36,7 @@ metadata:
   name: infraservices.catalog.idp.io
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
-    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests/infraservice.yaml"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
 spec:
   group: catalog.idp.io
   names:

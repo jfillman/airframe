@@ -85,8 +85,12 @@ second registered Function package once corrupted Crossplane's shared
 dependency-lock graph cluster-wide) plus a `function-auto-ready` step.
 
 - **GitHub** — `provider-upjet-github`, a classic PAT (`repo` + `delete_repo`).
-  Creates `Repository` + `RepositoryFile` resources: the src repo, boilerplate,
-  the empty `gitops-<app>` repo, `identity.yaml`, release `values.yaml`.
+  Creates `Repository` + `RepositoryFile` resources: the src repo, boilerplate
+  (including a minimal, real, build-only `cicd.yaml` matching the stack's own
+  version field — added 2026-09-21, see Glidepath's ADR-0017; every Bootstrap
+  app stack scaffolds one now, so onboarding is self-service end to end
+  instead of stopping one manual step short of a runnable pipeline), the
+  empty `gitops-<app>` repo, `identity.yaml`, release `values.yaml`.
 - **Secrets** — `provider-infisical` + ESO. `Project`/`ProjectEnvironment`/
   `Identity`/`ProjectIdentity` managed resources, wrapped through
   `provider-kubernetes` into a real ESO `ClusterSecretStore`. Kubernetes Auth on

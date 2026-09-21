@@ -1,0 +1,57 @@
+# Commits a minimal, real, build-only cicd.yaml into this app's own src repo -
+# closes a real onboarding gap found live 2026-09-21: without this file,
+# glidepath's own tenant-onboarding ArgoCD Application always declares a source
+# reading $appsrc/cicd.yaml as a Helm valueFiles entry (see
+# xrds/infraservice.yaml's own header for the citation and why that source
+# can't be made conditional), so a freshly scaffolded app had a real,
+# repo-not-found-shaped ArgoCD failure until a developer hand-authored this
+# file themselves - the one step in this whole catalog that wasn't actually
+# self-service. See docs/user/quickstart.md's cheat sheet for the write-up.
+#
+# Shape matches glidepath's own docs/user/examples/01-minimal-build-only.yaml,
+# with two deliberate differences: build.script is omitted (this stack's own
+# ./src-repo.yaml Dockerfile is single-stage with no separate compile step -
+# kaniko builds it directly, same strategy docs/user/examples/
+# 08-dockerfile-only-build.yaml describes) and unitTest is disabled (no test
+# script exists at scaffold time - flip it on once a real one is added).
+#
+# Same create-once-then-hands-off managementPolicies as every other src-repo
+# boilerplate file in this directory (package.json/index.js/Dockerfile/...) -
+# a developer is expected to add real test/deploy stages immediately; the
+# platform must never drift-correct that back to this stub.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $nodeVersion := .observed.composite.resource.spec.nodeVersion >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "src-repo-cicd-yaml">>
+    crossplane.io/external-name: "<<printf "%s:cicd.yaml:" $xrName>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: true
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+
+      build:
+        agent: <<printf "nodejs-%s" $nodeVersion>>
+        unitTest:
+          enabled: false # no test script exists yet - add one, then flip this on
+
+      pipelines:
+        ci:
+          trigger:
+            source: git
+            event: push
+            branch: main
+          steps:
+            - stage: build
+    commitMessage: "NodeJSApplication scaffold: cicd.yaml (build-only starter)"

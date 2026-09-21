@@ -82,6 +82,54 @@ spec:
                 namespace: crossplane-system
                 matchName: <<$devCluster>>
             ---
+            # Commits a minimal, real, build-only cicd.yaml into this app's own src repo -
+            # same fix, same reasoning, as nodejsapplication's own copy of this file (see
+            # its header for the full write-up of the onboarding gap this closes). agent
+            # maps directly onto spec.javaVersion (17|21) - glidepath's own
+            # schemas/cicd.schema.json enum (openjdk-17/openjdk-21) matches this XRD's
+            # enum exactly, unlike goapplication/pythonapplication's own copies of this
+            # file, which have to pin a fixed value instead.
+            #
+            # build.script omitted here too: this stack's own ./src-repo.yaml Dockerfile
+            # is genuinely multi-stage (a real JDK build stage, a bare JRE runtime stage),
+            # so kaniko builds it directly rather than a separate build.script step.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $javaVersion := .observed.composite.resource.spec.javaVersion >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-src-cicd-yaml
+              annotations:
+                <<setResourceNameAnnotation "src-repo-cicd-yaml">>
+                crossplane.io/external-name: "<<printf "%s:cicd.yaml:" $xrName>>"
+            spec:
+              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: cicd.yaml
+                overwriteOnCreate: true
+                content: |
+                  apiVersion: platform/v1
+                  kind: PipelineConfig
+
+                  build:
+                    agent: <<printf "openjdk-%s" $javaVersion>>
+                    unitTest:
+                      enabled: false # no test script exists yet - add one, then flip this on
+
+                  pipelines:
+                    ci:
+                      trigger:
+                        source: git
+                        event: push
+                        branch: main
+                      steps:
+                        - stage: build
+                commitMessage: "SpringBootApplication scaffold: cicd.yaml (build-only starter)"
+            ---
             # Empty, scaffolded gitops-<app-name> repo - idp/docs/service-catalog-design.md Item 1/2,
             # identical mechanism to nodejsapplication's own gitops-repo.yaml (straight port). Just a
             # README for now; the real <cluster>/<env>/values.yaml layout gets populated once

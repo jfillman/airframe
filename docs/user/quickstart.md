@@ -60,7 +60,10 @@ boarding-api    True              True            True
 Behind the form: Crossplane reconciles the `GoApplication` XR,
 `provider-upjet-github` creates the real `boarding-api` source repo and an empty
 `gitops-boarding-api` repo, and a composed `TektonCICD` child wires up the real
-pipeline. You now have a repo and a pipeline, with nowhere to deploy yet.
+pipeline. Scaffolding also commits a minimal, real `cicd.yaml` at the repo root —
+build-only, `agent: go-1.23` (matching the `goVersion` you picked), no test stage
+yet — so the pipeline is actually runnable immediately, not just onboarded. You
+now have a repo and a working pipeline, with nowhere to deploy yet.
 
 ## 03 — Ground: somewhere to run today
 

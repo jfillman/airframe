@@ -1,0 +1,48 @@
+# Commits a minimal, real, build-only cicd.yaml into this app's own src repo -
+# same fix, same reasoning, as nodejsapplication's own copy of this file (see
+# its header for the full write-up of the onboarding gap this closes).
+#
+# build.agent maps directly onto spec.goVersion (1.22|1.23|1.24), same as
+# nodejsapplication's nodeVersion mapping - safe as of 2026-09-21, when
+# glidepath's own schemas/cicd.schema.json build.agent enum was widened to
+# include go-1.23/go-1.24 (platform-cicd-toolbox rebuilt + tag-bumped to
+# 2026-09-21-go-python-agents for this). Before that, this file pinned a
+# fixed "go-1.22" regardless of the version actually picked, to avoid
+# committing a cicd.yaml that would fail glidepath's own schema validation -
+# see this file's git history if that workaround needs to be understood.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $goVersion := .observed.composite.resource.spec.goVersion >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "src-repo-cicd-yaml">>
+    crossplane.io/external-name: "<<printf "%s:cicd.yaml:" $xrName>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: true
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+
+      build:
+        agent: <<printf "go-%s" $goVersion>>
+        unitTest:
+          enabled: false # no test script exists yet - add one, then flip this on
+
+      pipelines:
+        ci:
+          trigger:
+            source: git
+            event: push
+            branch: main
+          steps:
+            - stage: build
+    commitMessage: "GoApplication scaffold: cicd.yaml (build-only starter)"

@@ -13,6 +13,26 @@ this repo is where it's actually built.
 
 ## Status
 
+**Every Bootstrap app stack now scaffolds a real `cicd.yaml` at onboarding — a
+real self-service gap closed, 2026-09-21.** `NodeJSApplication`/
+`SpringBootApplication`/`GoApplication`/`PythonApplication` previously scaffolded
+a src repo with no `cicd.yaml` at all, leaving pipeline onboarding as the one
+manual, hand-authored step in an otherwise fully self-service flow — and, since
+`glidepath-control-plane`'s tenant-onboarding `ApplicationSet` always declares a
+source reading that file, a freshly onboarded app's ArgoCD `Application` had
+nothing to resolve until a developer added one. Each stack's own
+`templates/render-github-resources/cicd-yaml.yaml` now commits a minimal,
+build-only starter (`build.agent` matching the stack's own version field, no
+test stage yet) alongside its other boilerplate, same create-once-then-hands-off
+`managementPolicies`. Building this surfaced a second, separate gap: Glidepath's
+`schemas/cicd.schema.json` `build.agent` enum didn't cover `goVersion`
+1.23/1.24 or `pythonVersion` 3.12/3.13 at all — widened as part of the same fix
+(`platform-cicd-toolbox` rebuilt + tag-bumped to `2026-09-21-go-python-agents`).
+Full write-up: Glidepath's own
+[ADR-0017](https://github.com/jfillman/glidepath/blob/main/docs/admin/adr/0017-cicd-yaml-scaffolded-not-hand-authored.md).
+`InfraService`'s own zero-stage `cicd-yaml-stub.yaml` is unaffected — different,
+correct use case (no source code to build).
+
 **`PythonApplication` + `GoApplication` XRDs — third and fourth Bootstrap-tier
 stacks, offline-verified, live rollout pending.** `xrds/pythonapplication.yaml` +
 `compositions/pythonapplication/` and `xrds/goapplication.yaml` +

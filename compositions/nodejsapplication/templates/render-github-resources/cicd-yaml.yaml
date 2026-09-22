@@ -10,13 +10,13 @@
 #
 # Shape matches glidepath's own docs/user/examples/01-minimal-build-only.yaml,
 # with two deliberate differences: build.script is omitted (this stack's own
-# ./src-repo.yaml Dockerfile is single-stage with no separate compile step -
+# ./src-repo.yaml Containerfile is single-stage with no separate compile step -
 # kaniko builds it directly, same strategy docs/user/examples/
-# 08-dockerfile-only-build.yaml describes) and unitTest is disabled (no test
+# 08-containerfile-only-build.yaml describes) and unitTest is disabled (no test
 # script exists at scaffold time - flip it on once a real one is added).
 #
 # Same create-once-then-hands-off managementPolicies as every other src-repo
-# boilerplate file in this directory (package.json/index.js/Dockerfile/...) -
+# boilerplate file in this directory (package.json/index.js/Containerfile/...) -
 # a developer is expected to add real test/deploy stages immediately; the
 # platform must never drift-correct that back to this stub.
 <<- $xrName := .observed.composite.resource.metadata.name >>

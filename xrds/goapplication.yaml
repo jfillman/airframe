@@ -63,10 +63,10 @@ spec:
                 goVersion:
                   type: string
                   description: >-
-                    Go minor version - drives the Dockerfile's build-stage FROM line
+                    Go minor version - drives the Containerfile's build-stage FROM line
                     and go.mod's own go directive. One of this platform's
                     currently-supported lines, not a free-form string, so a typo
-                    fails XR admission instead of producing a Dockerfile that pulls
+                    fails XR admission instead of producing a Containerfile that pulls
                     a nonexistent image tag.
                   enum: ["1.22", "1.23", "1.24"]
                   default: "1.23"
@@ -74,7 +74,7 @@ spec:
                   type: integer
                   description: >-
                     Port the boilerplate HTTP server listens on (also the
-                    Dockerfile's EXPOSE). Matches airframe-application's own
+                    Containerfile's EXPOSE). Matches airframe-application's own
                     rollout.ports default convention.
                   minimum: 1
                   maximum: 65535

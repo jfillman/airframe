@@ -36,7 +36,7 @@
 # spec.javaVersion / spec.buildTool: Node's nodeVersion/packageManager pair, renamed for
 # the stack. javaVersion enum is this platform's currently-supported LTS lines
 # (temurin's own eclipse-temurin:<version>-jdk-alpine / -jre-alpine tags exist for both).
-# buildTool picks Maven vs Gradle boilerplate/Dockerfile - the Composition branches on it
+# buildTool picks Maven vs Gradle boilerplate/Containerfile - the Composition branches on it
 # the same way NodeJSApplication branches on packageManager.
 #
 # No spec.springBootVersion: deliberately not a spec field, matching the reasoning
@@ -91,18 +91,18 @@ spec:
                 javaVersion:
                   type: string
                   description: >-
-                    Java LTS major version - drives the Dockerfile's eclipse-temurin
+                    Java LTS major version - drives the Containerfile's eclipse-temurin
                     base image tags and the build file's toolchain/release version. One
                     of this platform's currently-supported LTS lines, not a free-form
                     string, so a typo fails XR admission instead of producing a
-                    Dockerfile that pulls a nonexistent image tag.
+                    Containerfile that pulls a nonexistent image tag.
                   enum: ["17", "21"]
                   default: "21"
                 buildTool:
                   type: string
                   description: >-
                     Which build tool's boilerplate (pom.xml vs build.gradle) and
-                    Dockerfile build stage this app scaffolds with.
+                    Containerfile build stage this app scaffolds with.
                   enum: [maven, gradle]
                   default: maven
                 groupId:
@@ -118,7 +118,7 @@ spec:
                   type: integer
                   description: >-
                     Port the boilerplate Spring Boot app listens on (server.port,
-                    also the Dockerfile's EXPOSE). Matches airframe-application's own
+                    also the Containerfile's EXPOSE). Matches airframe-application's own
                     rollout.ports default convention.
                   minimum: 1
                   maximum: 65535

@@ -13,7 +13,7 @@
 # spec.pythonVersion / spec.packageManager: Node's nodeVersion/packageManager pair,
 # renamed for the stack. pythonVersion enum is this platform's currently-supported
 # minor lines (python:<version>-slim tags exist for all three). packageManager picks
-# the dependency-file shape (requirements.txt vs pyproject.toml) and the Dockerfile's
+# the dependency-file shape (requirements.txt vs pyproject.toml) and the Containerfile's
 # install step - the Composition branches on it the same way NodeJSApplication
 # branches on packageManager.
 apiVersion: apiextensions.crossplane.io/v2
@@ -64,10 +64,10 @@ spec:
                 pythonVersion:
                   type: string
                   description: >-
-                    Python minor version - drives the Dockerfile's FROM line. One of
+                    Python minor version - drives the Containerfile's FROM line. One of
                     this platform's currently-supported lines, not a free-form
                     string, so a typo fails XR admission instead of producing a
-                    Dockerfile that pulls a nonexistent image tag.
+                    Containerfile that pulls a nonexistent image tag.
                   enum: ["3.11", "3.12", "3.13"]
                   default: "3.12"
                 packageManager:
@@ -75,14 +75,14 @@ spec:
                   description: >-
                     Which dependency-management convention this app scaffolds with -
                     pip (requirements.txt), or poetry/uv (both pyproject.toml, with
-                    the matching install command in the Dockerfile).
+                    the matching install command in the Containerfile).
                   enum: [pip, poetry, uv]
                   default: pip
                 port:
                   type: integer
                   description: >-
                     Port the boilerplate HTTP server listens on (also the
-                    Dockerfile's EXPOSE). Matches airframe-application's own
+                    Containerfile's EXPOSE). Matches airframe-application's own
                     rollout.ports default convention.
                   minimum: 1
                   maximum: 65535

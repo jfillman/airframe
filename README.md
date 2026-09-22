@@ -40,12 +40,12 @@ stacks, offline-verified, live rollout pending.** `xrds/pythonapplication.yaml` 
 the `TektonCICD` extraction so both are simpler than `SpringBootApplication` was:
 CI/CD onboarding is composed via a `TektonCICD` child, not carried inline.
 `PythonApplication` adds `spec.pythonVersion`/`spec.packageManager` (pip/poetry/uv,
-branching the dependency-file shape and Dockerfile install step); `GoApplication`
+branching the dependency-file shape and Containerfile install step); `GoApplication`
 adds only `spec.goVersion` (no package-manager equivalent - Go has one real
 toolchain) and derives its module path from the real repo URL rather than taking it
 as input. Both boilerplates keep the same zero-external-dependency philosophy
 `NodeJSApplication`'s own scaffold uses (stdlib `http`/`http.server`/`net/http`, no
-framework); `GoApplication`'s Dockerfile is genuinely multi-stage, matching
+framework); `GoApplication`'s Containerfile is genuinely multi-stage, matching
 `SpringBootApplication`'s own precedent. The generated `main.py`/`main.go`/`go.mod`
 were validated against the real Python/Go toolchains (`py_compile`, `go build`), not
 just rendered - this also caught and fixed a pre-existing double-escaping bug
@@ -84,7 +84,7 @@ Java/Spring Boot: same devCluster-gated onboarding mechanism, same six-field
 pieces: `spec.javaVersion`/`spec.buildTool` (replacing `nodeVersion`/`packageManager`)
 and `spec.groupId` (Maven groupId / Gradle group, and this app's single flat Java
 package — see the XRD's own header for why it's not `groupId`+artifactId nested). The
-Dockerfile is genuinely multi-stage (JDK build stage, bare JRE runtime stage), a real
+Containerfile is genuinely multi-stage (JDK build stage, bare JRE runtime stage), a real
 difference from `NodeJSApplication`'s single-stage script, not just a style choice.
 Live-verified via a throwaway `springbootapp-verify-test` app (real `Repository`/
 `RepositoryFile` creation against GitHub, `pom.xml`/`identity.yaml`/
@@ -209,7 +209,7 @@ provisions the image-pull Secret.
 
 **`NodeJSApplication` XRD + Composition — first Bootstrap-tier XRD, built and
 live-verified on `kind-dev` 2026-08-13/14.** Item 1/2's design: given an app name,
-pure `provider-github` commits a src repo + Node.js boilerplate (Dockerfile,
+pure `provider-github` commits a src repo + Node.js boilerplate (Containerfile,
 `package.json`, `index.js`, README — `npm`/`pnpm`/`yarn` all covered), an empty,
 scaffolded `gitops-<appName>` repo (its real `<cluster>/<env>/values.yaml` layout
 gets populated once `ApplicationEnvironment` exists, immediately below), and a

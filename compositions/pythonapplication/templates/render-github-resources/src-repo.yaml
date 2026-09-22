@@ -167,23 +167,35 @@ spec:
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
+  # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile) -
+  # see goapplication's own identical comment on why (Crossplane's correlation key
+  # for an EXISTING XR's already-composed resource; renaming it risks the Delete
+  # policy below actually deleting an already-onboarded app's real file on its next
+  # reconcile). file:/content:/external-name below only take effect for a freshly-
+  # created XR - see managementPolicies' own comment.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:Dockerfile:" $xrName>>"
+    crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
   # `apt-get upgrade` picks up already-published Debian package patches, same
   # patch-freshness reasoning as nodejsapplication's/springbootapplication's own
-  # Dockerfiles. python:<version>-slim, not -alpine - avoids musl/manylinux wheel
+  # Containerfiles. python:<version>-slim, not -alpine - avoids musl/manylinux wheel
   # compatibility issues alpine's libc would otherwise risk for any future
   # dependency this app adds.
 spec:
+  # No "Update" - an already-created file's content is hands-off after its first
+  # commit. Also why this Composition can safely rename its scaffold target from
+  # "Dockerfile" to "Containerfile" (2026-09-22, platform-wide rename - see
+  # goapplication's own identical comment) without touching any already-onboarded
+  # app: a real write (Create) only ever happens when this resource slot's file is
+  # genuinely absent, never by revisiting an app whose Dockerfile already exists.
   managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
-    file: Dockerfile
+    file: Containerfile
     overwriteOnCreate: true
     content: |
       FROM python:<<$pythonVersion>>-slim
@@ -198,7 +210,7 @@ spec:
       COPY . .
       EXPOSE <<$port>>
       CMD ["python", "main.py"]
-    commitMessage: "PythonApplication scaffold: Dockerfile"
+    commitMessage: "PythonApplication scaffold: Containerfile"
 ---
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile

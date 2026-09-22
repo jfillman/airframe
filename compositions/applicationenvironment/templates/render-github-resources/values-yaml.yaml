@@ -25,7 +25,7 @@
 # reconcile - confirmed via the file's own git history, a "Bootstrap prod
 # environment" commit reverting the developer's "update app config" commit ~17
 # minutes later. Same fix, same reasoning, as nodejsapplication's src-repo.yaml
-# already applied to package.json/index.js/Dockerfile/.gitignore/README.md - this
+# already applied to package.json/index.js/Containerfile/.gitignore/README.md - this
 # file is exactly that same category (scaffold once, developer/CI owns it after),
 # just missed when that fix was made since it lives in a different Composition.
 # Deliberately different from THIS Composition's own cluster-identity-yaml.yaml,

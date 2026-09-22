@@ -265,26 +265,38 @@ spec:
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
+  # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile) -
+  # see goapplication's own identical comment on why (Crossplane's correlation key
+  # for an EXISTING XR's already-composed resource; renaming it risks the Delete
+  # policy below actually deleting an already-onboarded app's real file on its next
+  # reconcile). file:/content:/external-name below only take effect for a freshly-
+  # created XR - see managementPolicies' own comment.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:Dockerfile:" $xrName>>"
+    crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
   # Multi-stage: build stage carries a full JDK plus the build tool (installed via apk,
   # no bundled wrapper script - deliberately narrower than Maven/Gradle wrapper scaffolding,
   # matching this catalog's "deliberately narrow" scope elsewhere), final stage is a bare
   # JRE running only the packaged jar - keeps the shipped image's dependency surface (and
-  # CVE exposure - see nodejsapplication's own Dockerfile header for the real live
+  # CVE exposure - see nodejsapplication's own Containerfile header for the real live
   # precedent this follows) to the JRE plus the app's own runtime deps, not a JDK/build
   # toolchain nobody needs at runtime. `apk upgrade` on the runtime stage picks up
-  # already-published Alpine package patches, same as nodejsapplication's own Dockerfile.
+  # already-published Alpine package patches, same as nodejsapplication's own Containerfile.
 spec:
+  # No "Update" - an already-created file's content is hands-off after its first
+  # commit. Also why this Composition can safely rename its scaffold target from
+  # "Dockerfile" to "Containerfile" (2026-09-22, platform-wide rename - see
+  # goapplication's own identical comment) without touching any already-onboarded
+  # app: a real write (Create) only ever happens when this resource slot's file is
+  # genuinely absent, never by revisiting an app whose Dockerfile already exists.
   managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
-    file: Dockerfile
+    file: Containerfile
     overwriteOnCreate: true
     content: |
       FROM eclipse-temurin:<<$javaVersion>>-jdk-alpine AS build
@@ -311,7 +323,7 @@ spec:
       <<- end>>
       EXPOSE <<$port>>
       CMD ["java", "-jar", "app.jar"]
-    commitMessage: "SpringBootApplication scaffold: Dockerfile"
+    commitMessage: "SpringBootApplication scaffold: Containerfile"
 ---
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile

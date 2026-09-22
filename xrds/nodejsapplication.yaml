@@ -92,10 +92,10 @@ spec:
                 nodeVersion:
                   type: string
                   description: >-
-                    Node.js major version - drives the Dockerfile's FROM line and the
+                    Node.js major version - drives the Containerfile's FROM line and the
                     boilerplate package.json's engines field. One of this platform's
                     currently-supported LTS lines, not a free-form string, so a typo
-                    fails XR admission instead of producing a Dockerfile that pulls a
+                    fails XR admission instead of producing a Containerfile that pulls a
                     nonexistent image tag.
                   enum: ["18", "20", "22"]
                   default: "20"
@@ -103,14 +103,14 @@ spec:
                   type: string
                   description: >-
                     Which package manager's lockfile/install instructions the
-                    boilerplate README and Dockerfile reference.
+                    boilerplate README and Containerfile reference.
                   enum: [npm, pnpm, yarn]
                   default: npm
                 port:
                   type: integer
                   description: >-
                     Port the boilerplate HTTP server listens on (also exposed as
-                    package.json's start script and Dockerfile's EXPOSE). Matches
+                    package.json's start script and Containerfile's EXPOSE). Matches
                     airframe-application's own rollout.ports default convention.
                   minimum: 1
                   maximum: 65535

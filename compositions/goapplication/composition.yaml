@@ -339,10 +339,21 @@ spec:
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
+              # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile)
+              # even though the scaffolded file itself is now Containerfile - this name is
+              # Crossplane's own correlation key for "which composed resource is this" across
+              # reconciles of an EXISTING XR; renaming it would make every already-onboarded
+              # app's real RepositoryFile MR vanish from this Composition's rendered output,
+              # and since managementPolicies includes "Delete", that risks the runtime actually
+              # deleting each app's real Dockerfile from GitHub on its next reconcile - not
+              # something to trigger fleet-wide for a naming-convention change. file:/content:/
+              # external-name below are what a freshly-created XR actually reads at Create time;
+              # changing them has no effect on an already-composed MR's real external resource
+              # (no "Update" in managementPolicies - see that policy's own comment below).
               name: <<$xrName>>-src-dockerfile
               annotations:
                 <<setResourceNameAnnotation "src-repo-dockerfile">>
-                crossplane.io/external-name: "<<printf "%s:Dockerfile:" $xrName>>"
+                crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
               # Multi-stage, matching springbootapplication's own precedent (a real difference
               # from nodejsapplication's single-stage script, not just a style choice): build
               # stage carries the full Go toolchain, final stage is bare Alpine running only the
@@ -350,15 +361,25 @@ spec:
               # the binary plus Alpine's own base packages. CGO_ENABLED=0 - the resulting binary
               # has no libc dependency, so it runs unmodified on the runtime stage's musl libc.
               # `apk upgrade` on the runtime stage picks up already-published Alpine package
-              # patches, same as nodejsapplication's own Dockerfile.
+              # patches, same as nodejsapplication's own Containerfile.
             spec:
+              # No "Update" - an already-created file's content is hands-off after its first
+              # commit (a developer's own edits are never fought), same as every other scaffold
+              # resource here. This is also exactly why this Composition can safely stop
+              # scaffolding "Dockerfile" and start scaffolding "Containerfile" (2026-09-22,
+              # platform-wide rename - "Containerfile" is the vendor-neutral term this platform
+              # now uses, see glidepath's schemas/cicd.schema.json build.containerfile) without
+              # touching any already-onboarded app: this policy only ever risks a real write
+              # (Create) when the file this Composition instance renders is genuinely absent -
+              # an existing app's real Dockerfile, already created, is simply never revisited
+              # by this resource slot again regardless of what this template says today.
               managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
-                file: Dockerfile
+                file: Containerfile
                 overwriteOnCreate: true
                 content: |
                   FROM golang:<<$goVersion>>-alpine AS build
@@ -373,7 +394,7 @@ spec:
                   COPY --from=build /app/app .
                   EXPOSE <<$port>>
                   CMD ["./app"]
-                commitMessage: "GoApplication scaffold: Dockerfile"
+                commitMessage: "GoApplication scaffold: Containerfile"
             ---
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile

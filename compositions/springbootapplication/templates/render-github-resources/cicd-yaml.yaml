@@ -6,7 +6,7 @@
 # enum exactly, unlike goapplication/pythonapplication's own copies of this
 # file, which have to pin a fixed value instead.
 #
-# build.script omitted here too: this stack's own ./src-repo.yaml Dockerfile
+# build.script omitted here too: this stack's own ./src-repo.yaml Containerfile
 # is genuinely multi-stage (a real JDK build stage, a bare JRE runtime stage),
 # so kaniko builds it directly rather than a separate build.script step.
 <<- $xrName := .observed.composite.resource.metadata.name >>

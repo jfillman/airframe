@@ -41,7 +41,7 @@
 # every RepositoryFile below - deliberately different from applicationenvironment's
 # cluster-identity-yaml.yaml, which stays under full management (minus Delete) because
 # nothing but the composition should ever touch it. These five files (package.json, index.js,
-# Dockerfile, .gitignore, README.md) are the opposite: real app source a developer is
+# Containerfile, .gitignore, README.md) are the opposite: real app source a developer is
 # expected to edit immediately after scaffolding (add dependencies, write a test
 # script, ...). Under the provider's default "*" policy the controller drift-corrects
 # any such edit back to this static template on its next reconcile - a real bug hit
@@ -178,10 +178,16 @@ spec:
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
+  # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile) -
+  # see goapplication's own identical comment on why (Crossplane's correlation key
+  # for an EXISTING XR's already-composed resource; renaming it risks the Delete
+  # policy below actually deleting an already-onboarded app's real file on its next
+  # reconcile). file:/content:/external-name below only take effect for a freshly-
+  # created XR - see managementPolicies' own comment.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:Dockerfile:" $xrName>>"
+    crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
   # `apk upgrade` (picks up already-published Alpine package patches, e.g. libssl3/
   # libcrypto3) and removing npm's own bundled /usr/local/lib/node_modules/npm - real
   # HIGH-severity CVEs hit live scanning checkout-api's scaffolded image (brace-
@@ -193,13 +199,19 @@ metadata:
   # yarn branches alike. Verified live: local podman build + trivy scan via the same
   # toolbox image image-scan.yaml uses, 20 HIGH findings -> 0.
 spec:
+  # No "Update" - an already-created file's content is hands-off after its first
+  # commit. Also why this Composition can safely rename its scaffold target from
+  # "Dockerfile" to "Containerfile" (2026-09-22, platform-wide rename - see
+  # goapplication's own identical comment) without touching any already-onboarded
+  # app: a real write (Create) only ever happens when this resource slot's file is
+  # genuinely absent, never by revisiting an app whose Dockerfile already exists.
   managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
-    file: Dockerfile
+    file: Containerfile
     overwriteOnCreate: true
     content: |
       FROM node:<<$nodeVersion>>-alpine
@@ -211,7 +223,7 @@ spec:
       COPY . .
       EXPOSE <<$port>>
       CMD ["node", "index.js"]
-    commitMessage: "NodeJSApplication scaffold: Dockerfile"
+    commitMessage: "NodeJSApplication scaffold: Containerfile"
 ---
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile

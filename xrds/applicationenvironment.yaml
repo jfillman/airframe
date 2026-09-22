@@ -46,6 +46,7 @@ metadata:
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.appName }}/xr-requests"
+    terasky.backstage.io/description: "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded."
 spec:
   group: catalog.idp.io
   names:

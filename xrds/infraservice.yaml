@@ -37,6 +37,7 @@ metadata:
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "Provisions standalone shared infrastructure (e.g. a cache or datastore another app depends on) - just an empty GitOps deploy repo, no application source code."
 spec:
   group: catalog.idp.io
   names:

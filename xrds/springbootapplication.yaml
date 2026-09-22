@@ -50,6 +50,7 @@ metadata:
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
 spec:
   group: catalog.idp.io
   names:

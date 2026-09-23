@@ -1,0 +1,65 @@
+# Which machinery provisions THIS (app, cluster) pair's Infisical project: the
+# provider-infisical resource chain ("provider") or the old infisical-secretstore-
+# operator's InfisicalProject CR ("operator", the default). Read from an optional
+# ConfigMap, crossplane-system/secretstore-provisioner, keyed by project slug
+# (<appRef.name>-<cluster>). One entry per app, so the per-app cutover order in
+# hangar/docs/kind-prod-infisical-migration-plan.md is a one-line, reviewable GitOps
+# change, and merging this Composition alone changes nothing.
+#
+# Why a ConfigMap and not a field on the XR: the SecretStore XR manifests are files
+# the ApplicationEnvironment Composition commits into the cluster's tenants repo with
+# Update in its management policies, so a hand-added spec field would be reverted.
+# A missing ConfigMap, or a slug with no entry, means "operator".
+#
+# Entry format (YAML text under the slug key):
+#   provisioner: provider          # anything else (or absent) keeps the operator
+#   projectId: <uuid>              # optional: ADOPT an existing Infisical project
+#   sharedEnvId: <uuid>            # optional: adopt its existing "shared" environment
+#   envIds: {staging: <uuid>}      # optional: adopt existing per-env environments
+# The three id fields set crossplane.io/external-name on the composed resource so the
+# provider observes the existing object instead of trying to create a colliding one.
+# They only matter on the first reconcile after a flip; the provider maintains the
+# annotation itself afterwards.
+#
+# Kubernetes-auth clusters (the Infisical host, kiac-dev) always use the provider - that
+# migration is complete, so no entry is ever needed there.
+<<- $spec := .observed.composite.resource.spec >>
+<<- $gateSlug := printf "%s-%s" $spec.appRef.name $spec.cluster >>
+<<- $provExtra := .extraResources | default dict >>
+<<- $provEntry := index $provExtra "provisioner-config" | default dict >>
+<<- $provItems := index $provEntry "items" | default list >>
+<<- $provCfg := dict >>
+<<- if gt (len $provItems) 0 >>
+  <<- $provCm := (index $provItems 0).resource >>
+  <<- $provData := index $provCm "data" | default dict >>
+  <<- $provRaw := index $provData $gateSlug | default "" >>
+  <<- if ne $provRaw "" >>
+    <<- $provCfg = fromYaml $provRaw >>
+  <<- end >>
+<<- end >>
+<<- $useProvider := or $isInfisicalHost (eq (index $provCfg "provisioner" | default "operator") "provider") >>
+<<- $adoptProjectId := index $provCfg "projectId" | default "" >>
+<<- $adoptSharedEnvId := index $provCfg "sharedEnvId" | default "" >>
+<<- $adoptEnvIds := index $provCfg "envIds" | default dict >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  provisioner-config:
+    apiVersion: v1
+    kind: ConfigMap
+    namespace: crossplane-system
+    matchName: secretstore-provisioner
+---
+# The client secret the provider publishes for the universal-auth chain. Read here
+# (rather than from the managed resource's connection details) so it is available to the
+# credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
+# unconditionally; on every other branch it simply matches nothing.
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  ua-conn-secret:
+    apiVersion: v1
+    kind: Secret
+    namespace: <<.observed.composite.resource.metadata.namespace>>
+    matchName: <<printf "%s-ua-conn" $gateSlug>>
+---

@@ -50,7 +50,7 @@
   <<- $installCmd = "pip install --no-cache-dir uv && uv sync --frozen --no-dev" >>
 <<- end >>
 # ---------------------------------------------------------------------------
-# Scaffold files are CREATE-ONCE, then this Composition lets go of them.
+# Scaffold files never delete or overwrite developer content, and never re-identify.
 # (Added 2026-09-23 after a real incident - read before changing anything here.)
 #
 # These RepositoryFile resources exist only to seed a brand-new app's repo. After the
@@ -64,49 +64,31 @@
 #      force-replace field, so the provider could neither update nor settle, and
 #      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
 #      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
-#   2. Create fires whenever the file is observed missing, so a developer who renamed or
-#      deleted a scaffold file had it resurrected (happened to 4 repos), and with
-#      overwriteOnCreate true a mis-observed 403 could overwrite real content.
+#   2. Delete let a mis-observed 403 or a resource-name change remove a developer-owned
+#      file, and overwriteOnCreate true let a mis-observed 403 overwrite real content.
 #
-# The lifecycle, driven by the OBSERVED live resource (scaffoldMode below):
-#   create      not observed yet, or created but the provider has no id yet:
-#               render with Create, Observe, LateInitialize. Never Delete.
-#   transition  observed WITH an id but its live policies still include Delete or the
-#               wildcard (every resource created before this change): render Observe
-#               only, which strips Delete from the live object.
-#   retire      observed with an id and no Delete left in its live policies: render
-#               NOTHING. Crossplane garbage-collects the object; with no Delete policy
-#               the file in GitHub is untouched. Gating on the LIVE policies (not just
-#               on having an id) is what makes this safe - retiring an object that still
-#               had Delete would delete real files across the fleet.
-# Identity fields (file:, external-name) are pinned to the observed resource's own values
-# while it exists (scaffoldFile / scaffoldExternalName), so a future change of the
-# template default can never re-identify a live object.
-# A cluster rebuild still adopts existing files: a fresh cluster has nothing observed, so
-# it renders in create mode with external-name set, and Observe adopts the existing file.
+# Therefore: no Delete policy (deleting the Kubernetes object can never remove a file
+# from GitHub), overwriteOnCreate false, and the identity fields (file:, external-name)
+# of an EXISTING resource are pinned to what the provider itself reports it manages
+# (status.atProvider.file), falling back to the live spec, then to the template default.
+# The default therefore only ever applies to a resource that does not exist yet, so a
+# future change of the default can never re-identify a live object. A cluster rebuild
+# still adopts existing files: nothing is observed, external-name is set, Observe adopts.
+# Do NOT try to make these objects disappear after creation by rendering nothing: a
+# missing object looks identical to a brand-new one, so the next reconcile recreates it
+# (proved live on 2026-09-23 - an endless create/garbage-collect loop, ~800 GitHub calls
+# in 4 minutes). If retirement is ever wanted it needs a durable marker outside this
+# render, and a multi-pass test.
 # NOTE for editors: never write two adjacent angle-bracket characters in comments (see
-# the NOTE at the top of this file) - this block deliberately avoids them.
+# the note further down) - this block deliberately avoids them.
 # ---------------------------------------------------------------------------
-<<- define "scaffoldMode" ->>
-<<- $obs := .obs ->>
-<<- $mode := "create" ->>
-<<- if $obs ->>
-<<-   if dig "resource" "status" "atProvider" "id" "" $obs ->>
-<<-     $policies := dig "resource" "spec" "managementPolicies" (list) $obs ->>
-<<-     if or (has "Delete" $policies) (has "*" $policies) ->>
-<<-       $mode = "transition" ->>
-<<-     else ->>
-<<-       $mode = "retire" ->>
-<<-     end ->>
-<<-   end ->>
-<<- end ->>
-<<- $mode ->>
-<<- end ->>
 <<- define "scaffoldFile" ->>
-<<- if .obs ->><<- dig "resource" "spec" "forProvider" "file" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+<<- $f := "" ->>
+<<- if .obs ->>
+<<-   $f = dig "resource" "status" "atProvider" "file" "" .obs ->>
+<<-   if not $f ->><<- $f = dig "resource" "spec" "forProvider" "file" "" .obs ->><<- end ->>
 <<- end ->>
-<<- define "scaffoldExternalName" ->>
-<<- if .obs ->><<- dig "resource" "metadata" "annotations" "crossplane.io/external-name" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+<<- if $f ->><<- $f ->><<- else ->><<- .default ->><<- end ->>
 <<- end >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: Repository
@@ -132,9 +114,6 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
-<<- $obs1 := index (.observed.resources | default dict) "src-repo-dependency-file" >>
-<<- $mode1 := include "scaffoldMode" (dict "obs" $obs1) >>
-<<- if ne $mode1 "retire" >>
 <<- if eq $packageManager "pip" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
@@ -144,7 +123,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo-dependency-file">>
     crossplane.io/external-name: "<<printf "%s:requirements.txt:" $xrName>>"
 spec:
-  managementPolicies: <<if eq $mode1 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
@@ -164,7 +143,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo-dependency-file">>
     crossplane.io/external-name: "<<printf "%s:pyproject.toml:" $xrName>>"
 spec:
-  managementPolicies: <<if eq $mode1 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
@@ -181,11 +160,7 @@ spec:
       dependencies = []
     commitMessage: "PythonApplication scaffold: pyproject.toml"
 <<- end >>
-<<- end >>
 ---
-<<- $obs2 := index (.observed.resources | default dict) "src-repo-main-py" >>
-<<- $mode2 := include "scaffoldMode" (dict "obs" $obs2) >>
-<<- if ne $mode2 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -194,7 +169,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo-main-py">>
     crossplane.io/external-name: "<<printf "%s:main.py:" $xrName>>"
 spec:
-  managementPolicies: <<if eq $mode2 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
@@ -229,39 +204,36 @@ spec:
           print(<<printf "%s listening on port {}" $xrName | toJson>>.format(PORT))
           server.serve_forever()
     commitMessage: "PythonApplication scaffold: main.py"
-<<- end >>
 ---
-<<- $obs3 := index (.observed.resources | default dict) "src-repo-dockerfile" >>
-<<- $mode3 := include "scaffoldMode" (dict "obs" $obs3) >>
-<<- if ne $mode3 "retire" >>
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
   # metadata.name stays -src-dockerfile (not -src-containerfile): it is Crossplane's
   # correlation key for an EXISTING XR's already-composed resource. file: and the
-  # external-name annotation are pinned to the observed resource's own values while
-  # it exists (scaffoldFile / scaffoldExternalName at the top of this file), so the
-  # default below only ever applies to a resource that does not exist yet. See the
-  # header comment for the incident that made this necessary.
+  # external-name are pinned to the provider's own state for an existing resource
+  # (scaffoldFile at the top of this file); the default below only applies to a
+  # resource that does not exist yet. See the header comment for the incident.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<include "scaffoldExternalName" (dict "obs" $obs3 "default" (printf "%s:Containerfile:" $xrName))>>"
+    crossplane.io/external-name: "<<printf "%s:%s:" $xrName $pinnedFile>>"
   # `apt-get upgrade` picks up already-published Debian package patches, same
   # patch-freshness reasoning as nodejsapplication's/springbootapplication's own
   # Containerfiles. python:<version>-slim, not -alpine - avoids musl/manylinux wheel
   # compatibility issues alpine's libc would otherwise risk for any future
   # dependency this app adds.
 spec:
-  # Create-once, then retired (see the header comment and scaffoldMode). No Update,
-  # and no Delete: this object must never write to or remove a developer-owned file.
-  managementPolicies: <<if eq $mode3 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  # No "Update" and no "Delete": this object must never write to or remove a
+  # developer-owned file (see the header comment).
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
-    file: <<include "scaffoldFile" (dict "obs" $obs3 "default" "Containerfile")>>
+    file: <<$pinnedFile>>
     overwriteOnCreate: false
     content: |
       FROM python:<<$pythonVersion>>-slim
@@ -277,11 +249,7 @@ spec:
       EXPOSE <<$port>>
       CMD ["python", "main.py"]
     commitMessage: "PythonApplication scaffold: Containerfile"
-<<- end >>
 ---
-<<- $obs4 := index (.observed.resources | default dict) "src-repo-gitignore" >>
-<<- $mode4 := include "scaffoldMode" (dict "obs" $obs4) >>
-<<- if ne $mode4 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -290,7 +258,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo-gitignore">>
     crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
 spec:
-  managementPolicies: <<if eq $mode4 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
@@ -304,11 +272,7 @@ spec:
       .venv/
       .env
     commitMessage: "PythonApplication scaffold: .gitignore"
-<<- end >>
 ---
-<<- $obs5 := index (.observed.resources | default dict) "src-repo-readme" >>
-<<- $mode5 := include "scaffoldMode" (dict "obs" $obs5) >>
-<<- if ne $mode5 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -317,7 +281,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo-readme">>
     crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
 spec:
-  managementPolicies: <<if eq $mode5 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
@@ -343,4 +307,3 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "PythonApplication scaffold: README.md"
-<<- end >>

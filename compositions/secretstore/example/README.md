@@ -42,3 +42,17 @@ exists in Infisical (so its secrets stay put), add an entry to the
 `projectId`, `sharedEnvId` and `envIds`, and make sure the provider's machine identity is
 already an `admin` member of that project - otherwise every read is a 403. The old
 `provisioner: provider` key is ignored.
+
+## Deleting a SecretStore does not delete the Infisical project
+
+The Composition renders the `Project` and `ProjectEnvironment` managed resources with
+`managementPolicies: [Create, Observe, Update, LateInitialize]` - **no `Delete`**. Deleting
+the SecretStore XR, or ArgoCD pruning the file that declares it, removes the Kubernetes
+objects but leaves the Infisical project, its environments and every secret in them. The
+identity, its auth config and its client secrets keep `Delete`, so credentials are still
+revoked.
+
+The catch: a decommissioned app's project is left behind and keeps its slug. Onboarding an
+app with the same slug later would try to create a colliding project. Either **adopt** the
+leftover (an entry in the `secretstore-provisioner` ConfigMap, see above) or delete the
+project in Infisical by hand once you are sure the secrets are not wanted.

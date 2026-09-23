@@ -416,6 +416,14 @@ spec:
                 crossplane.io/external-name: <<$adoptProjectId | toJson>>
                 <<- end >>
             spec:
+              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
+              # must never delete the Infisical project/environment and the secrets in it. The
+              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
+              # client secrets keep Delete so credentials are still revoked. Consequence: a
+              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
+              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
+              # it in Infisical by hand.
+              managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: <<$projectSlug>>
                 slug: <<$projectSlug>>
@@ -434,6 +442,14 @@ spec:
                 crossplane.io/external-name: <<$adoptSharedEnvId | toJson>>
                 <<- end >>
             spec:
+              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
+              # must never delete the Infisical project/environment and the secrets in it. The
+              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
+              # client secrets keep Delete so credentials are still revoked. Consequence: a
+              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
+              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
+              # it in Infisical by hand.
+              managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: shared
                 slug: shared
@@ -687,6 +703,14 @@ spec:
                 crossplane.io/external-name: <<$adoptThisEnvId | toJson>>
                 <<- end >>
             spec:
+              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
+              # must never delete the Infisical project/environment and the secrets in it. The
+              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
+              # client secrets keep Delete so credentials are still revoked. Consequence: a
+              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
+              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
+              # it in Infisical by hand.
+              managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: <<$envSlug>>
                 slug: <<$envSlug>>

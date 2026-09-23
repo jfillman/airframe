@@ -122,6 +122,11 @@ spec:
                   repository: https://charts.bitnami.com/bitnami
                   version: 28.2.1
                 values:
+                  # fullnameOverride = the XR name so the Service/Secret names are exactly what
+                  # connectionDetails below reads (<xr>-master, <xr>). Without it Bitnami names
+                  # them <xr>-redis-master / <xr>-redis unless the XR name itself contains "redis",
+                  # and the connection secret never populates. Checked with `helm template`.
+                  fullnameOverride: <<$xrName>>
                   architecture: standalone
                   auth:
                     enabled: true

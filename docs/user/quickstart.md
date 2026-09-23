@@ -1,22 +1,31 @@
 # Airframe quickstart
 
-A hands-on walkthrough: create a service, get its pipeline running, give it a
-**ground** environment to iterate in and a **flight** environment to actually
-run in, then add a Redis cache.
+A hands-on walkthrough that ends with a **running application**: create a service,
+get its pipeline running, pull in the code, give it a **ground** environment to
+iterate in and a **flight** environment to run in, add a Redis cache, and finish
+with a real **canary** rollout you can watch.
 
-We build `boarding-api`, a small Go service that looks up a passenger's gate/seat
-assignment and caches the answer in Redis so a busy gate screen polling every few
-seconds doesn't hammer the reservations system.
+We build `boarding-api`, the gate board of [Skyport](skyport-demo.md) — a small
+NodeJS service that looks up a flight's gate and caches the answer in Redis so a
+busy gate screen doesn't hammer the reservations system. It also has a page built
+to make canary and blue/green deployments *visible*.
 
 > An illustrated version of this guide is published at
 > [Airframe Quickstart](https://claude.ai/artifact/WDPmWSD9BMBGurFzqATDWG).
 
-**What has and hasn't been verified.** Sections 02–06 describe mechanisms that are
-live and in use on real apps (`checkout-api`, `order-api`, `boarding-api`). Section
-07 (Redis) is **not verified end to end** — no Redis has ever been provisioned
-through this catalog, and it can only work on a cluster that has `provider-helm`
-and the `Redis` XRD installed. As of 2026-09-23 that is the dev cluster only. The
-section says exactly what is and isn't there.
+**What has and hasn't been verified.**
+- **Verified:** the app itself. Its tests pass, and it was run against a real Redis
+  container, including two instances sharing one counter.
+- **Verified in production use:** the create → onboard → environment mechanics
+  (sections 02–03 and 05–07) are live on real apps (`checkout-api`, `order-api`,
+  `boarding-api`).
+- **Not verified end to end:** this exact walkthrough with *this* code, and the
+  Redis component (section 08) — no Redis has ever been provisioned through this
+  catalog. Section 08 says what is and isn't in place.
+
+**Two architectures.** The dev cluster (`kiac-dev`) is arm64 and `kind-prod` is
+amd64. Leave `build.platforms` unset in `cicd.yaml` so your image is built for both;
+if you set it to one, the other cluster gets `exec format error`.
 
 ## 01 — Ground & flight
 
@@ -37,7 +46,7 @@ Both render through the same Helm chart, `airframe-application`. "Ground" and
 
 ## 02 — Create the app
 
-**Tower → Create → GoApplication.** Every Bootstrap-tier stack (NodeJS, Spring
+**Tower → Create → NodeJSApplication.** Every Bootstrap-tier stack (NodeJS, Spring
 Boot, Go, Python, InfraService) is a Backstage Scaffolder template generated from
 its XRD. Fill in:
 
@@ -45,33 +54,32 @@ its XRD. Fill in:
 |---|---|
 | Name | `boarding-api` |
 | `devCluster` | `kind-dev` |
-| `description` | Gate/seat lookup with a Redis-backed cache |
-| `goVersion` | `1.23` |
+| `description` | Skyport gate board: Redis-cached flight lookups and a canary visualizer |
+| `nodeVersion` | `20` |
+| `packageManager` | `npm` |
 | `port` | `8080` |
 | `visibility` | `private` |
 
 Submitting opens a pull request into `gitops-cluster-dev-tenants` at
 `tenants/boarding-api/xr-requests/boarding-api.yaml`. **Merge it** — the
 `xr-requests` ApplicationSet applies that file to the dev cluster as a
-`GoApplication` XR:
+`NodeJSApplication` XR:
 
 ```
-$ kubectl get goapplication boarding-api -n app-boarding-api-cicd
-NAME           SYNCED   READY   COMPOSITION                     AGE
-boarding-api   True     True    goapplications.catalog.idp.io   3m
+$ kubectl get nodejsapplication boarding-api -n app-boarding-api-cicd
+NAME           SYNCED   READY   COMPOSITION                          AGE
+boarding-api   True     True    nodejsapplications.catalog.idp.io    3m
 ```
 
 `kubectl describe` shows the two custom conditions this catalog adds:
 `DevClusterReady` (the dev cluster passed the registry check) and `CicdOnboarded`
 (Glidepath has picked the app up).
 
-Crossplane then creates the real `boarding-api` source repo (with a starter
-`cicd.yaml`, see below) and an empty `gitops-boarding-api` repo, and registers the
-app with Glidepath. You now have a repo — but no running pipeline yet, and nothing
-deployed.
-
-The scaffolded `cicd.yaml` is deliberately minimal: `build` only, `agent: go-1.23`,
-unit tests off. You'll extend it in sections 05 and 06.
+Crossplane then creates the real `boarding-api` source repo and an empty
+`gitops-boarding-api` repo, and registers the app with Glidepath. The source repo
+starts with a hello-world `index.js`, a `package.json`, a `Containerfile`, and a
+minimal `cicd.yaml` (`build` only, `agent: nodejs-20`, unit tests off). You now have a
+repo — but no running pipeline yet, and nothing deployed.
 
 ## 03 — Merge the pipeline onboarding PR
 
@@ -89,28 +97,69 @@ merge**:
 
 These files are never hand-edited. From then on, **every push that changes
 `cicd.yaml` opens a fresh PR** regenerating `.tekton/` if anything changed —
-merge those too. (You will meet this again in sections 05 and 06.) If nothing
+merge those too. (You will meet this again in sections 06 and 07.) If nothing
 happens after you push, check first that the platform's GitHub App has access to
 the repo.
 
-Once merged, a push to `main` runs the scaffolded `build` stage and publishes an
-image to `ghcr.io/<owner>/boarding-api`.
+Once merged, a push to `main` runs the scaffolded `build` stage and publishes a
+multi-arch image to `ghcr.io/<owner>/boarding-api`.
 
-## 04 — The app starts with no deployment
+## 04 — Pull in the code
+
+The scaffold's `index.js` is hello-world. The real `boarding-api` lives in the
+`airframe` repo, under `examples/skyport/boarding-api/`. Copy it over the scaffold:
+
+```bash
+git clone https://github.com/jfillman/airframe.git /tmp/airframe
+git clone https://github.com/jfillman/boarding-api.git && cd boarding-api
+
+cp -R /tmp/airframe/examples/skyport/boarding-api/. .
+git add -A && git commit -m "boarding-api: gate board with Redis-backed lookups"
+```
+
+This overwrites `index.js` and `package.json` and adds `app.js`, `store.js`,
+`reservations.js`, `public/`, `test/` and `test.sh`. **Keep the scaffolded
+`Containerfile`** — it already does what this app needs (`npm install`, `COPY . .`,
+`CMD ["node", "index.js"]`). Keep `cicd.yaml` for now too; you'll change it in
+section 06, and push then.
+
+Try it locally before pushing:
+
+```bash
+npm install && npm test        # 6 passing
+PORT=8080 node index.js        # open http://localhost:8080
+```
+
+You'll see the gate board. With no `REDIS_URL` set the header says `cache: memory` —
+the app falls back to an in-process store so it runs anywhere. That fallback is a
+teaching aid: with two replicas each pod keeps its own counts, which is the exact
+problem Redis fixes in section 08.
+
+What the app does:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /` | The gate board — flight lookup, boarding-pass scans, and the version tally |
+| `GET /api/boarding/:flight` | Boarding info for a flight like `AC123`; cached for 3 minutes; reports `cached` and `latencyMs` |
+| `POST /api/boarding/:flight/scan` | Increments that flight's boarded counter |
+| `GET /api/whoami` | Version, pod and cache mode — what the canary tally polls |
+| `GET /healthz` | Liveness / readiness |
+
+## 05 — The app starts with no deployment
 
 At this point `boarding-api` has an image and no environment: **nothing is running
 anywhere.** Onboarding creates the app, its repos, and its pipeline; it does not
 create a Deployment. Environments are separate objects, added next. There are two
 places to configure them, matching the two tiers:
 
-- **Ground** — you edit `platform/envs/dev.yaml` yourself (section 05).
-- **Flight** — you use Tower's **App Configuration** tab (section 06). That tab
+- **Ground** — you edit `platform/envs/dev.yaml` yourself (section 06).
+- **Flight** — you use Tower's **App Configuration** tab (section 07). That tab
   edits `gitops-<app>/<cluster>/<env>/values.yaml` through pull requests, and it
   only lists **flight** environments — the ones your `cicd.yaml` declares under
   `deploy.upperEnvironments`. It can't see a ground env, and it can't see a flight
   env until `cicd.yaml` declares it.
 
-## 05 — Ground: a running environment on the dev cluster
+## 06 — Ground: a running environment on the dev cluster
 
 A ground environment is two things: a file that creates the namespace, and a
 pipeline stage that puts an image in it.
@@ -139,9 +188,9 @@ apiVersion: platform/v1
 kind: PipelineConfig
 
 build:
-  agent: go-1.23
+  agent: nodejs-20
   unitTest:
-    enabled: false        # flip on once you add a test script
+    enabled: true         # runs ./test.sh, which the code you copied in provides
 
 deploy:
   lowerEnvironments: [dev]
@@ -151,7 +200,7 @@ pipelines:
     trigger: { source: git, event: push, branch: main }
     steps:
       - stage: build
-      - stage: test       # no tests configured yet: runs, reports success, tests nothing
+      - stage: test
         env: dev
       - stage: deploy
         env: dev
@@ -178,7 +227,8 @@ rollout:
 
 The chart's defaults apply for everything else: two replicas, container port
 `8080` named `http`, no probes. `boarding-api` listens on 8080, so this works
-as-is.
+as-is. Two replicas matters later: it's what makes the in-memory counter visibly
+wrong.
 
 ```
 $ kubectl get pods -n app-boarding-api-dev
@@ -186,10 +236,22 @@ NAME                            READY   STATUS    RESTARTS
 boarding-api-6c8f9d4b7-x2k9p    1/1     Running   0
 ```
 
+**See it.** Reach it with a port-forward (find the Service name with
+`kubectl get svc -n app-boarding-api-dev`):
+
+```bash
+kubectl port-forward -n app-boarding-api-dev svc/boarding-api 8080:8080
+```
+
+Open <http://localhost:8080>. Look up `AC123` twice — the second answer is a
+**cache hit**, a few milliseconds instead of ~400. Then press **Scan a boarding pass**
+several times: the counter jumps around, because the two pods each count on their
+own (`counter: memory`). Keep that in mind for section 08.
+
 To change ground settings (replicas, ports, probes, resources), edit
 `platform/envs/dev.yaml` directly — the App Configuration tab does not cover it.
 
-## 06 — Flight: a governed environment on an upper cluster
+## 07 — Flight: a governed environment on an upper cluster
 
 ### Step 1 — declare the environment in `cicd.yaml`
 
@@ -268,7 +330,7 @@ HPA or PDB) and fill in:
 | Section | For boarding-api |
 |---|---|
 | Deployment | On |
-| Scaling | Replicas `2` |
+| Scaling | Replicas `4` (a canary splits by replica count, so 4 gives readable 25% steps) |
 | Resources | Requests `100m` / `128Mi`, limits `500m` / `256Mi` |
 | Service | port name `http`, containerPort `8080` |
 | Health checks | Liveness and readiness: HTTP GET `/healthz` on `8080` |
@@ -289,98 +351,144 @@ Merge it — as a **signed** commit; GitHub's merge button produces an unsigned 
 see Glidepath's `docs/admin/commit-signing.md` ("Merge strategy matters"). kind-prod's
 ArgoCD syncs it and `WorkloadDeployed` flips to `True` once a real Rollout exists.
 
-## 07 — Adding a Redis cache
+## 08 — Add a Redis cache
 
 **Not verified end to end. Read this section as "what the code says," not "what
-was tried."**
+was tried."** The app side *is* verified against a real Redis; the platform side —
+the component provisioning it — has never run.
 
 ### What kind of thing is Redis?
 
 Redis is an **Attached-tier component**. It is not a Bootstrap object (you don't
-create it in Tower's Create menu — there is no form for it) and not an Embedded
+create it from Tower's Create menu — there is no form for it) and not an Embedded
 setting. You add one by putting an entry in the `components:` list of an
-environment's `values.yaml`; the `airframe-application` chart renders that entry
-into a `Redis` XR, whose Composition renders a `provider-helm` `Release` of
-Bitnami's `redis` chart (standalone, one instance per entry, in the same
-namespace as your app).
+environment's values; the `airframe-application` chart renders that entry into a
+`Redis` XR, whose Composition renders a `provider-helm` `Release` of Bitnami's
+`redis` chart (standalone, one instance per entry, in the same namespace as your
+app, password-protected).
 
-```yaml
-components:
-  - type: redis
-    name: cache
-    spec: { size: small, persistence: false }   # environmentRef is stamped for you
-```
+### Where it can work
 
-### Where it can work today
-
-A component only works where Crossplane can actually reconcile it. Checked
-against the live clusters on 2026-09-23:
+A component only works where Crossplane can reconcile it — `provider-helm` and the
+`Redis` XRD must both be installed on that cluster. As of 2026-09-23:
 
 | Cluster | `provider-helm` | `Redis` XRD |
 |---|---|---|
-| dev (`kiac-dev`) | installed, healthy | installed |
-| `kind-prod` | **not installed** | **not installed** |
+| dev (`kiac-dev`, arm64) | installed, healthy | installed |
+| `kind-prod` (amd64) | installed, healthy | **delivered by the `idp-service-catalog-redis` ArgoCD Application, which is manual-sync and had not been synced when this was written** — check `kubectl get xrd redis.catalog.idp.io` |
 
-So the **ground** tier is the only place a Redis component can be tried, by
-adding the block above to `platform/envs/dev.yaml`. A **flight** env on
-`kind-prod` can't run one until `provider-helm` and the `Redis` XRD are installed
-there. No `Redis` object, and no Helm release, currently exists on any cluster.
+So the **ground** tier works today; a **flight** env works once that Application is
+synced. All the images involved are multi-arch, checked against the registries.
 
-### Consuming it
+### Ground: add it to `platform/envs/dev.yaml`
 
-The Composition publishes host, port, and password to a Secret named
-`<xr-name>-connection` in your namespace. **Wiring that Secret into your app is
-not built** — the Composition's own header says so. `secrets:` entries in
-`values.yaml` read from Infisical by name; they don't read arbitrary Kubernetes
-Secrets. The manual route is to copy the password into the app's Infisical
-project, list it under `secrets:`, and put the host and port in `configMaps:`
-(find the Service name with `kubectl get svc -n app-boarding-api-dev`).
+Name the component **`redis`**. That is deliberate: Bitnami names its Services from
+the release name, and the connection secret this catalog writes assumes
+`<name>-master`. A component named `cache` would get a Service called
+`cache-redis-master` and a connection secret pointing at one that doesn't exist. (The
+Composition is fixed to avoid this in airframe `main`, but `kind-prod` runs the
+v0.3.77 tag, which has the bug; the name `redis` works on both.)
+
+```yaml
+envName: dev
+components:
+  - type: redis
+    name: redis
+    spec: { size: small, persistence: false }   # environmentRef is stamped for you
+env:
+  - { name: REDIS_URL, value: "redis://redis-master:6379" }
+secrets:
+  - name: redis-password      # read from this app's Infisical project
+    key: REDIS_PASSWORD       # the env var boarding-api reads
+```
+
+(Keep the `rollout:` block the deploy stage wrote; only add the keys above.)
+
+### The one manual step
+
+Wiring the Redis connection Secret into your app **is not built** — the
+Composition's own header says so. `secrets:` entries read from Infisical by name, not
+from arbitrary Kubernetes Secrets. So copy the password across once:
+
+```bash
+kubectl get secret redis -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d
+```
+
+Add it to `boarding-api`'s Infisical project as `redis-password`. (The host and port
+are already in `REDIS_URL` above.)
+
+### See it
+
+Once the pods restart, the gate board header says `cache: redis`. Scan a boarding
+pass repeatedly: the counter now climbs by exactly one each time, no matter which
+pod answers — and it survives a pod restart if you set `persistence: true`. That's
+the difference between section 06's scattered counts and one shared truth.
 
 ### Shared Redis: not supported yet
 
 One Redis serving several apps is not a feature of this catalog. `Redis` has no
-attach mode, and the obvious construction — a standalone `InfraService` hosting
-the instance — can't get a flight environment on a cluster that has no Redis
-support, and `ApplicationEnvironment` rejects the dev cluster. The earlier version
-of this guide described a shared-Redis flow; it was untested and has been removed.
+attach mode, and the obvious construction — a standalone `InfraService` hosting the
+instance — can't yet give a flight environment a cluster that has no Redis support.
+Skyport's plan uses `InfraService` for RabbitMQ and the OAuth server instead, once
+those components exist.
 
-## The cache, in Go
+## 09 — Roll out a canary
 
-```go
-func getBoardingInfo(ctx context.Context, rdb *redis.Client, code string) (*Boarding, error) {
-	key := "boarding:" + code
+`boarding-api` is built for this. The gate board polls `/api/whoami` twice a second
+and draws a bar of **which version answered**; the header colour comes from that
+version. Version 2 also adds a "boarding group" line to lookups, so a canary changes
+behaviour as well as colour.
 
-	if cached, err := rdb.Get(ctx, key).Result(); err == nil {
-		var b Boarding
-		if json.Unmarshal([]byte(cached), &b) == nil {
-			return &b, nil // cache hit — no reservations-system call at all
-		}
-	}
+**Start with v1 in flight** (section 07 done, image released). Port-forward to the
+staging Service and open the board — one solid bar, `v1.0.0: 100%`.
 
-	b, err := lookupFromReservations(ctx, code) // the slow path
-	if err != nil {
-		return nil, err
-	}
+**Make v2.** In the repo, set `"version": "2.0.0"` in `package.json`, commit and push
+to `main`. The pipeline builds, tests, deploys to dev, and opens a release PR for
+`staging`; merge it as a signed commit.
 
-	if payload, err := json.Marshal(b); err == nil {
-		rdb.Set(ctx, key, payload, 3*time.Minute) // short TTL, no manual invalidation
-	}
-	return b, nil
-}
+**Watch the canary.** The Rollout does not replace v1. It steps: with the chart's
+default canary steps (or the ones you set in App Configuration → Canary steps) and
+four replicas, the bar goes from all-v1 to roughly a quarter v2, then half, then all.
+The chart has no traffic router, so the split is by **pod count**, not by request
+weight — percentages round to whole pods, which is why four replicas reads better
+than two. A step that pauses without a duration waits for you to promote it.
+
+```bash
+kubectl argo rollouts get rollout boarding-api -n app-boarding-api-staging --watch
+kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   # if paused
 ```
+
+Press **Reset tally** between steps to see the current mix rather than a running
+average. **Look up `AC123`**: only the v2 pods show the boarding-group line, and the
+`answered by` row says which version you got.
+
+**Blue/green instead.** Set the env's `rollout.strategy: blueGreen`. The chart then
+renders two Services, `boarding-api` (active) and `boarding-api-preview`. Port-forward
+to the preview Service to see v2 at 100% *before* promotion, while the active Service
+still shows v1 at 100%; after promotion the active bar flips in one step.
+
+**Roll back** by promoting nothing and aborting the rollout, or by reverting the
+release PR; the bar returns to all-v1.
+
+This is the unverified end of the guide: the mechanism is Argo Rollouts driven by
+the chart's own values, but no canary has been run with this app.
 
 ## Cheat sheet
 
 - **Merge the `.tekton/` PR** — after creating the app, and again after every
   `cicd.yaml` change. No merge, no pipeline.
+- **Copy the demo code over the scaffold**, keep the scaffolded `Containerfile`.
 - **Nothing is deployed after onboarding.** Ground needs `platform/envs/dev.yaml`
   plus a `deploy` stage; flight needs an `ApplicationEnvironment`, App
   Configuration, and a `release` stage.
 - **App Configuration is flight-only**, and only lists envs declared in
   `deploy.upperEnvironments`.
-- **`envName`, never `env`** in `platform/envs/*.yaml`.
+- **`envName`, never `env`**, as the environment's name key in
+  `platform/envs/*.yaml`.
 - **`rollout: null` must be explicit.**
 - **The ground deploy commits to `main` itself** — pull before you push.
 - **`ApplicationEnvironment` rejects dev clusters** — `cluster` is live-gated to
   `type: upper`.
-- **Redis is a component, dev cluster only, unverified.**
+- **Name the Redis component `redis`**; it is a component, not a Bootstrap object.
+- **Two architectures** — don't narrow `build.platforms`.
+- **Canary splits by pod count**, so use four replicas.

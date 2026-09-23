@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate board</title>
+<style>
+  :root { --bg:#f6f1e7; --ink:#1c1a17; --mute:#6b655b; --line:#d9d1c1; --card:#fffdf8; --hue:38; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, sans-serif; }
+  header { background:hsl(var(--hue) 80% 45%); color:#fff; padding:20px 24px; display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; transition:background .4s; }
+  header h1 { margin:0; font-size:22px; letter-spacing:.02em; }
+  #ver { font:600 28px ui-monospace, monospace; }
+  header small { opacity:.85; }
+  main { max-width:880px; margin:0 auto; padding:24px; display:grid; gap:20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px 20px; }
+  h2 { margin:0 0 10px; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color:var(--mute); }
+  .bar { display:flex; height:28px; border-radius:6px; overflow:hidden; background:#eee6d6; }
+  .bar div { display:flex; align-items:center; justify-content:center; color:#fff; font:600 12px ui-monospace, monospace; transition:width .3s; }
+  .legend { margin-top:8px; color:var(--mute); font:12px ui-monospace, monospace; }
+  input, button { font:inherit; padding:8px 12px; border-radius:6px; border:1px solid var(--line); }
+  input { text-transform:uppercase; width:120px; }
+  button { background:var(--ink); color:#fff; cursor:pointer; border:0; }
+  button.ghost { background:transparent; color:var(--ink); border:1px solid var(--line); }
+  dl { display:grid; grid-template-columns:max-content 1fr; gap:4px 16px; margin:12px 0 0; }
+  dt { color:var(--mute); } dd { margin:0; font-family:ui-monospace, monospace; }
+  .hit { color:#1f7a3f; font-weight:600; } .miss { color:#b4541a; font-weight:600; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:99px; background:#eee6d6; font:12px ui-monospace, monospace; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Gate board</h1>
+  <span id="ver">…</span>
+  <small id="pod"></small>
+  <small id="cache"></small>
+</header>
+<main>
+  <section>
+    <h2>Which version answered? <span id="polls" class="tag">0 polls</span></h2>
+    <div class="bar" id="bar"></div>
+    <div class="legend" id="legend">waiting for the first response…</div>
+    <p style="margin:12px 0 0"><button class="ghost" id="reset">Reset tally</button></p>
+  </section>
+  <section>
+    <h2>Boarding lookup</h2>
+    <form id="f"><input id="code" value="AC123" maxlength="6" aria-label="Flight code"> <button>Look up</button>
+    <button type="button" id="scan" class="ghost">Scan a boarding pass</button></form>
+    <dl id="out"></dl>
+  </section>
+</main>
+<script>
+const hue = (v) => { let h = 0; for (const c of v) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const $ = (id) => document.getElementById(id);
+const tally = {}; let polls = 0;
+
+async function poll() {
+  try {
+    const w = await (await fetch('/api/whoami', { cache: 'no-store' })).json();
+    tally[w.version] = (tally[w.version] || 0) + 1; polls++;
+    $('ver').textContent = 'v' + w.version;
+    $('pod').textContent = w.pod; $('cache').textContent = 'cache: ' + w.cache;
+    document.documentElement.style.setProperty('--hue', hue(w.version));
+    render();
+  } catch (e) { $('legend').textContent = 'no response: ' + e.message; }
+}
+function render() {
+  const versions = Object.keys(tally).sort();
+  $('polls').textContent = polls + ' polls';
+  $('bar').innerHTML = versions.map((v) =>
+    `<div style="width:${(tally[v] / polls) * 100}%;background:hsl(${hue(v)} 80% 42%)">${Math.round((tally[v] / polls) * 100)}%</div>`).join('');
+  $('legend').textContent = versions.map((v) => `v${v}: ${tally[v]}`).join('   ');
+}
+$('reset').onclick = () => { for (const k in tally) delete tally[k]; polls = 0; render(); };
+setInterval(poll, 500); poll();
+
+const row = (k, v) => `<dt>${k}</dt><dd>${v}</dd>`;
+$('f').onsubmit = async (e) => {
+  e.preventDefault();
+  const r = await fetch('/api/boarding/' + $('code').value);
+  const b = await r.json();
+  if (!r.ok) { $('out').innerHTML = row('error', b.error); return; }
+  const major = parseInt(b.version, 10);
+  $('out').innerHTML = row('flight', b.flight) + row('gate', b.gate) + row('to', b.destination) + row('departs', b.departs)
+    + (major >= 2 ? row('boarding group', b.group) : '')
+    + row('source', b.cached ? '<span class="hit">cache hit</span>' : '<span class="miss">reservations (slow)</span>')
+    + row('latency', b.latencyMs + ' ms') + row('answered by', 'v' + b.version);
+};
+$('scan').onclick = async () => {
+  const r = await (await fetch('/api/boarding/' + $('code').value + '/scan', { method: 'POST' })).json();
+  $('out').innerHTML = row('flight', r.flight) + row('boarded', r.boarded + ' / ' + r.capacity) + row('counter', r.cache);
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "boarding-api",
+  "version": "1.0.0",
+  "description": "Skyport gate board: boarding-pass lookups (Redis-cached) and a live canary visualizer",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "redis": "^4.7.0"
+  }
+}

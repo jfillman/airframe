@@ -6,6 +6,7 @@ nav:
   - User guide:
       - Overview: user/README.md
       - Quickstart: user/quickstart.md
+      - Skyport demo system: user/skyport-demo.md
   - Admin guide:
       - Overview: admin/README.md
       - Architecture: admin/architecture.md

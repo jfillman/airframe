@@ -244,6 +244,47 @@ spec:
             <<- $visibility := $spec.visibility >>
             <<- $platformOwner := "jfillman" >>
             <<- $modulePath := printf "github.com/%s/%s" $platformOwner $xrName >>
+            # ---------------------------------------------------------------------------
+            # Scaffold files never delete or overwrite developer content, and never re-identify.
+            # (Added 2026-09-23 after a real incident - read before changing anything here.)
+            #
+            # These RepositoryFile resources exist only to seed a brand-new app's repo. After the
+            # first commit the file belongs to the developer. They used to be reconciled forever
+            # with policies Create, Observe, LateInitialize, Delete and overwriteOnCreate true, which
+            # had two real failure modes:
+            #   1. A composition change to a field of an ALREADY-COMPOSED resource is a fleet-wide
+            #      write even without an Update policy. The 2026-09-22 Dockerfile-to-Containerfile
+            #      rename rewrote file: and external-name on every existing resource while the
+            #      provider's Terraform state (and the repo) still said Dockerfile. file: is a
+            #      force-replace field, so the provider could neither update nor settle, and
+            #      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
+            #      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
+            #   2. Delete let a mis-observed 403 or a resource-name change remove a developer-owned
+            #      file, and overwriteOnCreate true let a mis-observed 403 overwrite real content.
+            #
+            # Therefore: no Delete policy (deleting the Kubernetes object can never remove a file
+            # from GitHub), overwriteOnCreate false, and the identity fields (file:, external-name)
+            # of an EXISTING resource are pinned to what the provider itself reports it manages
+            # (status.atProvider.file), falling back to the live spec, then to the template default.
+            # The default therefore only ever applies to a resource that does not exist yet, so a
+            # future change of the default can never re-identify a live object. A cluster rebuild
+            # still adopts existing files: nothing is observed, external-name is set, Observe adopts.
+            # Do NOT try to make these objects disappear after creation by rendering nothing: a
+            # missing object looks identical to a brand-new one, so the next reconcile recreates it
+            # (proved live on 2026-09-23 - an endless create/garbage-collect loop, ~800 GitHub calls
+            # in 4 minutes). If retirement is ever wanted it needs a durable marker outside this
+            # render, and a multi-pass test.
+            # NOTE for editors: never write two adjacent angle-bracket characters in comments (see
+            # the note further down) - this block deliberately avoids them.
+            # ---------------------------------------------------------------------------
+            <<- define "scaffoldFile" ->>
+            <<- $f := "" ->>
+            <<- if .obs ->>
+            <<-   $f = dig "resource" "status" "atProvider" "file" "" .obs ->>
+            <<-   if not $f ->><<- $f = dig "resource" "spec" "forProvider" "file" "" .obs ->><<- end ->>
+            <<- end ->>
+            <<- if $f ->><<- $f ->><<- else ->><<- .default ->><<- end ->>
+            <<- end >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: Repository
             metadata:
@@ -276,14 +317,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-go-mod">>
                 crossplane.io/external-name: "<<printf "%s:go.mod:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: go.mod
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   module <<$modulePath>>
 
@@ -298,14 +339,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-main-go">>
                 crossplane.io/external-name: "<<printf "%s:main.go:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: main.go
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   package main
 
@@ -336,24 +377,20 @@ spec:
                   }
                 commitMessage: "GoApplication scaffold: main.go"
             ---
+            <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+            <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
-              # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile)
-              # even though the scaffolded file itself is now Containerfile - this name is
-              # Crossplane's own correlation key for "which composed resource is this" across
-              # reconciles of an EXISTING XR; renaming it would make every already-onboarded
-              # app's real RepositoryFile MR vanish from this Composition's rendered output,
-              # and since managementPolicies includes "Delete", that risks the runtime actually
-              # deleting each app's real Dockerfile from GitHub on its next reconcile - not
-              # something to trigger fleet-wide for a naming-convention change. file:/content:/
-              # external-name below are what a freshly-created XR actually reads at Create time;
-              # changing them has no effect on an already-composed MR's real external resource
-              # (no "Update" in managementPolicies - see that policy's own comment below).
+              # metadata.name stays -src-dockerfile (not -src-containerfile): it is Crossplane's
+              # correlation key for an EXISTING XR's already-composed resource. file: and the
+              # external-name are pinned to the provider's own state for an existing resource
+              # (scaffoldFile at the top of this file); the default below only applies to a
+              # resource that does not exist yet. See the header comment for the incident.
               name: <<$xrName>>-src-dockerfile
               annotations:
                 <<setResourceNameAnnotation "src-repo-dockerfile">>
-                crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
+                crossplane.io/external-name: "<<printf "%s:%s:" $xrName $pinnedFile>>"
               # Multi-stage, matching springbootapplication's own precedent (a real difference
               # from nodejsapplication's single-stage script, not just a style choice): build
               # stage carries the full Go toolchain, final stage is bare Alpine running only the
@@ -363,24 +400,16 @@ spec:
               # `apk upgrade` on the runtime stage picks up already-published Alpine package
               # patches, same as nodejsapplication's own Containerfile.
             spec:
-              # No "Update" - an already-created file's content is hands-off after its first
-              # commit (a developer's own edits are never fought), same as every other scaffold
-              # resource here. This is also exactly why this Composition can safely stop
-              # scaffolding "Dockerfile" and start scaffolding "Containerfile" (2026-09-22,
-              # platform-wide rename - "Containerfile" is the vendor-neutral term this platform
-              # now uses, see glidepath's schemas/cicd.schema.json build.containerfile) without
-              # touching any already-onboarded app: this policy only ever risks a real write
-              # (Create) when the file this Composition instance renders is genuinely absent -
-              # an existing app's real Dockerfile, already created, is simply never revisited
-              # by this resource slot again regardless of what this template says today.
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              # No "Update" and no "Delete": this object must never write to or remove a
+              # developer-owned file (see the header comment).
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
-                file: Containerfile
-                overwriteOnCreate: true
+                file: <<$pinnedFile>>
+                overwriteOnCreate: false
                 content: |
                   FROM golang:<<$goVersion>>-alpine AS build
                   WORKDIR /app
@@ -404,14 +433,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-gitignore">>
                 crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: .gitignore
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   /app
                   *.log
@@ -426,14 +455,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-readme">>
                 crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: README.md
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   # <<$xrName>>
 

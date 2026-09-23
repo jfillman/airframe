@@ -28,16 +28,17 @@ field values, deterministic naming) — it doesn't exercise
 `infisical-secretstore-operator`'s own reconciliation against a real Infisical
 API, which only happens on a real cluster (see that operator's own README).
 
-## Provider vs. operator (universal-auth clusters)
+## Adopting an existing project
 
-On a universal-auth cluster (not the Infisical host) the Composition renders the old
-`InfisicalProject`/`InfisicalEnvironment` CRs **unless** the app opts in through
-`secretstore-provisioner.yaml` (a ConfigMap in `crossplane-system`, one key per
-`<app>-<cluster>` slug). On opt-in it renders the provider-infisical chain instead
-(`Project`, `ProjectEnvironment`, `Identity`, `IdentityUniversalAuth`,
-`IdentityUniversalAuthClientSecret`, `ProjectIdentity`, and the same
-`<slug>-infisical-creds` Secret the operator wrote), optionally adopting existing
-project/environment ids. The Infisical host cluster always uses the provider.
+The Composition always provisions through provider-infisical (`Project`,
+`ProjectEnvironment`, `Identity`, `IdentityUniversalAuth` / `IdentityKubernetesAuth`,
+`ProjectIdentity`, and the `<slug>-infisical-creds` Secret). The old
+`infisical-secretstore-operator` path was removed on 2026-09-23 once every kind-prod
+project had been migrated; the operator is retired.
 
-The offline render used to verify this (real Go `text/template`, stub function map) is
-described in `hangar/docs/service-catalog-design.md`'s Round 2026-09-18 playbook.
+A NEW app needs nothing: its project is created fresh. To **adopt** a project that already
+exists in Infisical (so its secrets stay put), add an entry to the
+`secretstore-provisioner` ConfigMap (see `secretstore-provisioner.yaml`) with its
+`projectId`, `sharedEnvId` and `envIds`, and make sure the provider's machine identity is
+already an `admin` member of that project - otherwise every read is a 403. The old
+`provisioner: provider` key is ignored.

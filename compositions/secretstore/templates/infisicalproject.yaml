@@ -39,8 +39,9 @@
 # project_kiac_dev_provider_github_bugs's sibling memory on this operator.
 #
 # The universal-auth branch (every cluster OTHER than the one hosting Infisical, e.g.
-# kind-prod) now has the same provider chain, opt-in per app via 02-provisioner-gate.yaml
-# (default: still the old InfisicalProject CR, unchanged). It was blocked until
+# kind-prod) now has the same provider chain (adopting existing projects by id via
+# 02-provisioner-gate.yaml). Until 2026-09-23 it was opt-in and the default was the old
+# InfisicalProject CR; that operator branch is removed. It was blocked until
 # 2026-09-23 by IdentityUniversalAuthClientSecret failing its pre-Create Observe: upjet
 # seeds the Terraform state with an empty id, the Terraform provider's Read then called
 # the client-secret LIST endpoint (an array) instead of GET-by-id. Fixed in
@@ -81,7 +82,6 @@
 # deployment infisical-secretstore-operator -o jsonpath=...).
 <<- $infisicalOrgId := "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
 <<- if eq $envSlug "shared" >>
-  <<- if $useProvider >>
 apiVersion: project.infisical.m.hangar.io/v1alpha1
 kind: Project
 metadata:
@@ -312,19 +312,4 @@ spec:
     <<- end >>
     <<- end >>
 
-  <<- else >>
-apiVersion: secrets.idp.io/v1alpha1
-kind: InfisicalProject
-metadata:
-  name: <<$projectSlug>>
-  annotations:
-    <<setResourceNameAnnotation "infisical-project">>
-spec:
-  projectName: <<$projectSlug>>
-  slug: <<$projectSlug>>
-  environmentSlug: shared
-  credentialsSecretName: <<printf "%s-infisical-creds" $projectSlug>>
-  authMethod: <<$authMethod>>
----
-  <<- end >>
 <<- end >>

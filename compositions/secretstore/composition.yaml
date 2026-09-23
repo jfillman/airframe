@@ -135,31 +135,29 @@ spec:
                 matchName: infisical-token-reviewer-token
             ---
             ---
-            # Which machinery provisions THIS (app, cluster) pair's Infisical project: the
-            # provider-infisical resource chain ("provider") or the old infisical-secretstore-
-            # operator's InfisicalProject CR ("operator", the default). Read from an optional
+            # Adoption ids for THIS (app, cluster) pair's Infisical project, read from an optional
             # ConfigMap, crossplane-system/secretstore-provisioner, keyed by project slug
-            # (<appRef.name>-<cluster>). One entry per app, so the per-app cutover order in
-            # hangar/docs/kind-prod-infisical-migration-plan.md is a one-line, reviewable GitOps
-            # change, and merging this Composition alone changes nothing.
+            # (<appRef.name>-<cluster>).
             #
-            # Why a ConfigMap and not a field on the XR: the SecretStore XR manifests are files
-            # the ApplicationEnvironment Composition commits into the cluster's tenants repo with
-            # Update in its management policies, so a hand-added spec field would be reverted.
-            # A missing ConfigMap, or a slug with no entry, means "operator".
+            # History: until 2026-09-23 this also chose between the provider-infisical chain and the
+            # old infisical-secretstore-operator's InfisicalProject CR ("provisioner: provider" opted an
+            # app in; the default was the operator). Every project on every cluster is now
+            # provider-managed and the operator is retired, so the provider is the only path and the
+            # `provisioner` key is ignored - old entries may still carry it.
+            #
+            # What the ConfigMap is still for: ADOPTING a project that already exists in Infisical,
+            # so its secrets stay in place instead of a fresh project being created. A slug with no
+            # entry simply gets a NEW project (the normal path for a newly onboarded app).
             #
             # Entry format (YAML text under the slug key):
-            #   provisioner: provider          # anything else (or absent) keeps the operator
-            #   projectId: <uuid>              # optional: ADOPT an existing Infisical project
-            #   sharedEnvId: <uuid>            # optional: adopt its existing "shared" environment
-            #   envIds: {staging: <uuid>}      # optional: adopt existing per-env environments
-            # The three id fields set crossplane.io/external-name on the composed resource so the
-            # provider observes the existing object instead of trying to create a colliding one.
-            # They only matter on the first reconcile after a flip; the provider maintains the
-            # annotation itself afterwards.
-            #
-            # Kubernetes-auth clusters (the Infisical host, kiac-dev) always use the provider - that
-            # migration is complete, so no entry is ever needed there.
+            #   projectId: <uuid>              # adopt this existing Infisical project
+            #   sharedEnvId: <uuid>            # adopt its existing "shared" environment
+            #   envIds: {staging: <uuid>}      # adopt existing per-env environments
+            # The ids set crossplane.io/external-name on the composed resource so the provider
+            # observes the existing object instead of creating a colliding one. They only matter on
+            # the first reconcile; the provider maintains the annotation itself afterwards. The
+            # provider's machine identity must already be a member (admin) of an adopted project, or
+            # every read is a 403.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $gateSlug := printf "%s-%s" $spec.appRef.name $spec.cluster >>
             <<- $provExtra := .extraResources | default dict >>
@@ -174,7 +172,6 @@ spec:
                 <<- $provCfg = fromYaml $provRaw >>
               <<- end >>
             <<- end >>
-            <<- $useProvider := or $isInfisicalHost (eq (index $provCfg "provisioner" | default "operator") "provider") >>
             <<- $adoptProjectId := index $provCfg "projectId" | default "" >>
             <<- $adoptSharedEnvId := index $provCfg "sharedEnvId" | default "" >>
             <<- $adoptEnvIds := index $provCfg "envIds" | default dict >>
@@ -366,8 +363,9 @@ spec:
             # project_kiac_dev_provider_github_bugs's sibling memory on this operator.
             #
             # The universal-auth branch (every cluster OTHER than the one hosting Infisical, e.g.
-            # kind-prod) now has the same provider chain, opt-in per app via 02-provisioner-gate.yaml
-            # (default: still the old InfisicalProject CR, unchanged). It was blocked until
+            # kind-prod) now has the same provider chain (adopting existing projects by id via
+            # 02-provisioner-gate.yaml). Until 2026-09-23 it was opt-in and the default was the old
+            # InfisicalProject CR; that operator branch is removed. It was blocked until
             # 2026-09-23 by IdentityUniversalAuthClientSecret failing its pre-Create Observe: upjet
             # seeds the Terraform state with an empty id, the Terraform provider's Read then called
             # the client-secret LIST endpoint (an array) instead of GET-by-id. Fixed in
@@ -408,7 +406,6 @@ spec:
             # deployment infisical-secretstore-operator -o jsonpath=...).
             <<- $infisicalOrgId := "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
             <<- if eq $envSlug "shared" >>
-              <<- if $useProvider >>
             apiVersion: project.infisical.m.hangar.io/v1alpha1
             kind: Project
             metadata:
@@ -639,21 +636,6 @@ spec:
                 <<- end >>
                 <<- end >>
 
-              <<- else >>
-            apiVersion: secrets.idp.io/v1alpha1
-            kind: InfisicalProject
-            metadata:
-              name: <<$projectSlug>>
-              annotations:
-                <<setResourceNameAnnotation "infisical-project">>
-            spec:
-              projectName: <<$projectSlug>>
-              slug: <<$projectSlug>>
-              environmentSlug: shared
-              credentialsSecretName: <<printf "%s-infisical-creds" $projectSlug>>
-              authMethod: <<$authMethod>>
-            ---
-              <<- end >>
             <<- end >>
             ---
             # ONLY rendered in per-env mode (environmentSlug != "shared"). Does NOT create a
@@ -689,7 +671,6 @@ spec:
               <<- $authMethod = "kubernetes" >>
             <<- end >>
             <<- if ne $envSlug "shared" >>
-              <<- if $useProvider >>
             # 2026-09-18 MIGRATION - see infisicalproject.yaml's own header for the full
             # rationale (kubernetes-auth branch only, universal-auth unchanged below, NOT YET
             # live-cut-over to main). Same $projectSlug convention: references the ALREADY
@@ -715,18 +696,6 @@ spec:
                 kind: ClusterProviderConfig
                 name: default
             ---
-              <<- else >>
-            apiVersion: secrets.idp.io/v1alpha1
-            kind: InfisicalEnvironment
-            metadata:
-              name: <<$xrName>>
-              annotations:
-                <<setResourceNameAnnotation "infisical-environment">>
-            spec:
-              projectSlug: <<$projectSlug>>
-              environmentSlug: <<$envSlug>>
-            ---
-              <<- end >>
             apiVersion: kubernetes.m.crossplane.io/v1alpha1
             kind: Object
             metadata:

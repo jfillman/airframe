@@ -365,6 +365,65 @@ spec:
               <<- $installCmd = "yarn install --frozen-lockfile" >>
               <<- $lockfile = "yarn.lock" >>
             <<- end >>
+            # ---------------------------------------------------------------------------
+            # Scaffold files are CREATE-ONCE, then this Composition lets go of them.
+            # (Added 2026-09-23 after a real incident - read before changing anything here.)
+            #
+            # These RepositoryFile resources exist only to seed a brand-new app's repo. After the
+            # first commit the file belongs to the developer. They used to be reconciled forever
+            # with policies Create, Observe, LateInitialize, Delete and overwriteOnCreate true, which
+            # had two real failure modes:
+            #   1. A composition change to a field of an ALREADY-COMPOSED resource is a fleet-wide
+            #      write even without an Update policy. The 2026-09-22 Dockerfile-to-Containerfile
+            #      rename rewrote file: and external-name on every existing resource while the
+            #      provider's Terraform state (and the repo) still said Dockerfile. file: is a
+            #      force-replace field, so the provider could neither update nor settle, and
+            #      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
+            #      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
+            #   2. Create fires whenever the file is observed missing, so a developer who renamed or
+            #      deleted a scaffold file had it resurrected (happened to 4 repos), and with
+            #      overwriteOnCreate true a mis-observed 403 could overwrite real content.
+            #
+            # The lifecycle, driven by the OBSERVED live resource (scaffoldMode below):
+            #   create      not observed yet, or created but the provider has no id yet:
+            #               render with Create, Observe, LateInitialize. Never Delete.
+            #   transition  observed WITH an id but its live policies still include Delete or the
+            #               wildcard (every resource created before this change): render Observe
+            #               only, which strips Delete from the live object.
+            #   retire      observed with an id and no Delete left in its live policies: render
+            #               NOTHING. Crossplane garbage-collects the object; with no Delete policy
+            #               the file in GitHub is untouched. Gating on the LIVE policies (not just
+            #               on having an id) is what makes this safe - retiring an object that still
+            #               had Delete would delete real files across the fleet.
+            # Identity fields (file:, external-name) are pinned to the observed resource's own values
+            # while it exists (scaffoldFile / scaffoldExternalName), so a future change of the
+            # template default can never re-identify a live object.
+            # A cluster rebuild still adopts existing files: a fresh cluster has nothing observed, so
+            # it renders in create mode with external-name set, and Observe adopts the existing file.
+            # NOTE for editors: never write two adjacent angle-bracket characters in comments (see
+            # the NOTE at the top of this file) - this block deliberately avoids them.
+            # ---------------------------------------------------------------------------
+            <<- define "scaffoldMode" ->>
+            <<- $obs := .obs ->>
+            <<- $mode := "create" ->>
+            <<- if $obs ->>
+            <<-   if dig "resource" "status" "atProvider" "id" "" $obs ->>
+            <<-     $policies := dig "resource" "spec" "managementPolicies" (list) $obs ->>
+            <<-     if or (has "Delete" $policies) (has "*" $policies) ->>
+            <<-       $mode = "transition" ->>
+            <<-     else ->>
+            <<-       $mode = "retire" ->>
+            <<-     end ->>
+            <<-   end ->>
+            <<- end ->>
+            <<- $mode ->>
+            <<- end ->>
+            <<- define "scaffoldFile" ->>
+            <<- if .obs ->><<- dig "resource" "spec" "forProvider" "file" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+            <<- end ->>
+            <<- define "scaffoldExternalName" ->>
+            <<- if .obs ->><<- dig "resource" "metadata" "annotations" "crossplane.io/external-name" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+            <<- end >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: Repository
             metadata:
@@ -397,6 +456,9 @@ spec:
                     secretScanningPushProtection:
                       - status: disabled
             ---
+            <<- $obs1 := index (.observed.resources | default dict) "src-repo-package-json" >>
+            <<- $mode1 := include "scaffoldMode" (dict "obs" $obs1) >>
+            <<- if ne $mode1 "retire" >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -405,14 +467,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-package-json">>
                 crossplane.io/external-name: "<<printf "%s:package.json:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: <<if eq $mode1 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: package.json
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   {
                     "name": <<$xrName | toJson>>,
@@ -427,7 +489,11 @@ spec:
                     }
                   }
                 commitMessage: "NodeJSApplication scaffold: package.json"
+            <<- end >>
             ---
+            <<- $obs2 := index (.observed.resources | default dict) "src-repo-index-js" >>
+            <<- $mode2 := include "scaffoldMode" (dict "obs" $obs2) >>
+            <<- if ne $mode2 "retire" >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -436,14 +502,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-index-js">>
                 crossplane.io/external-name: "<<printf "%s:index.js:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: <<if eq $mode2 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: index.js
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   const http = require('http');
 
@@ -463,20 +529,24 @@ spec:
                     console.log(<<printf "%s listening on port ${port}" $xrName | toJson>>);
                   });
                 commitMessage: "NodeJSApplication scaffold: index.js"
+            <<- end >>
             ---
+            <<- $obs3 := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+            <<- $mode3 := include "scaffoldMode" (dict "obs" $obs3) >>
+            <<- if ne $mode3 "retire" >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
-              # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile) -
-              # see goapplication's own identical comment on why (Crossplane's correlation key
-              # for an EXISTING XR's already-composed resource; renaming it risks the Delete
-              # policy below actually deleting an already-onboarded app's real file on its next
-              # reconcile). file:/content:/external-name below only take effect for a freshly-
-              # created XR - see managementPolicies' own comment.
+              # metadata.name stays -src-dockerfile (not -src-containerfile): it is Crossplane's
+              # correlation key for an EXISTING XR's already-composed resource. file: and the
+              # external-name annotation are pinned to the observed resource's own values while
+              # it exists (scaffoldFile / scaffoldExternalName at the top of this file), so the
+              # default below only ever applies to a resource that does not exist yet. See the
+              # header comment for the incident that made this necessary.
               name: <<$xrName>>-src-dockerfile
               annotations:
                 <<setResourceNameAnnotation "src-repo-dockerfile">>
-                crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
+                crossplane.io/external-name: "<<include "scaffoldExternalName" (dict "obs" $obs3 "default" (printf "%s:Containerfile:" $xrName))>>"
               # `apk upgrade` (picks up already-published Alpine package patches, e.g. libssl3/
               # libcrypto3) and removing npm's own bundled /usr/local/lib/node_modules/npm - real
               # HIGH-severity CVEs hit live scanning checkout-api's scaffolded image (brace-
@@ -488,20 +558,16 @@ spec:
               # yarn branches alike. Verified live: local podman build + trivy scan via the same
               # toolbox image image-scan.yaml uses, 20 HIGH findings -> 0.
             spec:
-              # No "Update" - an already-created file's content is hands-off after its first
-              # commit. Also why this Composition can safely rename its scaffold target from
-              # "Dockerfile" to "Containerfile" (2026-09-22, platform-wide rename - see
-              # goapplication's own identical comment) without touching any already-onboarded
-              # app: a real write (Create) only ever happens when this resource slot's file is
-              # genuinely absent, never by revisiting an app whose Dockerfile already exists.
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              # Create-once, then retired (see the header comment and scaffoldMode). No Update,
+              # and no Delete: this object must never write to or remove a developer-owned file.
+              managementPolicies: <<if eq $mode3 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
-                file: Containerfile
-                overwriteOnCreate: true
+                file: <<include "scaffoldFile" (dict "obs" $obs3 "default" "Containerfile")>>
+                overwriteOnCreate: false
                 content: |
                   FROM node:<<$nodeVersion>>-alpine
                   WORKDIR /app
@@ -513,7 +579,11 @@ spec:
                   EXPOSE <<$port>>
                   CMD ["node", "index.js"]
                 commitMessage: "NodeJSApplication scaffold: Containerfile"
+            <<- end >>
             ---
+            <<- $obs4 := index (.observed.resources | default dict) "src-repo-gitignore" >>
+            <<- $mode4 := include "scaffoldMode" (dict "obs" $obs4) >>
+            <<- if ne $mode4 "retire" >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -522,20 +592,24 @@ spec:
                 <<setResourceNameAnnotation "src-repo-gitignore">>
                 crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: <<if eq $mode4 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: .gitignore
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   node_modules/
                   .env
                   *.log
                 commitMessage: "NodeJSApplication scaffold: .gitignore"
+            <<- end >>
             ---
+            <<- $obs5 := index (.observed.resources | default dict) "src-repo-readme" >>
+            <<- $mode5 := include "scaffoldMode" (dict "obs" $obs5) >>
+            <<- if ne $mode5 "retire" >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -544,14 +618,14 @@ spec:
                 <<setResourceNameAnnotation "src-repo-readme">>
                 crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              managementPolicies: <<if eq $mode5 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
                 repository: <<$xrName>>
                 file: README.md
-                overwriteOnCreate: true
+                overwriteOnCreate: false
                 content: |
                   # <<$xrName>>
 
@@ -570,6 +644,7 @@ spec:
                   ApplicationSet has picked up this app's committed tenant identity yet. See the
                   resource's own status for details.
                 commitMessage: "NodeJSApplication scaffold: README.md"
+            <<- end >>
             ---
             # Composes a TektonCICD child XR directly - not a GitOps xr-requests commit like
             # SecretStore's own sibling template (secretstore-xr.yaml) uses. TektonCICD only

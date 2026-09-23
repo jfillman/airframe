@@ -33,6 +33,20 @@ Full write-up: Glidepath's own
 `InfraService`'s own zero-stage `cicd-yaml-stub.yaml` is unaffected — different,
 correct use case (no source code to build).
 
+**Scaffold files are create-once, then the Composition lets go of them (2026-09-23).**
+The four app stacks' `src-repo.yaml` scaffold `RepositoryFile`s (Containerfile,
+`.gitignore`, README, and the language boilerplate) are created once and then retired:
+Crossplane garbage-collects the object and the developer owns the file. Previously they
+were reconciled forever with `Create`+`Delete` and `overwriteOnCreate: true`, and
+changing a field of an already-composed object (the 2026-09-22 Dockerfile-to-Containerfile
+rename) put seven objects into a retry loop that burned ~16,000 GitHub API calls/hour of a
+5,000/hour budget shared with Backstage. Each file's `file:` and `external-name` are now
+pinned to the observed live object, and retirement is gated on the live object having no
+`Delete` policy left, so it can never remove a real file. See the header comment in each
+stack's `templates/render-github-resources/src-repo.yaml` for the lifecycle. A composition
+change to a field of an already-composed managed resource is a fleet-wide write even when
+its `managementPolicies` has no `Update` - plan it as a migration, not a default change.
+
 **`PythonApplication` + `GoApplication` XRDs — third and fourth Bootstrap-tier
 stacks, offline-verified, live rollout pending.** `xrds/pythonapplication.yaml` +
 `compositions/pythonapplication/` and `xrds/goapplication.yaml` +

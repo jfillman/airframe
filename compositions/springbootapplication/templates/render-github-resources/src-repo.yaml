@@ -68,6 +68,65 @@
 <<- $port := $spec.port >>
 <<- $visibility := $spec.visibility >>
 <<- $springBootVersion := "3.3.4" >>
+# ---------------------------------------------------------------------------
+# Scaffold files are CREATE-ONCE, then this Composition lets go of them.
+# (Added 2026-09-23 after a real incident - read before changing anything here.)
+#
+# These RepositoryFile resources exist only to seed a brand-new app's repo. After the
+# first commit the file belongs to the developer. They used to be reconciled forever
+# with policies Create, Observe, LateInitialize, Delete and overwriteOnCreate true, which
+# had two real failure modes:
+#   1. A composition change to a field of an ALREADY-COMPOSED resource is a fleet-wide
+#      write even without an Update policy. The 2026-09-22 Dockerfile-to-Containerfile
+#      rename rewrote file: and external-name on every existing resource while the
+#      provider's Terraform state (and the repo) still said Dockerfile. file: is a
+#      force-replace field, so the provider could neither update nor settle, and
+#      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
+#      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
+#   2. Create fires whenever the file is observed missing, so a developer who renamed or
+#      deleted a scaffold file had it resurrected (happened to 4 repos), and with
+#      overwriteOnCreate true a mis-observed 403 could overwrite real content.
+#
+# The lifecycle, driven by the OBSERVED live resource (scaffoldMode below):
+#   create      not observed yet, or created but the provider has no id yet:
+#               render with Create, Observe, LateInitialize. Never Delete.
+#   transition  observed WITH an id but its live policies still include Delete or the
+#               wildcard (every resource created before this change): render Observe
+#               only, which strips Delete from the live object.
+#   retire      observed with an id and no Delete left in its live policies: render
+#               NOTHING. Crossplane garbage-collects the object; with no Delete policy
+#               the file in GitHub is untouched. Gating on the LIVE policies (not just
+#               on having an id) is what makes this safe - retiring an object that still
+#               had Delete would delete real files across the fleet.
+# Identity fields (file:, external-name) are pinned to the observed resource's own values
+# while it exists (scaffoldFile / scaffoldExternalName), so a future change of the
+# template default can never re-identify a live object.
+# A cluster rebuild still adopts existing files: a fresh cluster has nothing observed, so
+# it renders in create mode with external-name set, and Observe adopts the existing file.
+# NOTE for editors: never write two adjacent angle-bracket characters in comments (see
+# the NOTE at the top of this file) - this block deliberately avoids them.
+# ---------------------------------------------------------------------------
+<<- define "scaffoldMode" ->>
+<<- $obs := .obs ->>
+<<- $mode := "create" ->>
+<<- if $obs ->>
+<<-   if dig "resource" "status" "atProvider" "id" "" $obs ->>
+<<-     $policies := dig "resource" "spec" "managementPolicies" (list) $obs ->>
+<<-     if or (has "Delete" $policies) (has "*" $policies) ->>
+<<-       $mode = "transition" ->>
+<<-     else ->>
+<<-       $mode = "retire" ->>
+<<-     end ->>
+<<-   end ->>
+<<- end ->>
+<<- $mode ->>
+<<- end ->>
+<<- define "scaffoldFile" ->>
+<<- if .obs ->><<- dig "resource" "spec" "forProvider" "file" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+<<- end ->>
+<<- define "scaffoldExternalName" ->>
+<<- if .obs ->><<- dig "resource" "metadata" "annotations" "crossplane.io/external-name" .default .obs ->><<- else ->><<- .default ->><<- end ->>
+<<- end >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: Repository
 metadata:
@@ -96,6 +155,9 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
+<<- $obs1 := index (.observed.resources | default dict) "src-repo-build-file" >>
+<<- $mode1 := include "scaffoldMode" (dict "obs" $obs1) >>
+<<- if ne $mode1 "retire" >>
 <<- if eq $buildTool "gradle" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
@@ -105,14 +167,14 @@ metadata:
     <<setResourceNameAnnotation "src-repo-build-file">>
     crossplane.io/external-name: "<<printf "%s:build.gradle:" $xrName>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode1 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: build.gradle
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       plugins {
           id 'org.springframework.boot' version '<<$springBootVersion>>'
@@ -147,14 +209,14 @@ metadata:
     <<setResourceNameAnnotation "src-repo-build-file">>
     crossplane.io/external-name: "<<printf "%s:pom.xml:" $xrName>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode1 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: pom.xml
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       <?xml version="1.0" encoding="UTF-8"?>
       <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -200,7 +262,11 @@ spec:
       </project>
     commitMessage: "SpringBootApplication scaffold: pom.xml"
 <<- end >>
+<<- end >>
 ---
+<<- $obs2 := index (.observed.resources | default dict) "src-repo-application-java" >>
+<<- $mode2 := include "scaffoldMode" (dict "obs" $obs2) >>
+<<- if ne $mode2 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -209,14 +275,14 @@ metadata:
     <<setResourceNameAnnotation "src-repo-application-java">>
     crossplane.io/external-name: "<<printf "%s:%s:" $xrName (printf "src/main/java/%s/Application.java" $packagePath)>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode2 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: <<printf "src/main/java/%s/Application.java" $packagePath>>
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       package <<$groupId>>;
 
@@ -239,7 +305,11 @@ spec:
           }
       }
     commitMessage: "SpringBootApplication scaffold: Application.java"
+<<- end >>
 ---
+<<- $obs3 := index (.observed.resources | default dict) "src-repo-application-properties" >>
+<<- $mode3 := include "scaffoldMode" (dict "obs" $obs3) >>
+<<- if ne $mode3 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -248,33 +318,37 @@ metadata:
     <<setResourceNameAnnotation "src-repo-application-properties">>
     crossplane.io/external-name: "<<printf "%s:src/main/resources/application.properties:" $xrName>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode3 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: src/main/resources/application.properties
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       spring.application.name=<<$xrName>>
       server.port=${PORT:<<$port>>}
       management.endpoints.web.exposure.include=health,info
     commitMessage: "SpringBootApplication scaffold: application.properties"
+<<- end >>
 ---
+<<- $obs4 := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $mode4 := include "scaffoldMode" (dict "obs" $obs4) >>
+<<- if ne $mode4 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
-  # metadata.name deliberately UNCHANGED (-src-dockerfile, not -src-containerfile) -
-  # see goapplication's own identical comment on why (Crossplane's correlation key
-  # for an EXISTING XR's already-composed resource; renaming it risks the Delete
-  # policy below actually deleting an already-onboarded app's real file on its next
-  # reconcile). file:/content:/external-name below only take effect for a freshly-
-  # created XR - see managementPolicies' own comment.
+  # metadata.name stays -src-dockerfile (not -src-containerfile): it is Crossplane's
+  # correlation key for an EXISTING XR's already-composed resource. file: and the
+  # external-name annotation are pinned to the observed resource's own values while
+  # it exists (scaffoldFile / scaffoldExternalName at the top of this file), so the
+  # default below only ever applies to a resource that does not exist yet. See the
+  # header comment for the incident that made this necessary.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:Containerfile:" $xrName>>"
+    crossplane.io/external-name: "<<include "scaffoldExternalName" (dict "obs" $obs4 "default" (printf "%s:Containerfile:" $xrName))>>"
   # Multi-stage: build stage carries a full JDK plus the build tool (installed via apk,
   # no bundled wrapper script - deliberately narrower than Maven/Gradle wrapper scaffolding,
   # matching this catalog's "deliberately narrow" scope elsewhere), final stage is a bare
@@ -284,20 +358,16 @@ metadata:
   # toolchain nobody needs at runtime. `apk upgrade` on the runtime stage picks up
   # already-published Alpine package patches, same as nodejsapplication's own Containerfile.
 spec:
-  # No "Update" - an already-created file's content is hands-off after its first
-  # commit. Also why this Composition can safely rename its scaffold target from
-  # "Dockerfile" to "Containerfile" (2026-09-22, platform-wide rename - see
-  # goapplication's own identical comment) without touching any already-onboarded
-  # app: a real write (Create) only ever happens when this resource slot's file is
-  # genuinely absent, never by revisiting an app whose Dockerfile already exists.
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  # Create-once, then retired (see the header comment and scaffoldMode). No Update,
+  # and no Delete: this object must never write to or remove a developer-owned file.
+  managementPolicies: <<if eq $mode4 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
-    file: Containerfile
-    overwriteOnCreate: true
+    file: <<include "scaffoldFile" (dict "obs" $obs4 "default" "Containerfile")>>
+    overwriteOnCreate: false
     content: |
       FROM eclipse-temurin:<<$javaVersion>>-jdk-alpine AS build
       WORKDIR /app
@@ -324,7 +394,11 @@ spec:
       EXPOSE <<$port>>
       CMD ["java", "-jar", "app.jar"]
     commitMessage: "SpringBootApplication scaffold: Containerfile"
+<<- end >>
 ---
+<<- $obs5 := index (.observed.resources | default dict) "src-repo-gitignore" >>
+<<- $mode5 := include "scaffoldMode" (dict "obs" $obs5) >>
+<<- if ne $mode5 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -333,14 +407,14 @@ metadata:
     <<setResourceNameAnnotation "src-repo-gitignore">>
     crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode5 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: .gitignore
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       <<- if eq $buildTool "gradle">>
       .gradle/
@@ -351,7 +425,11 @@ spec:
       *.log
       .env
     commitMessage: "SpringBootApplication scaffold: .gitignore"
+<<- end >>
 ---
+<<- $obs6 := index (.observed.resources | default dict) "src-repo-readme" >>
+<<- $mode6 := include "scaffoldMode" (dict "obs" $obs6) >>
+<<- if ne $mode6 "retire" >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -360,14 +438,14 @@ metadata:
     <<setResourceNameAnnotation "src-repo-readme">>
     crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  managementPolicies: <<if eq $mode6 "transition">>["Observe"]<<else>>["Create", "Observe", "LateInitialize"]<<end>>
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
   forProvider:
     repository: <<$xrName>>
     file: README.md
-    overwriteOnCreate: true
+    overwriteOnCreate: false
     content: |
       # <<$xrName>>
 
@@ -395,3 +473,4 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "SpringBootApplication scaffold: README.md"
+<<- end >>

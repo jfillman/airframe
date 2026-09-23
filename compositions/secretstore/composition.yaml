@@ -135,6 +135,72 @@ spec:
                 matchName: infisical-token-reviewer-token
             ---
             ---
+            # Which machinery provisions THIS (app, cluster) pair's Infisical project: the
+            # provider-infisical resource chain ("provider") or the old infisical-secretstore-
+            # operator's InfisicalProject CR ("operator", the default). Read from an optional
+            # ConfigMap, crossplane-system/secretstore-provisioner, keyed by project slug
+            # (<appRef.name>-<cluster>). One entry per app, so the per-app cutover order in
+            # hangar/docs/kind-prod-infisical-migration-plan.md is a one-line, reviewable GitOps
+            # change, and merging this Composition alone changes nothing.
+            #
+            # Why a ConfigMap and not a field on the XR: the SecretStore XR manifests are files
+            # the ApplicationEnvironment Composition commits into the cluster's tenants repo with
+            # Update in its management policies, so a hand-added spec field would be reverted.
+            # A missing ConfigMap, or a slug with no entry, means "operator".
+            #
+            # Entry format (YAML text under the slug key):
+            #   provisioner: provider          # anything else (or absent) keeps the operator
+            #   projectId: <uuid>              # optional: ADOPT an existing Infisical project
+            #   sharedEnvId: <uuid>            # optional: adopt its existing "shared" environment
+            #   envIds: {staging: <uuid>}      # optional: adopt existing per-env environments
+            # The three id fields set crossplane.io/external-name on the composed resource so the
+            # provider observes the existing object instead of trying to create a colliding one.
+            # They only matter on the first reconcile after a flip; the provider maintains the
+            # annotation itself afterwards.
+            #
+            # Kubernetes-auth clusters (the Infisical host, kiac-dev) always use the provider - that
+            # migration is complete, so no entry is ever needed there.
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $gateSlug := printf "%s-%s" $spec.appRef.name $spec.cluster >>
+            <<- $provExtra := .extraResources | default dict >>
+            <<- $provEntry := index $provExtra "provisioner-config" | default dict >>
+            <<- $provItems := index $provEntry "items" | default list >>
+            <<- $provCfg := dict >>
+            <<- if gt (len $provItems) 0 >>
+              <<- $provCm := (index $provItems 0).resource >>
+              <<- $provData := index $provCm "data" | default dict >>
+              <<- $provRaw := index $provData $gateSlug | default "" >>
+              <<- if ne $provRaw "" >>
+                <<- $provCfg = fromYaml $provRaw >>
+              <<- end >>
+            <<- end >>
+            <<- $useProvider := or $isInfisicalHost (eq (index $provCfg "provisioner" | default "operator") "provider") >>
+            <<- $adoptProjectId := index $provCfg "projectId" | default "" >>
+            <<- $adoptSharedEnvId := index $provCfg "sharedEnvId" | default "" >>
+            <<- $adoptEnvIds := index $provCfg "envIds" | default dict >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              provisioner-config:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchName: secretstore-provisioner
+            ---
+            # The client secret the provider publishes for the universal-auth chain. Read here
+            # (rather than from the managed resource's connection details) so it is available to the
+            # credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
+            # unconditionally; on every other branch it simply matches nothing.
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              ua-conn-secret:
+                apiVersion: v1
+                kind: Secret
+                namespace: <<.observed.composite.resource.metadata.namespace>>
+                matchName: <<printf "%s-ua-conn" $gateSlug>>
+            ---
+            ---
             # Rendered by function-go-templating (source: Inline, see composition.yaml/
             # build-composition.sh).
             #
@@ -299,13 +365,19 @@ spec:
             # ensure_project_membership() bug - a live 400 on retry, see
             # project_kiac_dev_provider_github_bugs's sibling memory on this operator.
             #
-            # The universal-auth branch (every cluster OTHER than the one hosting Infisical,
-            # e.g. kind-prod) deliberately still renders the OLD InfisicalProject CR, unchanged -
-            # universal auth depends on IdentityUniversalAuthClientSecret, which hits a real bug
-            # in terraform-provider-infisical's own Go SDK
-            # (GetIdentityUniversalAuthClientSecretResponse.clientSecretData unmarshals an array
-            # into a single-object struct field) that blocks its Observe path before Create ever
-            # runs - not usable today. Revisit once that's fixed upstream.
+            # The universal-auth branch (every cluster OTHER than the one hosting Infisical, e.g.
+            # kind-prod) now has the same provider chain, opt-in per app via 02-provisioner-gate.yaml
+            # (default: still the old InfisicalProject CR, unchanged). It was blocked until
+            # 2026-09-23 by IdentityUniversalAuthClientSecret failing its pre-Create Observe: upjet
+            # seeds the Terraform state with an empty id, the Terraform provider's Read then called
+            # the client-secret LIST endpoint (an array) instead of GET-by-id. Fixed in
+            # provider-infisical v0.0.0-7 (a non-empty seeded id) - not an upstream SDK bug, which
+            # is what this comment used to say. Chain: Project, ProjectEnvironment, Identity,
+            # IdentityUniversalAuth, IdentityUniversalAuthClientSecret, ProjectIdentity, then the
+            # same <slug>-infisical-creds Secret the operator writes (clientId + clientSecret), so
+            # the ClusterSecretStores need no change. clientId comes from the client-secret
+            # resource's status.atProvider.clientId; clientSecret from its connection Secret
+            # (key attribute.client_secret), read through the ua-conn-secret ExtraResources lookup.
             #
             # NOT YET WIRED INTO THE LIVE CLUSTER'S REAL SECRETSTORE XRS: this Composition
             # change, once merged to main, would immediately re-render EVERY existing
@@ -336,13 +408,16 @@ spec:
             # deployment infisical-secretstore-operator -o jsonpath=...).
             <<- $infisicalOrgId := "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
             <<- if eq $envSlug "shared" >>
-              <<- if eq $authMethod "kubernetes" >>
+              <<- if $useProvider >>
             apiVersion: project.infisical.m.hangar.io/v1alpha1
             kind: Project
             metadata:
               name: <<$projectSlug>>
               annotations:
                 <<setResourceNameAnnotation "infisical-project">>
+                <<- if $adoptProjectId >>
+                crossplane.io/external-name: <<$adoptProjectId | toJson>>
+                <<- end >>
             spec:
               forProvider:
                 name: <<$projectSlug>>
@@ -358,6 +433,9 @@ spec:
               name: <<printf "%s-shared" $projectSlug>>
               annotations:
                 <<setResourceNameAnnotation "infisical-project-shared-env">>
+                <<- if $adoptSharedEnvId >>
+                crossplane.io/external-name: <<$adoptSharedEnvId | toJson>>
+                <<- end >>
             spec:
               forProvider:
                 name: shared
@@ -383,6 +461,7 @@ spec:
                 kind: ClusterProviderConfig
                 name: default
             ---
+              <<- if eq $authMethod "kubernetes" >>
             apiVersion: identity.infisical.m.hangar.io/v1alpha1
             kind: IdentityKubernetesAuth
             metadata:
@@ -409,6 +488,43 @@ spec:
                 kind: ClusterProviderConfig
                 name: default
             ---
+              <<- else >>
+            apiVersion: identity.infisical.m.hangar.io/v1alpha1
+            kind: IdentityUniversalAuth
+            metadata:
+              name: <<$projectSlug>>
+              annotations:
+                <<setResourceNameAnnotation "infisical-identity-ua">>
+            spec:
+              forProvider:
+                identityIdRef:
+                  name: <<$projectSlug>>
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+            ---
+            apiVersion: identity.infisical.m.hangar.io/v1alpha1
+            kind: IdentityUniversalAuthClientSecret
+            metadata:
+              name: <<$projectSlug>>
+              annotations:
+                <<setResourceNameAnnotation "infisical-identity-ua-client-secret">>
+            spec:
+              forProvider:
+                identityIdRef:
+                  name: <<$projectSlug>>
+                description: <<printf "%s (managed by the SecretStore Composition)" $projectSlug | toJson>>
+              # Same-namespace connection Secret (the namespaced MR writes into its own
+              # namespace, which is this XR's). Read back through 02-provisioner-gate.yaml's
+              # ua-conn-secret lookup; only key attribute.client_secret is published - the client
+              # id is not sensitive and comes from status.atProvider.clientId instead.
+              writeConnectionSecretToRef:
+                name: <<printf "%s-ua-conn" $projectSlug>>
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+            ---
+              <<- end >>
             apiVersion: project.infisical.m.hangar.io/v1alpha1
             kind: ProjectIdentity
             metadata:
@@ -435,6 +551,7 @@ spec:
                 kind: ClusterProviderConfig
                 name: default
             ---
+                <<- if eq $authMethod "kubernetes" >>
                 <<- $identityId := "" >>
                 <<- if .observed.resources >>
                   <<- $obsIdentity := index .observed.resources "infisical-identity" >>
@@ -475,6 +592,53 @@ spec:
               managementPolicies: ["*"]
             ---
                 <<- end >>
+                <<- else >>
+                <<- $uaClientId := "" >>
+                <<- $uaSecretB64 := "" >>
+                <<- if .observed.resources >>
+                  <<- $obsCs := index .observed.resources "infisical-identity-ua-client-secret" >>
+                  <<- if $obsCs >>
+                    <<- if $obsCs.resource >>
+                      <<- if $obsCs.resource.status >>
+                        <<- if $obsCs.resource.status.atProvider >>
+                          <<- $uaClientId = index $obsCs.resource.status.atProvider "clientId" | default "" >>
+                        <<- end >>
+                      <<- end >>
+                    <<- end >>
+                  <<- end >>
+                <<- end >>
+                <<- $uaExtra := .extraResources | default dict >>
+                <<- $uaEntry := index $uaExtra "ua-conn-secret" | default dict >>
+                <<- $uaItems := index $uaEntry "items" | default list >>
+                <<- if gt (len $uaItems) 0 >>
+                  <<- $uaData := index (index $uaItems 0).resource "data" | default dict >>
+                  <<- $uaSecretB64 = index $uaData "attribute.client_secret" | default "" >>
+                <<- end >>
+                <<- if and (ne $uaClientId "") (ne $uaSecretB64 "") >>
+            apiVersion: kubernetes.m.crossplane.io/v1alpha1
+            kind: Object
+            metadata:
+              name: <<printf "%s-identity-secret" $projectSlug>>
+              annotations:
+                <<setResourceNameAnnotation "infisical-identity-secret">>
+            spec:
+              forProvider:
+                manifest:
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: <<printf "%s-infisical-creds" $projectSlug>>
+                    namespace: <<$xrNamespace>>
+                  # data (base64), never stringData - see the kubernetes branch above. The
+                  # ExtraResources value is already base64, so it is passed through as-is.
+                  data:
+                    clientId: <<$uaClientId | b64enc>>
+                    clientSecret: <<$uaSecretB64 | toJson>>
+              managementPolicies: ["*"]
+            ---
+                <<- end >>
+                <<- end >>
+
               <<- else >>
             apiVersion: secrets.idp.io/v1alpha1
             kind: InfisicalProject
@@ -525,7 +689,7 @@ spec:
               <<- $authMethod = "kubernetes" >>
             <<- end >>
             <<- if ne $envSlug "shared" >>
-              <<- if eq $authMethod "kubernetes" >>
+              <<- if $useProvider >>
             # 2026-09-18 MIGRATION - see infisicalproject.yaml's own header for the full
             # rationale (kubernetes-auth branch only, universal-auth unchanged below, NOT YET
             # live-cut-over to main). Same $projectSlug convention: references the ALREADY
@@ -537,6 +701,10 @@ spec:
               name: <<$xrName>>
               annotations:
                 <<setResourceNameAnnotation "infisical-environment">>
+                <<- $adoptThisEnvId := index $adoptEnvIds $envSlug | default "" >>
+                <<- if $adoptThisEnvId >>
+                crossplane.io/external-name: <<$adoptThisEnvId | toJson>>
+                <<- end >>
             spec:
               forProvider:
                 name: <<$envSlug>>

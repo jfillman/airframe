@@ -299,7 +299,8 @@ spec:
             <<- $errorQuery := "" >>
             <<- $totalQuery := "" >>
             <<- if eq $indicator.type "availability" >>
-            <<- $errorQuery = printf "sum(rate(%s{%s,%s}[{{.window}}]))" $indicator.metric $indicator.totalFilter $indicator.errorFilter >>
+            <<- /* `or vector(0)`: with zero error events (the healthy case) the filtered rate() matches no series at all, so the bare sum() is an EMPTY vector, and Sloth's generated error-ratio (error/total) empty-propagates - every recording rule evaluates ok but produces no data, exactly when nothing is wrong. vector(0) makes "no error series" read as 0 errors. (Latency SLIs don't need it: total minus under-threshold always has a series.) Verified live: bare form returns [], wrapped form returns 0 and the full ratio evaluates to 0. */ ->>
+            <<- $errorQuery = printf "(sum(rate(%s{%s,%s}[{{.window}}]))) or vector(0)" $indicator.metric $indicator.totalFilter $indicator.errorFilter >>
             <<- $totalQuery = printf "sum(rate(%s{%s}[{{.window}}]))" $indicator.metric $indicator.totalFilter >>
             <<- else >>
             <<- $errorQuery = printf "sum(rate(%s_count{%s}[{{.window}}])) - sum(rate(%s_bucket{%s,le=%q}[{{.window}}]))" $indicator.metric $indicator.totalFilter $indicator.metric $indicator.totalFilter $indicator.latencyThreshold >>

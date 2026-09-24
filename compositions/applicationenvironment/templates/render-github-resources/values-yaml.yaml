@@ -77,7 +77,7 @@ metadata:
   name: <<$xrName>>-values-yaml
   annotations:
     <<setResourceNameAnnotation "values-yaml">>
-    crossplane.io/external-name: "<<printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)) (index (.observed.resources | default dict) "values-yaml" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:

@@ -33,6 +33,15 @@ Full write-up: Glidepath's own
 `InfraService`'s own zero-stage `cicd-yaml-stub.yaml` is unaffected — different,
 correct use case (no source code to build).
 
+**RepositoryFile external-names follow the observed object (2026-09-24).** The provider
+rewrites the `crossplane.io/external-name` of a RepositoryFile it created to its own id
+(`repo:file:main`); templates that rendered `repo:file:` made the two overwrite each
+other every ~2s, each flip forcing an immediate re-reconcile (~2 GitHub calls) - about
+280 calls/minute from five objects, the real cause of the repeated rate-limit
+exhaustion. Every RepositoryFile template now renders the live object's annotation when
+the object exists and its computed name only for new ones. Never render a different
+spelling of a name the provider owns.
+
 **Scaffold files never delete, overwrite, or re-identify (2026-09-23).**
 The four app stacks' `src-repo.yaml` scaffold `RepositoryFile`s (Containerfile,
 `.gitignore`, README, and the language boilerplate) no longer carry a `Delete` policy and

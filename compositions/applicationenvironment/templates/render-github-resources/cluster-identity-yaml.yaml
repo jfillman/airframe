@@ -83,7 +83,7 @@ metadata:
   name: <<$xrName>>-cluster-identity-yaml
   annotations:
     <<setResourceNameAnnotation "cluster-identity-yaml">>
-    crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $appName)>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $appName)) (index (.observed.resources | default dict) "cluster-identity-yaml" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
   providerConfigRef:

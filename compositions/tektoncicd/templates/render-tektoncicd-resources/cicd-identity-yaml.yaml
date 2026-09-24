@@ -50,7 +50,7 @@ metadata:
   name: <<$xrName>>-cicd-identity-yaml
   annotations:
     <<setResourceNameAnnotation "cicd-identity-yaml">>
-    crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $xrName)>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $xrName)) (index (.observed.resources | default dict) "cicd-identity-yaml" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
   providerConfigRef:

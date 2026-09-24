@@ -351,7 +351,7 @@ spec:
               name: <<$xrName>>-cluster-identity-yaml
               annotations:
                 <<setResourceNameAnnotation "cluster-identity-yaml">>
-                crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $appName)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/identity.yaml" $appName)) (index (.observed.resources | default dict) "cluster-identity-yaml" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -438,7 +438,7 @@ spec:
               name: <<$xrName>>-secretstore-shared-xr
               annotations:
                 <<setResourceNameAnnotation "secretstore-shared-xr">>
-                crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-shared.yaml" $appName)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-shared.yaml" $appName)) (index (.observed.resources | default dict) "secretstore-shared-xr" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -465,7 +465,7 @@ spec:
               name: <<$xrName>>-secretstore-env-xr
               annotations:
                 <<setResourceNameAnnotation "secretstore-env-xr">>
-                crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-%s.yaml" $appName $env)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/xr-requests/secretstore-%s.yaml" $appName $env)) (index (.observed.resources | default dict) "secretstore-env-xr" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -540,7 +540,7 @@ spec:
               name: <<$xrName>>-tenant-identity-yaml
               annotations:
                 <<setResourceNameAnnotation "tenant-identity-yaml">>
-                crossplane.io/external-name: "<<printf "%s:%s:" $tenantsRepo (printf "tenants/%s/%s/identity.yaml" $appName $env)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $tenantsRepo (printf "tenants/%s/%s/identity.yaml" $appName $env)) (index (.observed.resources | default dict) "tenant-identity-yaml" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Update", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -640,7 +640,7 @@ spec:
               name: <<$xrName>>-values-yaml
               annotations:
                 <<setResourceNameAnnotation "values-yaml">>
-                crossplane.io/external-name: "<<printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)) (index (.observed.resources | default dict) "values-yaml" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:

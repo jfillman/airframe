@@ -110,7 +110,7 @@ metadata:
   name: <<$xrName>>-src-go-mod
   annotations:
     <<setResourceNameAnnotation "src-repo-go-mod">>
-    crossplane.io/external-name: "<<printf "%s:go.mod:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:go.mod:" $xrName) (index (.observed.resources | default dict) "src-repo-go-mod" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -132,7 +132,7 @@ metadata:
   name: <<$xrName>>-src-main-go
   annotations:
     <<setResourceNameAnnotation "src-repo-main-go">>
-    crossplane.io/external-name: "<<printf "%s:main.go:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:main.go:" $xrName) (index (.observed.resources | default dict) "src-repo-main-go" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -181,11 +181,14 @@ metadata:
   # correlation key for an EXISTING XR's already-composed resource. file: and the
   # external-name are pinned to the provider's own state for an existing resource
   # (scaffoldFile at the top of this file); the default below only applies to a
-  # resource that does not exist yet. See the header comment for the incident.
+  # resource that does not exist yet. The external-name keeps the provider's own form
+  # (it appends the branch, repo:file:main) whenever that agrees with the pinned file,
+  # because rendering a different spelling makes provider and composition overwrite
+  # each other's annotation forever. See the header comment for the incident.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:%s:" $xrName $pinnedFile>>"
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
   # Multi-stage, matching springbootapplication's own precedent (a real difference
   # from nodejsapplication's single-stage script, not just a style choice): build
   # stage carries the full Go toolchain, final stage is bare Alpine running only the
@@ -226,7 +229,7 @@ metadata:
   name: <<$xrName>>-src-gitignore
   annotations:
     <<setResourceNameAnnotation "src-repo-gitignore">>
-    crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:.gitignore:" $xrName) (index (.observed.resources | default dict) "src-repo-gitignore" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -248,7 +251,7 @@ metadata:
   name: <<$xrName>>-src-readme
   annotations:
     <<setResourceNameAnnotation "src-repo-readme">>
-    crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:README.md:" $xrName) (index (.observed.resources | default dict) "src-repo-readme" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:

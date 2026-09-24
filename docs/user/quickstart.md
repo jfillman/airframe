@@ -17,11 +17,20 @@ to make canary and blue/green deployments *visible*.
 - **Verified:** the app itself. Its tests pass, and it was run against a real Redis
   container, including two instances sharing one counter.
 - **Verified in production use:** the create → onboard → environment mechanics
-  (sections 02–03 and 05–07) are live on real apps (`checkout-api`, `order-api`,
-  `boarding-api`).
+  (sections 02–03 and 05–07) are live on real apps (`checkout-api`, `order-api`).
 - **Not verified end to end:** this exact walkthrough with *this* code, and the
   Redis component (section 08) — no Redis has ever been provisioned through this
-  catalog. Section 08 says what is and isn't in place.
+  catalog. The Redis platform pieces are installed on both clusters (airframe
+  v0.3.83); section 08 says what is and isn't in place. Sections 06–09 are being
+  walked for the first time — where a step here turns out wrong, this guide is
+  corrected.
+
+**Starting over?** If a previous `boarding-api` was decommissioned, finish
+[decommissioning](decommission-app.md) first — in particular delete its Infisical
+projects (`boarding-api-kind-dev`, `boarding-api-kind-prod`) and any
+`boarding-api` key in kind-prod's `secretstore-provisioner` ConfigMap, or the new
+app tries to adopt a dead project. Also move any old local `boarding-api` checkout
+out of the way: section 04 clones into that directory name.
 
 **Two architectures.** The dev cluster (`kiac-dev`) is arm64 and `kind-prod` is
 amd64. Leave `build.platforms` unset in `cicd.yaml` so your image is built for both;
@@ -111,7 +120,7 @@ The scaffold's `index.js` is hello-world. The real `boarding-api` lives in the
 
 ```bash
 git clone https://github.com/jfillman/airframe.git /tmp/airframe
-git clone https://github.com/jfillman/boarding-api.git && cd boarding-api
+git clone https://github.com/jfillman/boarding-api.git && cd boarding-api   # fails if ./boarding-api already exists
 
 cp -R /tmp/airframe/examples/skyport/boarding-api/. .
 git add -A && git commit -m "boarding-api: gate board with Redis-backed lookups"
@@ -375,28 +384,28 @@ A component only works where Crossplane can reconcile it — `provider-helm` and
 | Cluster | `provider-helm` | `Redis` XRD |
 |---|---|---|
 | dev (`kiac-dev`, arm64) | installed, healthy | installed |
-| `kind-prod` (amd64) | installed, healthy | **delivered by the `idp-service-catalog-redis` ArgoCD Application, which is manual-sync and had not been synced when this was written** — check `kubectl get xrd redis.catalog.idp.io` |
+| `kind-prod` (amd64) | installed, healthy | installed (delivered by the `idp-service-catalog-redis` Application) |
 
-So the **ground** tier works today; a **flight** env works once that Application is
-synced. All the images involved are multi-arch, checked against the registries.
+Both tiers have what they need, and both clusters run airframe v0.3.83, which
+includes the Redis naming fix. All the images involved are multi-arch, checked
+against the registries.
 
 ### Ground: add it to `platform/envs/dev.yaml`
 
-Name the component **`redis`**. That is deliberate: Bitnami names its Services from
-the release name, and the connection secret this catalog writes assumes
-`<name>-master`. A component named `cache` would get a Service called
-`cache-redis-master` and a connection secret pointing at one that doesn't exist. (The
-Composition is fixed to avoid this in airframe `main`, but `kind-prod` runs the
-v0.3.77 tag, which has the bug; the name `redis` works on both.)
+Name the component whatever you like; we use **`cache`**. The Composition sets the
+Bitnami chart's `fullnameOverride` to the component name, so the Service is
+`<name>-master` (here `cache-master`) and the password Secret is `<name>` (here
+`cache`), exactly what the connection secret expects. (Before airframe v0.3.79 this
+was broken and the name had to be `redis`; every cluster is past that now.)
 
 ```yaml
 envName: dev
 components:
   - type: redis
-    name: redis
+    name: cache
     spec: { size: small, persistence: false }   # environmentRef is stamped for you
 env:
-  - { name: REDIS_URL, value: "redis://redis-master:6379" }
+  - { name: REDIS_URL, value: "redis://cache-master:6379" }
 secrets:
   - name: redis-password      # read from this app's Infisical project
     key: REDIS_PASSWORD       # the env var boarding-api reads
@@ -411,7 +420,7 @@ Composition's own header says so. `secrets:` entries read from Infisical by name
 from arbitrary Kubernetes Secrets. So copy the password across once:
 
 ```bash
-kubectl get secret redis -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d
+kubectl get secret cache -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d
 ```
 
 Add it to `boarding-api`'s Infisical project as `redis-password`. (The host and port
@@ -489,6 +498,6 @@ the chart's own values, but no canary has been run with this app.
 - **The ground deploy commits to `main` itself** — pull before you push.
 - **`ApplicationEnvironment` rejects dev clusters** — `cluster` is live-gated to
   `type: upper`.
-- **Name the Redis component `redis`**; it is a component, not a Bootstrap object.
+- **Redis is a component**, not a Bootstrap object: add it to `components:`; its Service is `<name>-master`.
 - **Two architectures** — don't narrow `build.platforms`.
 - **Canary splits by pod count**, so use four replicas.

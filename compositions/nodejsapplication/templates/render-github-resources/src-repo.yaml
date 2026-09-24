@@ -155,7 +155,7 @@ metadata:
   name: <<$xrName>>-src-package-json
   annotations:
     <<setResourceNameAnnotation "src-repo-package-json">>
-    crossplane.io/external-name: "<<printf "%s:package.json:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:package.json:" $xrName) (index (.observed.resources | default dict) "src-repo-package-json" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -186,7 +186,7 @@ metadata:
   name: <<$xrName>>-src-index-js
   annotations:
     <<setResourceNameAnnotation "src-repo-index-js">>
-    crossplane.io/external-name: "<<printf "%s:index.js:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:index.js:" $xrName) (index (.observed.resources | default dict) "src-repo-index-js" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -225,11 +225,14 @@ metadata:
   # correlation key for an EXISTING XR's already-composed resource. file: and the
   # external-name are pinned to the provider's own state for an existing resource
   # (scaffoldFile at the top of this file); the default below only applies to a
-  # resource that does not exist yet. See the header comment for the incident.
+  # resource that does not exist yet. The external-name keeps the provider's own form
+  # (it appends the branch, repo:file:main) whenever that agrees with the pinned file,
+  # because rendering a different spelling makes provider and composition overwrite
+  # each other's annotation forever. See the header comment for the incident.
   name: <<$xrName>>-src-dockerfile
   annotations:
     <<setResourceNameAnnotation "src-repo-dockerfile">>
-    crossplane.io/external-name: "<<printf "%s:%s:" $xrName $pinnedFile>>"
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
   # `apk upgrade` (picks up already-published Alpine package patches, e.g. libssl3/
   # libcrypto3) and removing npm's own bundled /usr/local/lib/node_modules/npm - real
   # HIGH-severity CVEs hit live scanning checkout-api's scaffolded image (brace-
@@ -269,7 +272,7 @@ metadata:
   name: <<$xrName>>-src-gitignore
   annotations:
     <<setResourceNameAnnotation "src-repo-gitignore">>
-    crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:.gitignore:" $xrName) (index (.observed.resources | default dict) "src-repo-gitignore" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
@@ -291,7 +294,7 @@ metadata:
   name: <<$xrName>>-src-readme
   annotations:
     <<setResourceNameAnnotation "src-repo-readme">>
-    crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:README.md:" $xrName) (index (.observed.resources | default dict) "src-repo-readme" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:

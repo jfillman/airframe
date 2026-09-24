@@ -17,7 +17,7 @@ metadata:
   name: <<$xrName>>-src-cicd-yaml
   annotations:
     <<setResourceNameAnnotation "src-repo-cicd-yaml">>
-    crossplane.io/external-name: "<<printf "%s:cicd.yaml:" $xrName>>"
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:cicd.yaml:" $xrName) (index (.observed.resources | default dict) "src-repo-cicd-yaml" | default dict)>>"
 spec:
   managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
   providerConfigRef:

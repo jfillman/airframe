@@ -91,7 +91,7 @@ spec:
               name: <<$xrName>>-src-cicd-yaml
               annotations:
                 <<setResourceNameAnnotation "src-repo-cicd-yaml">>
-                crossplane.io/external-name: "<<printf "%s:cicd.yaml:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:cicd.yaml:" $xrName) (index (.observed.resources | default dict) "src-repo-cicd-yaml" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
               providerConfigRef:
@@ -349,7 +349,7 @@ spec:
               name: <<$xrName>>-src-requirements-txt
               annotations:
                 <<setResourceNameAnnotation "src-repo-dependency-file">>
-                crossplane.io/external-name: "<<printf "%s:requirements.txt:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:requirements.txt:" $xrName) (index (.observed.resources | default dict) "src-repo-dependency-file" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -369,7 +369,7 @@ spec:
               name: <<$xrName>>-src-pyproject-toml
               annotations:
                 <<setResourceNameAnnotation "src-repo-dependency-file">>
-                crossplane.io/external-name: "<<printf "%s:pyproject.toml:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:pyproject.toml:" $xrName) (index (.observed.resources | default dict) "src-repo-dependency-file" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -395,7 +395,7 @@ spec:
               name: <<$xrName>>-src-main-py
               annotations:
                 <<setResourceNameAnnotation "src-repo-main-py">>
-                crossplane.io/external-name: "<<printf "%s:main.py:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:main.py:" $xrName) (index (.observed.resources | default dict) "src-repo-main-py" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -442,11 +442,14 @@ spec:
               # correlation key for an EXISTING XR's already-composed resource. file: and the
               # external-name are pinned to the provider's own state for an existing resource
               # (scaffoldFile at the top of this file); the default below only applies to a
-              # resource that does not exist yet. See the header comment for the incident.
+              # resource that does not exist yet. The external-name keeps the provider's own form
+              # (it appends the branch, repo:file:main) whenever that agrees with the pinned file,
+              # because rendering a different spelling makes provider and composition overwrite
+              # each other's annotation forever. See the header comment for the incident.
               name: <<$xrName>>-src-dockerfile
               annotations:
                 <<setResourceNameAnnotation "src-repo-dockerfile">>
-                crossplane.io/external-name: "<<printf "%s:%s:" $xrName $pinnedFile>>"
+                crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
               # `apt-get upgrade` picks up already-published Debian package patches, same
               # patch-freshness reasoning as nodejsapplication's/springbootapplication's own
               # Containerfiles. python:<version>-slim, not -alpine - avoids musl/manylinux wheel
@@ -484,7 +487,7 @@ spec:
               name: <<$xrName>>-src-gitignore
               annotations:
                 <<setResourceNameAnnotation "src-repo-gitignore">>
-                crossplane.io/external-name: "<<printf "%s:.gitignore:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:.gitignore:" $xrName) (index (.observed.resources | default dict) "src-repo-gitignore" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
@@ -507,7 +510,7 @@ spec:
               name: <<$xrName>>-src-readme
               annotations:
                 <<setResourceNameAnnotation "src-repo-readme">>
-                crossplane.io/external-name: "<<printf "%s:README.md:" $xrName>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:README.md:" $xrName) (index (.observed.resources | default dict) "src-repo-readme" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:

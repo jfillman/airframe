@@ -12,7 +12,7 @@
 # far is container images and Crossplane provider packages, not plain Helm
 # charts) - not worth building for the lowest-risk first Component XRD.
 #
-# repository: https://charts.bitnami.com/bitnami, version 28.2.1 - version
+# repository: https://charts.bitnami.com/bitnami, version 19.0.2 - version
 # verified against the real index (charts.bitnami.com/bitnami/index.yaml,
 # which 302-redirects to repo.broadcom.com/bitnami-files post-acquisition but
 # is otherwise the same live, actively-published classic Helm-repo channel -
@@ -90,13 +90,25 @@ spec:
     chart:
       name: redis
       repository: https://charts.bitnami.com/bitnami
-      version: 28.2.1
+      version: 19.0.2
     values:
       # fullnameOverride = the XR name so the Service/Secret names are exactly what
       # connectionDetails below reads (<xr>-master, <xr>). Without it Bitnami names
       # them <xr>-redis-master / <xr>-redis unless the XR name itself contains "redis",
       # and the connection secret never populates. Checked with `helm template`.
       fullnameOverride: <<$xrName>>
+      # Bitnami removed its versioned images from docker.io/bitnami (2025), and
+      # re-published chart 28.2.1 as appVersion 8.10.2 (loads a redisearch
+      # module the legacy image lacks -> CrashLoopBackOff, checked live). So this
+      # pins the last-era chart, 19.0.2 (Redis 7.2.4), with its own image tag taken
+      # from bitnamilegacy: multi-arch (amd64+arm64) per the registry manifest, and
+      # verified live on kiac-dev (fresh install, auth enforced, <xr>-master Service,
+      # <xr> Secret). Both the legacy repo and the old chart get no updates and
+      # could disappear - replace this component's backend before that matters.
+      image:
+        registry: docker.io
+        repository: bitnamilegacy/redis
+        tag: 7.2.4-debian-12-r9
       architecture: standalone
       auth:
         enabled: true

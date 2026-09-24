@@ -10,8 +10,8 @@ name: function-rollout-watcher-ci
 # (ghcr.io/jfillman/function-rollout-watcher:v0.2.4) is a genuine single-platform
 # manifest (application/vnd.docker.distribution.manifest.v2+json, no per-platform
 # entries) - it was built and pushed by hand on an amd64 machine at some point, the
-# same "no real CI" gap infisical-secretstore-operator-ci.yaml (this directory)
-# closed for that operator on 2026-08-26. Runs on kiac-dev's arm64 nodes with the
+# same "no real CI" gap a since-retired sibling workflow (the Infisical operator's, removed
+# 2026-09-23) closed for that operator on 2026-08-26. Runs on kiac-dev's arm64 nodes with the
 # same "exec format error" crash that fix addressed.
 #
 # This is a real top-level workflow that does the same amd64+arm64 matrix build +

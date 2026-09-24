@@ -4,10 +4,10 @@
 # this catalog uses `source: Inline` for every Composition rather than
 # `source: FileSystem` against a shared mount.
 #
-# Renders an InfisicalProject CR (reconciled by infisical-secretstore-operator,
-# gitops-cluster-dev/10-crds-operators/infisical-secretstore-operator/) and an ESO
-# ClusterSecretStore pointed at the credentials that operator produces -
-# idp/docs/service-catalog-design.md Item 8. NOT yet wired into
+# Renders the provider-infisical resource chain (project, environments, machine identity
+# and auth config, membership) and an ESO ClusterSecretStore pointed at the credentials
+# that chain produces - idp/docs/service-catalog-design.md Item 8. (Until 2026-09-23 this
+# was an InfisicalProject CR reconciled by the infisical-secretstore-operator, now retired.) NOT yet wired into
 # ApplicationEnvironment's auto-provisioning (create-on-first-env, reference on
 # later ones) - this XRD is standalone-creatable for this first pass, same as SLO
 # was before any Attached-tier auto-provisioning existed. That wiring needs the

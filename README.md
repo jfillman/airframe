@@ -114,10 +114,10 @@ that both stacks are built.
 
 **`SecretStore` XRD + `infisical-secretstore-operator` — Item 8, done, live-verified
 end-to-end 2026-08-17.** `xrds/secretstore.yaml` + `compositions/secretstore/`
-render an `InfisicalProject` CR (reconciled by a new kopf/Python operator,
-`operators/infisical-secretstore-operator/`, against Infisical's real REST API -
-no native Crossplane provider exists, ruled out `provider-terraform` too, see the
-operator's own README for the "Q1" reasoning) and an ESO `ClusterSecretStore`
+originally rendered an `InfisicalProject` CR reconciled by a purpose-built kopf/Python
+operator (`operators/infisical-secretstore-operator/`, since **retired and removed** - it
+was replaced by `provider-infisical`, see `hangar/docs/kind-prod-infisical-migration-plan.md`;
+the source is in git history at tag v0.3.81 and earlier) and an ESO `ClusterSecretStore`
 wrapped in a `provider-kubernetes` `Object` (Crossplane v2 rejects composing a
 cluster-scoped resource directly from this namespaced XR - same fix
 `NodeJSApplication`'s `provider-github` already needed). Full chain live-proven on
@@ -168,8 +168,9 @@ multi-cluster revision) — done, live-verified end-to-end on both `kind-dev` an
    controller had no RBAC for the new `infisicalenvironments` CRD on either
    cluster - `native-resources-rbac.yaml` needed extending on both.
 
-See `idp/docs/service-catalog-design.md` Item 8 for the full design writeup and
-`operators/infisical-secretstore-operator/README.md` for the operator-level detail.
+See `idp/docs/service-catalog-design.md` Item 8 for the full design writeup. (The operator-level
+detail lived in the removed `operators/infisical-secretstore-operator/README.md`; recover it
+from git history at v0.3.81 or earlier if needed.)
 
 **SecretStore provisioning moved to the Bootstrap XRs (xr-requests), off
 airframe-application's chart — done, live-verified against real existing apps on both

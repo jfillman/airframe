@@ -69,6 +69,8 @@ its XRD. Fill in:
 | `port` | `8080` |
 | `visibility` | `private` |
 
+**Use `kind-dev` exactly, even though the dev cluster is `kiac-dev`.** The dev ApplicationSets hard-code `cluster: kind-dev` when they render an environment's ExternalSecret, so it reads the store `<app>-kind-dev`. An app created with `devCluster: kiac-dev` gets a store named `<app>-kiac-dev`, its ExternalSecret never syncs, and its pods sit in `CreateContainerConfigError`. And don't remove `kind-dev` from the cluster-registry: every existing app is pinned to it, and removing it turns their stores `InvalidProviderConfig` fleet-wide.
+
 Submitting opens a pull request into `gitops-cluster-dev-tenants` at
 `tenants/boarding-api/xr-requests/boarding-api.yaml`. **Merge it** — the
 `xr-requests` ApplicationSet applies that file to the dev cluster as a

@@ -14,16 +14,16 @@ to make canary and blue/green deployments *visible*.
 > [Airframe Quickstart](https://claude.ai/artifact/WDPmWSD9BMBGurFzqATDWG).
 
 **What has and hasn't been verified.**
-- **Verified:** the app itself. Its tests pass, and it was run against a real Redis
+- **Verified:** the app itself. Its 11 tests pass, and it was run against a real Redis
   container, including two instances sharing one counter.
-- **Verified in production use:** the create → onboard → environment mechanics
-  (sections 02–03 and 05–07) are live on real apps (`checkout-api`, `order-api`).
-- **Not verified end to end:** this exact walkthrough with *this* code, and the
-  Redis component (section 08) — no Redis has ever been provisioned through this
-  catalog. The Redis platform pieces are installed on both clusters (airframe
-  v0.3.83); section 08 says what is and isn't in place. Sections 06–09 are being
-  walked for the first time — where a step here turns out wrong, this guide is
-  corrected.
+- **Verified live:** the create → onboard → ground environment mechanics, and the
+  **Redis component** (section 08): it has been provisioned through the catalog on both
+  clusters, the gate board reports `cache: redis`, and the password is read straight
+  from the component's Secret. Walking this guide for the first time found and fixed
+  several real problems (the Redis image, the `devCluster` name, the label on the
+  cache's resources), which is why the text names them.
+- **Not verified:** the **canary** (section 09). The mechanism is Argo Rollouts driven
+  by the chart's own values, but no canary has been run with this app yet.
 
 **Starting over?** If a previous `boarding-api` was decommissioned, finish
 [decommissioning](decommission-app.md) first — in particular delete its Infisical
@@ -364,9 +364,10 @@ ArgoCD syncs it and `WorkloadDeployed` flips to `True` once a real Rollout exist
 
 ## 08 — Add a Redis cache
 
-**Not verified end to end. Read this section as "what the code says," not "what
-was tried."** The app side *is* verified against a real Redis; the platform side —
-the component provisioning it — has never run.
+This section is verified live: the component has been provisioned on both clusters and
+the gate board reads and writes through it. It needed one platform fix along the way
+(Bitnami removed its versioned images, so the Composition now pins the last chart and image
+that still pull).
 
 ### What kind of thing is Redis?
 
@@ -472,8 +473,8 @@ still shows v1 at 100%; after promotion the active bar flips in one step.
 **Roll back** by promoting nothing and aborting the rollout, or by reverting the
 release PR; the bar returns to all-v1.
 
-This is the unverified end of the guide: the mechanism is Argo Rollouts driven by
-the chart's own values, but no canary has been run with this app.
+This is the one unverified section of the guide: the mechanism is Argo Rollouts driven by
+the chart's own values, but no canary has been run with this app yet.
 
 ## Cheat sheet
 

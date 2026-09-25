@@ -1,0 +1,40 @@
+# App namespaces carry a baseline NetworkPolicy that admits ingress only from pods in the
+# same namespace (airframe-application's own baseline), which would cut off the CNPG
+# operator, running in another namespace, from the instance pods: it reaches each instance's
+# manager on 8000 for status and lifecycle, and the cluster never reports healthy without
+# that. This admits exactly that traffic from the operator's namespace and nothing else.
+# Same-namespace app traffic to 5432 is already covered by the baseline.
+# Ports follow CNPG's own documented policy for a locked-down namespace.
+#
+# Written from CNPG's documentation rather than exercised: kiac-dev's CNI did not enforce
+# NetworkPolicy in testing, so the "operator blocked without this" half is unproven.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: <<printf "%s-cnpg-operator" $xrName>>
+  namespace: <<$xrNamespace>>
+  annotations:
+    <<setResourceNameAnnotation "networkpolicy">>
+    # A NetworkPolicy has no status, so function-auto-ready would wait on it forever and the
+    # XR would never go Ready (seen live). It is ready as soon as it exists.
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: <<$xrName>>
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+      ports:
+        - protocol: TCP
+          port: 8000
+        - protocol: TCP
+          port: 5432

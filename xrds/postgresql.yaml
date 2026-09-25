@@ -1,0 +1,80 @@
+# Attached-tier Component XRD: a dedicated PostgreSQL database for one app environment,
+# backed by CloudNativePG (service-catalog-design.md, Round 2026-09-24). A `components:`
+# entry (`type: postgresql`) in an environment's values.yaml, rendered by
+# airframe-application's generic templates/attached/components.yaml.
+#
+# DEDICATED mode only: one CNPG `Cluster` per app-env, in the app's own namespace, the same
+# shape as Redis. Shared-tenant / attach mode is deliberately not here - it needs a
+# cross-namespace design (CNPG's Database/DatabaseRole reference their Cluster by name, so
+# they must live beside it, and a namespaced XR can only compose into its own namespace).
+# See the design doc before adding one; this schema leaves room for a future `mode`.
+#
+# The database and its owning role are created by the Cluster's own initdb bootstrap, with
+# the SAME name. That is load-bearing: the Cluster's pg_hba uses `samerole`, which lets a
+# role connect only to a database named for it.
+#
+# The app's credentials are CNPG's own `<name>-app` Secret (keys: username, password, host,
+# port, dbname, uri, jdbc-uri) in the app's namespace. Wiring it into the consuming app is
+# not built - same gap Redis documents.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: postgresqls.catalog.idp.io
+spec:
+  group: catalog.idp.io
+  names:
+    kind: PostgreSQL
+    plural: postgresqls
+    singular: postgresql
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - environmentRef
+              properties:
+                environmentRef:
+                  type: object
+                  description: >-
+                    Names the owning ApplicationEnvironment (app + cluster + env identity).
+                    Labeling/audit only, not a live lookup. Auto-stamped by
+                    airframe-application's components.yaml renderer.
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                size:
+                  type: string
+                  description: CPU/memory requests and limits for each instance.
+                  enum: [small, medium, large]
+                  default: small
+                instances:
+                  type: integer
+                  description: >-
+                    1 is a single instance with no failover. 2-3 give a primary plus streaming
+                    replicas with automatic failover, for real environments. Each instance
+                    gets its own volume.
+                  enum: [1, 2, 3]
+                  default: 1
+                storageSize:
+                  type: string
+                  description: Size of each instance's volume (a Kubernetes quantity, e.g. 1Gi).
+                  pattern: '^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$'
+                  default: 1Gi
+                databaseName:
+                  type: string
+                  description: >-
+                    Name of the database AND of the role that owns it (they must match, see
+                    above). Defaults to the XR's own name with hyphens turned into
+                    underscores. Lowercase letters, digits and underscores only.
+                  pattern: '^[a-z][a-z0-9_]{0,62}$'
+          required: ["spec"]

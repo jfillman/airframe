@@ -1,0 +1,166 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template`
+# block below. Edit templates/*.yaml instead, then run ./build-composition.sh
+# to regenerate this file.
+#
+# Component Composition (Item 7, Round 2026-09-24)
+# (service-catalog-design.md). Single function-go-templating step: renders
+# a CloudNativePG Cluster and a NetworkPolicy for its operator - see
+# templates/cluster.yaml's own header for the full mapping/reasoning.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other
+# Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: postgresql.catalog.idp.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: PostgreSQL
+  mode: Pipeline
+  pipeline:
+    - step: render-postgresql-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Wraps CloudNativePG's `Cluster` (postgresql.cnpg.io/v1) - see xrds/postgresql.yaml's
+            # header for the dedicated-per-app-env shape and why database name == role name.
+            #
+            # The CNPG operator (10-crds-operators/cloudnative-pg in the cluster's gitops repo) must be
+            # installed on the cluster; without it this XR composes a Cluster nothing reconciles.
+            #
+            # Database and owner both come from bootstrap.initdb, so CNPG creates them together and
+            # writes the owner's generated password into the <xr>-app Secret. No password is generated
+            # here (a template-generated one would change on every reconcile).
+            #
+            # pg_hba: CNPG orders it as its own fixed rules, then these, then its default allow-all
+            # (host all all all scram-sha-256). First match wins, so `samerole` (a role reaches only the
+            # database named for it) and the reject below beat that default. Tested on a real cluster:
+            # a role is rejected on any other database, on postgres and on template1, before
+            # authentication. enableSuperuserAccess is off, so the postgres role has no password and
+            # is reachable only through the operator's local socket, which these host rules don't cover.
+            #
+            # inheritedMetadata.labels puts the XR's hangar.io/* labels on everything CNPG creates (Pod,
+            # PVC, Services, Secrets, ServiceAccount), so `kubectl get all -l hangar.io/app=<app>`
+            # finds the database. The Cluster object itself is labelled by metadata.labels below.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $size := $spec.size | default "small" >>
+            <<- $instances := $spec.instances | default 1 >>
+            <<- $storage := $spec.storageSize | default "1Gi" >>
+            <<- $db := $spec.databaseName | default (replace "-" "_" $xrName) >>
+            <<- $cpuReq := "100m" >>
+            <<- $memReq := "256Mi" >>
+            <<- $cpuLim := "500m" >>
+            <<- $memLim := "512Mi" >>
+            <<- if eq $size "medium" >>
+              <<- $cpuReq = "250m" >>
+              <<- $memReq = "512Mi" >>
+              <<- $cpuLim = "1" >>
+              <<- $memLim = "1Gi" >>
+            <<- else if eq $size "large" >>
+              <<- $cpuReq = "500m" >>
+              <<- $memReq = "1Gi" >>
+              <<- $cpuLim = "2" >>
+              <<- $memLim = "2Gi" >>
+            <<- end >>
+            <<- $hangarLabels := dict >>
+            <<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
+              <<- if hasPrefix "hangar.io/" $k >>
+                <<- $_ := set $hangarLabels $k $v >>
+              <<- end >>
+            <<- end >>
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+            metadata:
+              name: <<$xrName>>
+              namespace: <<$xrNamespace>>
+              annotations:
+                <<setResourceNameAnnotation "cluster">>
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              instances: <<$instances | int>>
+              # The operator's own default image at chart 0.29.1 / operator 1.30.1, pinned here so an
+              # operator upgrade never changes the Postgres major version under an existing database.
+              # Multi-arch (linux/amd64 + linux/arm64) per the registry manifest.
+              imageName: ghcr.io/cloudnative-pg/postgresql:18.6-system-trixie
+              enableSuperuserAccess: false
+              storage:
+                size: <<$storage>>
+              resources:
+                requests:
+                  cpu: <<$cpuReq>>
+                  memory: <<$memReq>>
+                limits:
+                  cpu: <<$cpuLim>>
+                  memory: <<$memLim>>
+              inheritedMetadata:
+                labels:
+                  <<- range $k, $v := $hangarLabels >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+              bootstrap:
+                initdb:
+                  database: <<$db>>
+                  owner: <<$db>>
+              postgresql:
+                pg_hba:
+                  - host samerole all all scram-sha-256
+                  - host all all all reject
+            ---
+            # App namespaces carry a baseline NetworkPolicy that admits ingress only from pods in the
+            # same namespace (airframe-application's own baseline), which would cut off the CNPG
+            # operator, running in another namespace, from the instance pods: it reaches each instance's
+            # manager on 8000 for status and lifecycle, and the cluster never reports healthy without
+            # that. This admits exactly that traffic from the operator's namespace and nothing else.
+            # Same-namespace app traffic to 5432 is already covered by the baseline.
+            # Ports follow CNPG's own documented policy for a locked-down namespace.
+            #
+            # Written from CNPG's documentation rather than exercised: kiac-dev's CNI did not enforce
+            # NetworkPolicy in testing, so the "operator blocked without this" half is unproven.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: <<printf "%s-cnpg-operator" $xrName>>
+              namespace: <<$xrNamespace>>
+              annotations:
+                <<setResourceNameAnnotation "networkpolicy">>
+                # A NetworkPolicy has no status, so function-auto-ready would wait on it forever and the
+                # XR would never go Ready (seen live). It is ready as soon as it exists.
+                gotemplating.fn.crossplane.io/ready: "True"
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              podSelector:
+                matchLabels:
+                  cnpg.io/cluster: <<$xrName>>
+              policyTypes:
+                - Ingress
+              ingress:
+                - from:
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: cnpg-system
+                  ports:
+                    - protocol: TCP
+                      port: 8000
+                    - protocol: TCP
+                      port: 5432
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready

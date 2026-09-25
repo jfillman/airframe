@@ -533,6 +533,7 @@ slos: [] # Attached - rendered into the `SLO` XRD (Airframe/xrds/slo.yaml),
 attachedResourceApiVersion: catalog.idp.io/v1alpha1
 componentKinds:
   redis: Redis
+  postgresql: PostgreSQL
   oauth-server: OAuthServer
   database: Database
   queue: Queue

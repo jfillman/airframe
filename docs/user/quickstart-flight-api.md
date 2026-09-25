@@ -28,6 +28,11 @@ split; it links back to the section that explains each.
   namespace could not reach the database.
 - **Verified by rendering only:** the chart passing `flight-db-app`'s Secret into the container
   (`env` entries with `valueFrom`) and the `allowIngressFrom` rule for `boarding-api`.
+- **Verified:** the build. `build.sh` compiles in the exact Java agent image in about 30 seconds, the
+  thin image built from it starts, migrates and answers against a real PostgreSQL, and its emulated
+  amd64 packaging leg was timed on the cluster's builder at about 30 seconds. (The scaffold's
+  in-Containerfile Maven build was still running after 15 minutes under emulation, which is why this
+  guide replaces it.)
 - **Not verified:** this exact walkthrough — creating the app in Tower, the pipeline, and the
   deploy — has not been walked end to end. Where a step turns out wrong, this guide is corrected.
 
@@ -101,10 +106,18 @@ cp -R /tmp/airframe/examples/skyport/flight-api/. .
 git add -A && git commit -m "flight-api: flights and gates in Postgres"
 ```
 
-This overwrites the scaffold's `pom.xml`, `Application.java` and `application.properties`,
-and adds the other classes, the SQL migrations, the tests, `test.sh` and the Maven Wrapper
-(`mvnw`, `.mvn/`). **Keep the scaffolded `Containerfile`.** Keep `cicd.yaml` for now; you change
-it in section 05.
+This overwrites the scaffold's `pom.xml`, `Application.java`, `application.properties` **and
+`Containerfile`**, and adds the other classes, the SQL migrations, the tests, `test.sh`, `build.sh`
+and the Maven Wrapper (`mvnw`, `.mvn/`). Keep `cicd.yaml` for now; you change it in section 05.
+
+**Why the `Containerfile` is replaced (unlike part 1).** The scaffold's Java `Containerfile`
+compiles the app inside the image build. That build runs for two architectures, and the amd64 leg
+runs under QEMU emulation on the arm64 build node, where Maven on a JVM took over 15 minutes and
+was still going, while the native arm64 build finished in about five. Java bytecode is identical on
+both architectures, so the fix is to compile **once, natively**, and let only a tiny packaging
+step run per architecture: `build.sh` compiles inside the pipeline's Java agent, and the new
+`Containerfile` just copies the jar into a JRE image. Measured: the emulated amd64 packaging leg
+takes about 30 seconds.
 
 The wrapper matters: the platform builds Java in a plain JDK image with no Maven, so `test.sh`
 runs `./mvnw`, which downloads Maven on first use.
@@ -115,9 +128,10 @@ Try it before pushing. The unit tests need no database:
 ./test.sh                # 17 passing (needs a JDK 21 locally, or run it in a container)
 ```
 
-Nothing in `flight-api` reads a database at build time, so the image builds on both
-architectures with no changes (Java bytecode is architecture-neutral). Leave `build.platforms`
-alone, as in part 1.
+Leave `build.platforms` alone, as in part 1: with the thin `Containerfile` the image builds for both
+architectures, and the amd64 leg is cheap. (`FROM --platform=$BUILDPLATFORM` in the scaffold's
+Containerfile would be the usual answer, but this platform's builder, kaniko, ignores it: the
+"build" stage still ran emulated, and `BUILDPLATFORM` was empty. Testing it is how that was found.)
 
 What the service does:
 
@@ -183,6 +197,8 @@ kind: PipelineConfig
 
 build:
   agent: openjdk-21
+  script: ./build.sh            # compiles natively in the Java agent (see section 04)
+  containerfile: ./Containerfile  # thin: just copies the jar in
   unitTest:
     enabled: true         # runs ./test.sh
 
@@ -199,6 +215,10 @@ pipelines:
       - stage: deploy
         env: dev
 ```
+
+Setting `build.script` is what switches the pipeline from "build inside the Containerfile" to
+"build in the agent, then package". It is documented in Glidepath's cicd.yaml reference under *Two
+build strategies*.
 
 **Step 3 — commit both, merge the `.tekton/` PR** this push opens, then push. As in part 1
 the `deploy` stage commits the image straight into `platform/envs/dev.yaml` on `main`, so
@@ -399,6 +419,8 @@ Deleting this environment deletes its database and both volumes.
   `fqdn-uri`).
 - **Database name equals role name** — the component enforces it.
 - **Deleting the environment deletes the database.** It's dedicated, and its volume goes with it.
+- **Build Java with `build.script`, not in the Containerfile.** The amd64 image leg runs under emulation; a
+  Maven build there is 15+ minutes, the packaging-only leg is ~30 s.
 - **Add probes after the first deploy**, not before: `rollout` must stay `null` until the deploy
   stage has written an image.
 - **Cross-namespace traffic needs a rule.** Namespaces deny ingress from other namespaces by

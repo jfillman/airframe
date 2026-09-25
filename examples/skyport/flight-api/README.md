@@ -9,6 +9,7 @@ through Airframe is [quickstart part 2](../../../docs/user/quickstart-flight-api
 | Stack | `SpringBootApplication` — Java 21, Maven, Spring Boot 3.3.4 |
 | Package | `io.skyport.flight` — set `groupId` to this in Tower's form; the scaffold uses it as the one Java package |
 | Component | `postgresql` — a dedicated CloudNativePG cluster in the app's own namespace |
+| Build | `build.sh` compiles natively; a thin `Containerfile` packages the jar (replaces the scaffold's) |
 | Port | 8080 |
 
 ## API
@@ -68,6 +69,10 @@ TEST_DB_URL=jdbc:postgresql://<container ip>:5432/flight_db TEST_DB_USER=flight_
 
 ## Architectures
 
-Java bytecode is architecture-neutral and every image involved (`eclipse-temurin`, the
-scaffold's Containerfile) is multi-arch, so this builds for `linux/arm64` and `linux/amd64`
-with no changes. Leave `build.platforms` alone.
+The image is built for `linux/arm64` and `linux/amd64`. Java bytecode is the same on both, so
+`build.sh` compiles **once, natively**, in the pipeline's Java agent, and the `Containerfile` only
+copies the jar into a JRE image. Do not compile inside the Containerfile (the scaffold's default):
+the amd64 leg runs under QEMU emulation on the arm64 build node, and Maven on a JVM there took
+over 15 minutes and was still running, versus about 30 seconds for the packaging-only leg.
+`FROM --platform=$BUILDPLATFORM` does not help on this platform's builder (kaniko ignores it).
+Set `build.script: ./build.sh` in `cicd.yaml` to use this shape. Leave `build.platforms` alone.

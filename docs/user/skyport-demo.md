@@ -127,7 +127,12 @@ in Skyport has to run on both:
   default (`build.platforms` in `cicd.yaml`); leave it alone. The amd64 leg runs
   under QEMU on the arm64 build node, so it is slow, and a compiler crashing under
   emulation is a known failure mode. Where a build stage is architecture-neutral
-  (Java bytecode, pure-JS dependencies) use `FROM --platform=$BUILDPLATFORM` for it.
+  (Java bytecode, pure-JS dependencies) do **not** rely on `FROM --platform=$BUILDPLATFORM`:
+  this platform's builder (kaniko) ignores it and the stage still runs emulated (tested; the
+  build stage reported `x86_64` and `BUILDPLATFORM` was empty). Compile in `build.script`
+  instead, natively in the build agent, and keep the Containerfile a thin packaging step.
+  `flight-api` does this; the scaffold's Java Containerfile, which compiles inside the image
+  build, was still running after 15 minutes for the emulated leg.
   `boarding-api` has no native dependencies. `flight-api` and `baggage-api` must
   avoid ones without both wheels or classifiers.
 - **Component charts.** Every image a wrapped upstream chart pulls has to be a

@@ -331,7 +331,7 @@ kubectl --context kind-prod get postgresql -n app-flight-api-staging
 **Step 3 — configure it.** The flight values live in
 `gitops-flight-api/kind-prod/staging/values.yaml` and change only through a pull request. Add the
 database, its credentials, the probes and the network rule — **edit the file in that PR directly**
-rather than through Tower's App Configuration *Environment variables* section (see the warning
+rather than through Tower's App Configuration *Environment variables* section (see the note
 below):
 
 ```yaml
@@ -366,12 +366,12 @@ networkPolicy:
 `instances: 2` gives a real failover pair; on a small single-node cluster `1` is fine too.
 The image is not set here: the release pipeline sets it, as in part 1.
 
-> **Warning: don't edit *Environment variables* in Tower's App Configuration on an environment
-> that uses `valueFrom`.** That section is a name/value form. It loads a `valueFrom` entry as a
-> row with an empty value, and if you change anything in that section it saves the whole `env` list
-> back as name/value pairs, which **drops the credentials wiring**. Other sections (scaling,
-> probes, config files) send only what you changed and leave `env` alone. Whatever you edit, read
-> the PR diff before merging. This is a gap in Tower, not in the chart.
+> **Tower and `valueFrom`.** Tower's *Environment variables* section is a name/value form, and
+> older builds of it saved the whole `env` list back as name/value pairs, which **replaced a
+> `valueFrom` entry with an empty value** (the app then started with a blank `DB_HOST`). Builds from
+> Backstage commit `366ea8c` on show `valueFrom` rows read-only (`← Secret flight-db-app / host`) and
+> keep them when you save; they only go away if you press Remove. If your Tower predates that
+> commit, edit this section in the PR directly instead. Either way, read the PR diff before merging.
 
 **Step 4 — release**, as a signed merge, as in part 1. Then in `boarding-api`'s staging values point
 it at `http://flight-api.app-flight-api-staging.svc.cluster.local:8080`.
@@ -402,7 +402,7 @@ Deleting this environment deletes its database and both volumes.
   default; `networkPolicy.allowIngressFrom` opens exactly one.
 - **`test.sh` uses `./mvnw`** — the Java build agent has no Maven.
 - **One selector for everything:** `-l hangar.io/app=<app>`.
-- **Don't use Tower's *Environment variables* section** on an env with `valueFrom` — it drops them.
+- **`valueFrom` and Tower:** older Tower builds drop `valueFrom` entries when you edit *Environment variables*; builds from Backstage `366ea8c` keep them. Read the PR diff either way.
 - **After any component change, expect ~10 minutes of `Ready=False`** on its Release: provider-helm
   (Redis) reports it until its next poll though the pods are fine. The PostgreSQL component
   doesn't use provider-helm and doesn't do this.

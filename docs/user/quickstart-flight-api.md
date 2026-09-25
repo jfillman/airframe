@@ -34,8 +34,14 @@ split; it links back to the section that explains each.
   in-Containerfile Maven build did finish, but took about 17 minutes under emulation (the amd64 leg alone
   took 11 minutes), which is why this
   guide replaces it.)
-- **Not verified:** this exact walkthrough — creating the app in Tower, the pipeline, and the
-  deploy — has not been walked end to end. Where a step turns out wrong, this guide is corrected.
+- **Verified live by walking it (2026-09-25):** create → pipeline → ground deploy on the dev
+  cluster with the database component; `boarding-api` on dev serves from `flight-api`
+  (`source: flight-api`, live status from the simulator) and the database accumulated hundreds of
+  events; `flight-api` runs on `kind-prod` staging with a two-instance database. Walking it found and
+  fixed the slow emulated Java build (section 04) and a liveness probe pointed at the readiness
+  endpoint (section 05).
+- **Not yet confirmed:** `boarding-api` on `kind-prod` staging still reports its built-in lookup
+  (`FLIGHT_API_URL` not set there), so the staging call path in section 07 has not been exercised.
 
 **Needs airframe v0.3.88 or later** on the dev cluster's ApplicationSets (`env:` `valueFrom`).
 

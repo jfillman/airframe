@@ -17,8 +17,12 @@ split; it links back to the section that explains each.
   migrations and queries pass against a real PostgreSQL (4 integration tests); the container
   image was built with the exact `Containerfile` the platform scaffolds and run against that
   database; and `boarding-api` was run against it end to end.
-- **Verified:** the database component. A `PostgreSQL` component was created, went Ready,
-  scaled to two instances with data intact, and tore down cleanly on the dev cluster.
+- **Verified:** the database component, on **both clusters**. A `PostgreSQL` component was
+  created, went Ready, kept its data across a restart, scaled to two instances on the dev
+  cluster, and tore down cleanly. On `kind-prod` (which enforces NetworkPolicy) it went Ready with
+  the app's baseline policy in place, and a control run **without** the component's operator
+  policy never became healthy, so that policy is necessary, not decoration. A pod in another
+  namespace could not reach the database.
 - **Verified by rendering only:** the chart passing `flight-db-app`'s Secret into the container
   (`env` entries with `valueFrom`) and the `allowIngressFrom` rule for `boarding-api`.
 - **Not verified:** this exact walkthrough — creating the app in Tower, the pipeline, and the
@@ -278,6 +282,110 @@ board accurate — the fix is for flight-api to publish `flight.gate-changed` an
 evict the entry, which is Phase 2 of [Skyport](skyport-demo.md). The `flight_events` table is
 already there for that: every gate change is written to it in the same transaction as the change.
 
+## 07 — Flight: the same service on `kind-prod`
+
+The flight environment works exactly as in [part 1, section 07](quickstart.md#07--flight-a-governed-environment-on-an-upper-cluster):
+declare it in `cicd.yaml`, create the `ApplicationEnvironment`, configure it, release an image.
+Only the parts that differ are here.
+
+`kind-prod` has the CloudNativePG operator and the `PostgreSQL` XRD installed. Note that it runs
+Kubernetes 1.37, which CloudNativePG 1.30 lists as *tested but not supported* upstream; the
+component was verified there (above), not assumed.
+
+**Step 1 — `cicd.yaml`.** Add the flight env and a `release` stage:
+
+```yaml
+deploy:
+  lowerEnvironments: [dev]
+  upperEnvironments:
+    - { name: staging, cluster: kind-prod }
+
+governance:
+  allowedCommitSigners:
+    - you@example.com
+
+pipelines:
+  ci:
+    trigger: { source: git, event: push, branch: main }
+    steps:
+      - stage: build
+      - stage: test
+        env: dev
+      - stage: deploy
+        env: dev
+      - stage: release
+        env: staging
+```
+
+Merge the `.tekton/` PR it opens.
+
+**Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-kind-prod-staging`,
+`Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `kind-prod`, `env` `staging`.
+Merge the PR. The flight environment starts as `rollout: null`, so **the database is created
+first**, in `app-flight-api-staging`, before any application runs:
+
+```bash
+kubectl --context kind-prod get postgresql -n app-flight-api-staging
+```
+
+**Step 3 — configure it.** The flight values live in
+`gitops-flight-api/kind-prod/staging/values.yaml` and change only through a pull request. Add the
+database, its credentials, the probes and the network rule — **edit the file in that PR directly**
+rather than through Tower's App Configuration *Environment variables* section (see the warning
+below):
+
+```yaml
+rollout:
+  replicas: 2
+  ports: [{ name: http, containerPort: 8080 }]
+  readinessProbe:
+    httpGet: { path: /actuator/health/readiness, port: 8080 }
+    initialDelaySeconds: 20
+  livenessProbe:
+    httpGet: { path: /actuator/health/liveness, port: 8080 }
+    initialDelaySeconds: 60
+
+components:
+  - type: postgresql
+    name: flight-db
+    spec: { size: small, instances: 2, storageSize: 5Gi }    # a primary and a replica
+
+env:
+  - { name: DB_HOST,     valueFrom: { secretKeyRef: { name: flight-db-app, key: host } } }
+  - { name: DB_PORT,     valueFrom: { secretKeyRef: { name: flight-db-app, key: port } } }
+  - { name: DB_NAME,     valueFrom: { secretKeyRef: { name: flight-db-app, key: dbname } } }
+  - { name: DB_USER,     valueFrom: { secretKeyRef: { name: flight-db-app, key: username } } }
+  - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: flight-db-app, key: password } } }
+  - { name: SIMULATOR_INTERVAL_MS, value: "60000" }
+
+networkPolicy:
+  allowIngressFrom:
+    - { namespace: app-boarding-api-staging, ports: [8080] }
+```
+
+`instances: 2` gives a real failover pair; on a small single-node cluster `1` is fine too.
+The image is not set here: the release pipeline sets it, as in part 1.
+
+> **Warning: don't edit *Environment variables* in Tower's App Configuration on an environment
+> that uses `valueFrom`.** That section is a name/value form. It loads a `valueFrom` entry as a
+> row with an empty value, and if you change anything in that section it saves the whole `env` list
+> back as name/value pairs, which **drops the credentials wiring**. Other sections (scaling,
+> probes, config files) send only what you changed and leave `env` alone. Whatever you edit, read
+> the PR diff before merging. This is a gap in Tower, not in the chart.
+
+**Step 4 — release**, as a signed merge, as in part 1. Then in `boarding-api`'s staging values point
+it at `http://flight-api.app-flight-api-staging.svc.cluster.local:8080`.
+
+Check it from a machine that can reach `kind-prod`:
+
+```bash
+kubectl --context kind-prod get all,pvc,secret,networkpolicy -n app-flight-api-staging -l hangar.io/app=flight-api
+kubectl --context kind-prod -n app-flight-api-staging port-forward svc/flight-api 8082:8080
+curl -s localhost:8082/api/flights/AC123
+```
+
+Deleting this environment deletes its database and both volumes.
+
 ## Cheat sheet
 
 - **`devCluster: kind-dev`**, and **`groupId: io.skyport.flight`** — the code you copy in assumes
@@ -294,3 +402,7 @@ already there for that: every gate change is written to it in the same transacti
   default; `networkPolicy.allowIngressFrom` opens exactly one.
 - **`test.sh` uses `./mvnw`** — the Java build agent has no Maven.
 - **One selector for everything:** `-l hangar.io/app=<app>`.
+- **Don't use Tower's *Environment variables* section** on an env with `valueFrom` — it drops them.
+- **After any component change, expect ~10 minutes of `Ready=False`** on its Release: provider-helm
+  (Redis) reports it until its next poll though the pods are fine. The PostgreSQL component
+  doesn't use provider-helm and doesn't do this.

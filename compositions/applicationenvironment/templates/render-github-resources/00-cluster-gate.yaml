@@ -43,8 +43,20 @@
 <<- $cluster := $spec.cluster >>
 <<- $platformOwner := "jfillman" >>
 <<- $tenantsRepo := printf "gitops-cluster-%s-tenants" $cluster >>
-<<- $gitopsRepoUrl := printf "https://github.com/%s/gitops-%s" $platformOwner $appName >>
+<<- /* An InfraService's deploy repo is gitops-infra-<name> (no source repo exists, so the same repo
+       is also its "app" repo), unlike an app's gitops-<name>. spec.appType says which; default app.
+       Hard-coding gitops-<name> wrote an infra service's values.yaml to a repo that doesn't exist
+       (seen live: gitops-skyport-broker instead of gitops-infra-skyport-broker). */ ->>
+<<- $appType := $spec.appType | default "app" >>
+<<- $gitopsRepo := printf "gitops-%s" $appName >>
+<<- if eq $appType "infra" >>
+  <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
+<<- end >>
+<<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
 <<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
+<<- if eq $appType "infra" >>
+  <<- $appRepoUrl = $gitopsRepoUrl >>
+<<- end >>
 <<- $configMapGenerator := $spec.configMapGenerator | default false >>
 <<- $allExtra := .extraResources | default dict >>
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>

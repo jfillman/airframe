@@ -39,7 +39,9 @@ spec:
         inline:
           template: |
             # ExtraResources lookup resolving which real XR kind $appName actually is - one of
-            # NodeJSApplication, SpringBootApplication, PythonApplication, or GoApplication.
+            # NodeJSApplication, SpringBootApplication, PythonApplication, GoApplication or InfraService
+            # (InfraService added 2026-09-25: skyport-broker's kind-prod env sat at "Unready resources:
+            # app-usage" because its Usage pointed at a NodeJSApplication that doesn't exist).
             # Added once SpringBootApplication went from "future" (xrds/applicationenvironment.yaml's
             # own appName description already anticipated it, written before either existed) to
             # real and app-usage.yaml's previously-hardcoded `kind: NodeJSApplication` was found
@@ -83,6 +85,8 @@ spec:
             <<- $pythonItems := index $pythonEntry "items" | default list >>
             <<- $goEntry := index $allExtra "app-kind-go" | default dict >>
             <<- $goItems := index $goEntry "items" | default list >>
+            <<- $infraEntry := index $allExtra "app-kind-infra" | default dict >>
+            <<- $infraItems := index $infraEntry "items" | default list >>
             <<- $appKind := "NodeJSApplication" >>
             <<- if gt (len $nodejsItems) 0 >>
               <<- $appKind = "NodeJSApplication" >>
@@ -92,6 +96,8 @@ spec:
               <<- $appKind = "PythonApplication" >>
             <<- else if gt (len $goItems) 0 >>
               <<- $appKind = "GoApplication" >>
+            <<- else if gt (len $infraItems) 0 >>
+              <<- $appKind = "InfraService" >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
@@ -114,6 +120,11 @@ spec:
               app-kind-go:
                 apiVersion: catalog.idp.io/v1alpha1
                 kind: GoApplication
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
+              app-kind-infra:
+                apiVersion: catalog.idp.io/v1alpha1
+                kind: InfraService
                 namespace: <<$xrNamespace>>
                 matchName: <<$appName>>
             ---
@@ -162,8 +173,20 @@ spec:
             <<- $cluster := $spec.cluster >>
             <<- $platformOwner := "jfillman" >>
             <<- $tenantsRepo := printf "gitops-cluster-%s-tenants" $cluster >>
-            <<- $gitopsRepoUrl := printf "https://github.com/%s/gitops-%s" $platformOwner $appName >>
+            <<- /* An InfraService's deploy repo is gitops-infra-<name> (no source repo exists, so the same repo
+                   is also its "app" repo), unlike an app's gitops-<name>. spec.appType says which; default app.
+                   Hard-coding gitops-<name> wrote an infra service's values.yaml to a repo that doesn't exist
+                   (seen live: gitops-skyport-broker instead of gitops-infra-skyport-broker). */ ->>
+            <<- $appType := $spec.appType | default "app" >>
+            <<- $gitopsRepo := printf "gitops-%s" $appName >>
+            <<- if eq $appType "infra" >>
+              <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
+            <<- end >>
+            <<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
             <<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
+            <<- if eq $appType "infra" >>
+              <<- $appRepoUrl = $gitopsRepoUrl >>
+            <<- end >>
             <<- $configMapGenerator := $spec.configMapGenerator | default false >>
             <<- $allExtra := .extraResources | default dict >>
             <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
@@ -364,7 +387,7 @@ spec:
                 content: |
                   platformIdentity:
                     appName: <<$appName>>
-                    type: app
+                    type: <<$appType>>
                     gitopsRepoUrl: <<$gitopsRepoUrl>>
                     appRepoUrl: <<$appRepoUrl>>
                     githubOwner: <<$platformOwner>>
@@ -640,19 +663,19 @@ spec:
               name: <<$xrName>>-values-yaml
               annotations:
                 <<setResourceNameAnnotation "values-yaml">>
-                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" (printf "gitops-%s" $appName) (printf "%s/%s/values.yaml" $cluster $env)) (index (.observed.resources | default dict) "values-yaml" | default dict)>>"
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $gitopsRepo (printf "%s/%s/values.yaml" $cluster $env)) (index (.observed.resources | default dict) "values-yaml" | default dict)>>"
             spec:
               managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
               forProvider:
-                repository: <<printf "gitops-%s" $appName>>
+                repository: <<$gitopsRepo>>
                 file: <<printf "%s/%s/values.yaml" $cluster $env>>
                 overwriteOnCreate: true
                 content: |
                   appName: <<$appName>>
-                  appType: app
+                  appType: <<$appType>>
                   cluster: <<$cluster>>
                   envName: <<$env>>
                   rollout: null

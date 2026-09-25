@@ -132,6 +132,15 @@ spec:
                   pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
                   minLength: 1
                   maxLength: 20
+                appType:
+                  type: string
+                  enum: [app, infra]
+                  default: app
+                  description: >-
+                    `app` (the default) for an env of a NodeJS/SpringBoot/Go/Python application, whose deploy
+                    repo is gitops-<appName>. `infra` for an env of an InfraService (a shared component such
+                    as a broker), whose deploy repo is gitops-infra-<appName>. Without it an infra service's
+                    values.yaml is written to gitops-<appName>, which doesn't exist.
                 configMapGenerator:
                   type: boolean
                   default: false

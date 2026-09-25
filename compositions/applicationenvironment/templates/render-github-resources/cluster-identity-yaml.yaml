@@ -96,7 +96,7 @@ spec:
     content: |
       platformIdentity:
         appName: <<$appName>>
-        type: app
+        type: <<$appType>>
         gitopsRepoUrl: <<$gitopsRepoUrl>>
         appRepoUrl: <<$appRepoUrl>>
         githubOwner: <<$platformOwner>>

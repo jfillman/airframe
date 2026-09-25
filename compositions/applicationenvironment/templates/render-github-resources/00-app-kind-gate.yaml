@@ -1,5 +1,7 @@
 # ExtraResources lookup resolving which real XR kind $appName actually is - one of
-# NodeJSApplication, SpringBootApplication, PythonApplication, or GoApplication.
+# NodeJSApplication, SpringBootApplication, PythonApplication, GoApplication or InfraService
+# (InfraService added 2026-09-25: skyport-broker's kind-prod env sat at "Unready resources:
+# app-usage" because its Usage pointed at a NodeJSApplication that doesn't exist).
 # Added once SpringBootApplication went from "future" (xrds/applicationenvironment.yaml's
 # own appName description already anticipated it, written before either existed) to
 # real and app-usage.yaml's previously-hardcoded `kind: NodeJSApplication` was found
@@ -43,6 +45,8 @@
 <<- $pythonItems := index $pythonEntry "items" | default list >>
 <<- $goEntry := index $allExtra "app-kind-go" | default dict >>
 <<- $goItems := index $goEntry "items" | default list >>
+<<- $infraEntry := index $allExtra "app-kind-infra" | default dict >>
+<<- $infraItems := index $infraEntry "items" | default list >>
 <<- $appKind := "NodeJSApplication" >>
 <<- if gt (len $nodejsItems) 0 >>
   <<- $appKind = "NodeJSApplication" >>
@@ -52,6 +56,8 @@
   <<- $appKind = "PythonApplication" >>
 <<- else if gt (len $goItems) 0 >>
   <<- $appKind = "GoApplication" >>
+<<- else if gt (len $infraItems) 0 >>
+  <<- $appKind = "InfraService" >>
 <<- end >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ExtraResources
@@ -74,5 +80,10 @@ requirements:
   app-kind-go:
     apiVersion: catalog.idp.io/v1alpha1
     kind: GoApplication
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
+  app-kind-infra:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: InfraService
     namespace: <<$xrNamespace>>
     matchName: <<$appName>>

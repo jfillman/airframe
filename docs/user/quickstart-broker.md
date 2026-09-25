@@ -306,8 +306,11 @@ The flight environment for the broker works as in [part 1, section 07](quickstar
 and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-kind-prod):
 
 1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-kind-prod-staging`, `Namespace`
-   `app-skyport-broker-cicd`, `appName` `skyport-broker`, `cluster` `kind-prod`, `env` `staging`.
-   Merge the PR.
+   `app-skyport-broker-cicd`, `appName` `skyport-broker`, `cluster` `kind-prod`, `env` `staging`, and
+   **`appType` `infra`**. Merge the PR. (Needs airframe v0.3.90. `appType` tells the environment that
+   its deploy repo is `gitops-infra-skyport-broker`, not `gitops-skyport-broker`. Without it the values
+   file is written to a repo that doesn't exist, and the environment reports
+   `Unready resources: app-usage`. Both were found when someone created this environment.)
 2. In the PR that adds `gitops-infra-skyport-broker/kind-prod/staging/values.yaml`, use the same
    `components:` block as section 03 with `allowedNamespaces: [app-flight-api-staging,
    app-boarding-api-staging]`.
@@ -339,7 +342,7 @@ on the list was blocked.
   manual change).
 
 **Needs airframe v0.3.89 or later** on the dev cluster's ApplicationSets (the `rabbitmq` component and
-its `componentKinds` entry).
+its `componentKinds` entry), and **v0.3.90** for section 08 (`ApplicationEnvironment` `appType: infra`).
 
 ## Cheat sheet
 

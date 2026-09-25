@@ -1,0 +1,111 @@
+# mode: attach - see xrds/rabbitmq.yaml's header. A User + Permission in THIS namespace that
+# reference the broker across namespaces (the broker must list this namespace in its
+# allowedNamespaces), and a ConfigMap of connection details. Nothing renders in broker mode.
+#
+# The operator generates the username and password and writes them to the Secret
+# `<xr>-user-credentials` in this namespace (keys username, password). No password is
+# rendered here, so nothing changes on reconcile.
+#
+# Regexes are built from names, with `.` escaped: configure and write cover the app's own
+# queue prefix plus the exchanges it publishes to; read covers the prefix plus the exchanges
+# it consumes from. Tested live: with write on the queue prefix and read on the exchange an
+# app can declare, bind and consume its queue; it can neither publish to an exchange it only
+# consumes from nor read another app's queue.
+<<- $xr := .observed.composite.resource >>
+<<- $spec := $xr.spec >>
+<<- if eq $spec.mode "attach" >>
+<<- $xrName := $xr.metadata.name >>
+<<- $ns := $xr.metadata.namespace >>
+<<- $ref := $spec.brokerRef >>
+<<- $hangarLabels := dict >>
+<<- range $k, $v := ($xr.metadata.labels | default dict) >>
+  <<- if hasPrefix "hangar.io/" $k >>
+    <<- $_ := set $hangarLabels $k $v >>
+  <<- end >>
+<<- end >>
+<<- $own := list >>
+<<- if $spec.queuePrefix >>
+  <<- $own = append $own (printf "%s\\..*" (replace "." "\\." $spec.queuePrefix)) >>
+<<- end >>
+<<- $cfg := $own >>
+<<- range $e := ($spec.publish | default list) >>
+  <<- $cfg = append $cfg (replace "." "\\." $e) >>
+<<- end >>
+<<- $rd := $own >>
+<<- range $e := ($spec.consume | default list) >>
+  <<- $rd = append $rd (replace "." "\\." $e) >>
+<<- end >>
+<<- $cfgRe := "" >>
+<<- if $cfg >>
+  <<- $cfgRe = printf "^(%s)$" (join "|" $cfg) >>
+<<- end >>
+<<- $rdRe := "" >>
+<<- if $rd >>
+  <<- $rdRe = printf "^(%s)$" (join "|" $rd) >>
+<<- end >>
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: <<$xrName>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation "user">>
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  rabbitmqClusterReference:
+    name: <<$ref.name>>
+    namespace: <<$ref.namespace>>
+---
+<<- /* The Topology Operator makes a Permission's `userReference` target its controlling
+       owner, which fails when Crossplane already controls the Permission ("already owned by
+       another controller", seen live). So refer to the user by name instead: the operator
+       generates the username, so the Permission renders once the User's status has it. */ ->>
+<<- $username := "" >>
+<<- with (index (.observed.resources | default dict) "user") >>
+  <<- $username = .resource.status.username | default "" >>
+<<- end >>
+<<- if $username >>
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: <<$xrName>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation "permission">>
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  vhost: <<$spec.vhost>>
+  user: <<$username | quote>>
+  permissions:
+    configure: <<$cfgRe | quote>>
+    write: <<$cfgRe | quote>>
+    read: <<$rdRe | quote>>
+  rabbitmqClusterReference:
+    name: <<$ref.name>>
+    namespace: <<$ref.namespace>>
+---
+<<- end >>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <<printf "%s-connection" $xrName>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation "connection">>
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+data:
+  host: <<printf "%s.%s.svc" $ref.name $ref.namespace | quote>>
+  port: "5672"
+  vhost: <<$spec.vhost | quote>>
+---
+<<- end >>

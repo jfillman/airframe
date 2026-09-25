@@ -534,6 +534,7 @@ attachedResourceApiVersion: catalog.idp.io/v1alpha1
 componentKinds:
   redis: Redis
   postgresql: PostgreSQL
+  rabbitmq: RabbitMQ
   oauth-server: OAuthServer
   database: Database
   queue: Queue

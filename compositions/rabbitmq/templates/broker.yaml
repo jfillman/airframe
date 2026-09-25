@@ -1,0 +1,154 @@
+# mode: broker - see xrds/rabbitmq.yaml's header. Renders the shared RabbitmqCluster, one
+# Vhost per entry in spec.vhosts, and a NetworkPolicy. Nothing renders in attach mode.
+#
+# The RabbitMQ image is pinned to 4.2.x, NOT 4.1: Cluster Operator 2.23.0's startup probe
+# calls /api/health/checks/reached-target-cluster-size, which 4.1.8 answers with 404, so the
+# pod never becomes ready (seen live). Pinned to a patch version so an operator upgrade
+# never changes the broker version under existing data. Multi-arch (amd64 + arm64).
+#
+# `rabbitmq.com/topology-allowed-namespaces` is what lets a User/Permission in ANOTHER
+# namespace reference this cluster; without it the Topology Operator refuses them with
+# "resource is not allowed to reference defined cluster reference" (seen live).
+#
+# The operator copies the CR's labels onto the StatefulSet, Services and Secrets, and the
+# override below adds them to the pod template, so `kubectl get all,secret -l
+# hangar.io/app=<app>` finds the broker.
+<<- $xr := .observed.composite.resource >>
+<<- $spec := $xr.spec >>
+<<- if eq $spec.mode "broker" >>
+<<- $xrName := $xr.metadata.name >>
+<<- $ns := $xr.metadata.namespace >>
+<<- $size := $spec.size | default "small" >>
+<<- $cpuReq := "100m" >>
+<<- $memReq := "512Mi" >>
+<<- $cpuLim := "1" >>
+<<- $memLim := "1Gi" >>
+<<- if eq $size "medium" >>
+  <<- $cpuReq = "500m" >>
+  <<- $memReq = "1Gi" >>
+  <<- $cpuLim = "2" >>
+  <<- $memLim = "2Gi" >>
+<<- else if eq $size "large" >>
+  <<- $cpuReq = "1" >>
+  <<- $memReq = "2Gi" >>
+  <<- $cpuLim = "4" >>
+  <<- $memLim = "4Gi" >>
+<<- end >>
+<<- $hangarLabels := dict >>
+<<- range $k, $v := ($xr.metadata.labels | default dict) >>
+  <<- if hasPrefix "hangar.io/" $k >>
+    <<- $_ := set $hangarLabels $k $v >>
+  <<- end >>
+<<- end >>
+<<- $allowed := $spec.allowedNamespaces | default list >>
+<<- /* A RabbitmqCluster has no `Ready` condition (it reports AllReplicasReady), so
+       function-auto-ready would wait on it forever (seen live): mark it ready from the
+       observed condition instead. */ ->>
+<<- $ready := "False" >>
+<<- with (index (.observed.resources | default dict) "cluster") >>
+  <<- range $c := (.resource.status.conditions | default list) >>
+    <<- if and (eq $c.type "AllReplicasReady") (eq $c.status "True") >>
+      <<- $ready = "True" >>
+    <<- end >>
+  <<- end >>
+<<- end >>
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: <<$xrName>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation "cluster">>
+    gotemplating.fn.crossplane.io/ready: <<$ready | quote>>
+    <<- if $allowed >>
+    rabbitmq.com/topology-allowed-namespaces: <<join "," $allowed | quote>>
+    <<- end >>
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  replicas: <<$spec.instances | default 1 | int>>
+  image: rabbitmq:4.2.9-management
+  persistence:
+    storage: <<$spec.storageSize | default "1Gi">>
+  resources:
+    requests:
+      cpu: <<$cpuReq>>
+      memory: <<$memReq>>
+    limits:
+      cpu: <<$cpuLim>>
+      memory: <<$memLim>>
+  override:
+    statefulSet:
+      spec:
+        template:
+          metadata:
+            labels:
+              <<- range $k, $v := $hangarLabels >>
+              <<$k>>: <<$v | quote>>
+              <<- end >>
+---
+<<- range $v := ($spec.vhosts | default list) >>
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: <<printf "%s-%s" $xrName $v>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation (printf "vhost-%s" $v)>>
+  labels:
+    <<- range $k, $lv := $hangarLabels >>
+    <<$k>>: <<$lv | quote>>
+    <<- end >>
+spec:
+  name: <<$v>>
+  rabbitmqClusterReference:
+    name: <<$xrName>>
+---
+<<- end >>
+# The Topology Operator (rabbitmq-system) reaches the management API on 15672 to create
+# vhosts/users/permissions; consumer namespaces reach AMQP on 5672. Same-namespace traffic is
+# already covered by the app baseline policy. The cluster never reports ready if the
+# operator is blocked, same as CNPG.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: <<printf "%s-rabbitmq-access" $xrName>>
+  namespace: <<$ns>>
+  annotations:
+    <<setResourceNameAnnotation "networkpolicy">>
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: <<$xrName>>
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: rabbitmq-system
+      ports:
+        - protocol: TCP
+          port: 15672
+        - protocol: TCP
+          port: 5672
+    <<- if $allowed >>
+    - from:
+        <<- range $n := $allowed >>
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: <<$n>>
+        <<- end >>
+      ports:
+        - protocol: TCP
+          port: 5672
+    <<- end >>
+---
+<<- end >>

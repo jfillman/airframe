@@ -1,0 +1,303 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template`
+# block below. Edit templates/*.yaml instead, then run ./build-composition.sh
+# to regenerate this file.
+#
+# Component Composition (Item 7, Round 2026-09-25)
+# (service-catalog-design.md). Single function-go-templating step: renders
+# a RabbitmqCluster (broker mode) or a User + Permission (attach mode) - see
+# templates/*.yaml's own header for the full mapping/reasoning.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other
+# Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: rabbitmq.catalog.idp.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: RabbitMQ
+  mode: Pipeline
+  pipeline:
+    - step: render-rabbitmq-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # mode: attach - see xrds/rabbitmq.yaml's header. A User + Permission in THIS namespace that
+            # reference the broker across namespaces (the broker must list this namespace in its
+            # allowedNamespaces), and a ConfigMap of connection details. Nothing renders in broker mode.
+            #
+            # The operator generates the username and password and writes them to the Secret
+            # `<xr>-user-credentials` in this namespace (keys username, password). No password is
+            # rendered here, so nothing changes on reconcile.
+            #
+            # Regexes are built from names, with `.` escaped: configure and write cover the app's own
+            # queue prefix plus the exchanges it publishes to; read covers the prefix plus the exchanges
+            # it consumes from. Tested live: with write on the queue prefix and read on the exchange an
+            # app can declare, bind and consume its queue; it can neither publish to an exchange it only
+            # consumes from nor read another app's queue.
+            <<- $xr := .observed.composite.resource >>
+            <<- $spec := $xr.spec >>
+            <<- if eq $spec.mode "attach" >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $ns := $xr.metadata.namespace >>
+            <<- $ref := $spec.brokerRef >>
+            <<- $hangarLabels := dict >>
+            <<- range $k, $v := ($xr.metadata.labels | default dict) >>
+              <<- if hasPrefix "hangar.io/" $k >>
+                <<- $_ := set $hangarLabels $k $v >>
+              <<- end >>
+            <<- end >>
+            <<- $own := list >>
+            <<- if $spec.queuePrefix >>
+              <<- $own = append $own (printf "%s\\..*" (replace "." "\\." $spec.queuePrefix)) >>
+            <<- end >>
+            <<- $cfg := $own >>
+            <<- range $e := ($spec.publish | default list) >>
+              <<- $cfg = append $cfg (replace "." "\\." $e) >>
+            <<- end >>
+            <<- $rd := $own >>
+            <<- range $e := ($spec.consume | default list) >>
+              <<- $rd = append $rd (replace "." "\\." $e) >>
+            <<- end >>
+            <<- $cfgRe := "" >>
+            <<- if $cfg >>
+              <<- $cfgRe = printf "^(%s)$" (join "|" $cfg) >>
+            <<- end >>
+            <<- $rdRe := "" >>
+            <<- if $rd >>
+              <<- $rdRe = printf "^(%s)$" (join "|" $rd) >>
+            <<- end >>
+            apiVersion: rabbitmq.com/v1beta1
+            kind: User
+            metadata:
+              name: <<$xrName>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation "user">>
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              rabbitmqClusterReference:
+                name: <<$ref.name>>
+                namespace: <<$ref.namespace>>
+            ---
+            <<- /* The Topology Operator makes a Permission's `userReference` target its controlling
+                   owner, which fails when Crossplane already controls the Permission ("already owned by
+                   another controller", seen live). So refer to the user by name instead: the operator
+                   generates the username, so the Permission renders once the User's status has it. */ ->>
+            <<- $username := "" >>
+            <<- with (index (.observed.resources | default dict) "user") >>
+              <<- $username = .resource.status.username | default "" >>
+            <<- end >>
+            <<- if $username >>
+            apiVersion: rabbitmq.com/v1beta1
+            kind: Permission
+            metadata:
+              name: <<$xrName>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation "permission">>
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              vhost: <<$spec.vhost>>
+              user: <<$username | quote>>
+              permissions:
+                configure: <<$cfgRe | quote>>
+                write: <<$cfgRe | quote>>
+                read: <<$rdRe | quote>>
+              rabbitmqClusterReference:
+                name: <<$ref.name>>
+                namespace: <<$ref.namespace>>
+            ---
+            <<- end >>
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: <<printf "%s-connection" $xrName>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation "connection">>
+                gotemplating.fn.crossplane.io/ready: "True"
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            data:
+              host: <<printf "%s.%s.svc" $ref.name $ref.namespace | quote>>
+              port: "5672"
+              vhost: <<$spec.vhost | quote>>
+            ---
+            <<- end >>
+            ---
+            # mode: broker - see xrds/rabbitmq.yaml's header. Renders the shared RabbitmqCluster, one
+            # Vhost per entry in spec.vhosts, and a NetworkPolicy. Nothing renders in attach mode.
+            #
+            # The RabbitMQ image is pinned to 4.2.x, NOT 4.1: Cluster Operator 2.23.0's startup probe
+            # calls /api/health/checks/reached-target-cluster-size, which 4.1.8 answers with 404, so the
+            # pod never becomes ready (seen live). Pinned to a patch version so an operator upgrade
+            # never changes the broker version under existing data. Multi-arch (amd64 + arm64).
+            #
+            # `rabbitmq.com/topology-allowed-namespaces` is what lets a User/Permission in ANOTHER
+            # namespace reference this cluster; without it the Topology Operator refuses them with
+            # "resource is not allowed to reference defined cluster reference" (seen live).
+            #
+            # The operator copies the CR's labels onto the StatefulSet, Services and Secrets, and the
+            # override below adds them to the pod template, so `kubectl get all,secret -l
+            # hangar.io/app=<app>` finds the broker.
+            <<- $xr := .observed.composite.resource >>
+            <<- $spec := $xr.spec >>
+            <<- if eq $spec.mode "broker" >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $ns := $xr.metadata.namespace >>
+            <<- $size := $spec.size | default "small" >>
+            <<- $cpuReq := "100m" >>
+            <<- $memReq := "512Mi" >>
+            <<- $cpuLim := "1" >>
+            <<- $memLim := "1Gi" >>
+            <<- if eq $size "medium" >>
+              <<- $cpuReq = "500m" >>
+              <<- $memReq = "1Gi" >>
+              <<- $cpuLim = "2" >>
+              <<- $memLim = "2Gi" >>
+            <<- else if eq $size "large" >>
+              <<- $cpuReq = "1" >>
+              <<- $memReq = "2Gi" >>
+              <<- $cpuLim = "4" >>
+              <<- $memLim = "4Gi" >>
+            <<- end >>
+            <<- $hangarLabels := dict >>
+            <<- range $k, $v := ($xr.metadata.labels | default dict) >>
+              <<- if hasPrefix "hangar.io/" $k >>
+                <<- $_ := set $hangarLabels $k $v >>
+              <<- end >>
+            <<- end >>
+            <<- $allowed := $spec.allowedNamespaces | default list >>
+            <<- /* A RabbitmqCluster has no `Ready` condition (it reports AllReplicasReady), so
+                   function-auto-ready would wait on it forever (seen live): mark it ready from the
+                   observed condition instead. */ ->>
+            <<- $ready := "False" >>
+            <<- with (index (.observed.resources | default dict) "cluster") >>
+              <<- range $c := (.resource.status.conditions | default list) >>
+                <<- if and (eq $c.type "AllReplicasReady") (eq $c.status "True") >>
+                  <<- $ready = "True" >>
+                <<- end >>
+              <<- end >>
+            <<- end >>
+            apiVersion: rabbitmq.com/v1beta1
+            kind: RabbitmqCluster
+            metadata:
+              name: <<$xrName>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation "cluster">>
+                gotemplating.fn.crossplane.io/ready: <<$ready | quote>>
+                <<- if $allowed >>
+                rabbitmq.com/topology-allowed-namespaces: <<join "," $allowed | quote>>
+                <<- end >>
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              replicas: <<$spec.instances | default 1 | int>>
+              image: rabbitmq:4.2.9-management
+              persistence:
+                storage: <<$spec.storageSize | default "1Gi">>
+              resources:
+                requests:
+                  cpu: <<$cpuReq>>
+                  memory: <<$memReq>>
+                limits:
+                  cpu: <<$cpuLim>>
+                  memory: <<$memLim>>
+              override:
+                statefulSet:
+                  spec:
+                    template:
+                      metadata:
+                        labels:
+                          <<- range $k, $v := $hangarLabels >>
+                          <<$k>>: <<$v | quote>>
+                          <<- end >>
+            ---
+            <<- range $v := ($spec.vhosts | default list) >>
+            apiVersion: rabbitmq.com/v1beta1
+            kind: Vhost
+            metadata:
+              name: <<printf "%s-%s" $xrName $v>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation (printf "vhost-%s" $v)>>
+              labels:
+                <<- range $k, $lv := $hangarLabels >>
+                <<$k>>: <<$lv | quote>>
+                <<- end >>
+            spec:
+              name: <<$v>>
+              rabbitmqClusterReference:
+                name: <<$xrName>>
+            ---
+            <<- end >>
+            # The Topology Operator (rabbitmq-system) reaches the management API on 15672 to create
+            # vhosts/users/permissions; consumer namespaces reach AMQP on 5672. Same-namespace traffic is
+            # already covered by the app baseline policy. The cluster never reports ready if the
+            # operator is blocked, same as CNPG.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: <<printf "%s-rabbitmq-access" $xrName>>
+              namespace: <<$ns>>
+              annotations:
+                <<setResourceNameAnnotation "networkpolicy">>
+                gotemplating.fn.crossplane.io/ready: "True"
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            spec:
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: <<$xrName>>
+              policyTypes:
+                - Ingress
+              ingress:
+                - from:
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: rabbitmq-system
+                  ports:
+                    - protocol: TCP
+                      port: 15672
+                    - protocol: TCP
+                      port: 5672
+                <<- if $allowed >>
+                - from:
+                    <<- range $n := $allowed >>
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: <<$n>>
+                    <<- end >>
+                  ports:
+                    - protocol: TCP
+                      port: 5672
+                <<- end >>
+            ---
+            <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready

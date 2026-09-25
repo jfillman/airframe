@@ -1,0 +1,139 @@
+# Attached-tier Component XRD: RabbitMQ (service-catalog-design.md, Round 2026-09-25).
+# A `components:` entry (`type: rabbitmq`) in an environment's values.yaml, rendered by
+# airframe-application's generic templates/attached/components.yaml.
+#
+# Two modes, because a broker is SHARED (unlike PostgreSQL/Redis, which are dedicated per
+# app-env): flight-api publishes and boarding-api / baggage-api consume, so they must sit on
+# the same broker and the same vhost (nothing crosses a vhost without federation/shovel).
+#
+#   broker  one RabbitmqCluster + its vhosts, in the XR's own namespace. Lives in an
+#           InfraService's gitops repo (skyport-broker). `allowedNamespaces` is the trust
+#           boundary: the RabbitMQ Messaging Topology Operator refuses a User/Permission
+#           from any namespace not in the cluster's `rabbitmq.com/topology-allowed-namespaces`
+#           annotation, and the same list is admitted to the AMQP port by NetworkPolicy.
+#   attach  a User + Permission in the CONSUMER's own namespace that reference the broker
+#           across namespaces. The operator writes the credentials to a Secret
+#           `<xr-name>-user-credentials` (keys username, password) in that namespace, so an
+#           app reads them with `env` `valueFrom` - no copy through Infisical. A ConfigMap
+#           `<xr-name>-connection` carries host, port and vhost.
+#
+# Permissions are generated from names, never written as raw regexes (least privilege by
+# construction). Binding a queue to an exchange needs `write` on the queue and `read` on the
+# exchange, and declaring an exchange needs `configure` on it; tested live:
+#   queuePrefix "boarding"  -> configure/write/read on queues named boarding.*
+#   publish: [flights.events] -> configure + write on that exchange
+#   consume: [flights.events] -> read on that exchange (to bind a queue to it)
+#
+# Needs the RabbitMQ Cluster Operator + Messaging Topology Operator (and cert-manager) on
+# the cluster: 10-crds-operators/rabbitmq-operators in the cluster's gitops repo.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: rabbitmqs.catalog.idp.io
+spec:
+  group: catalog.idp.io
+  names:
+    kind: RabbitMQ
+    plural: rabbitmqs
+    singular: rabbitmq
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - environmentRef
+                - mode
+              properties:
+                environmentRef:
+                  type: object
+                  description: >-
+                    Names the owning ApplicationEnvironment (app + cluster + env identity).
+                    Labeling/audit only, not a live lookup. Auto-stamped by
+                    airframe-application's components.yaml renderer.
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                mode:
+                  type: string
+                  description: >-
+                    `broker` runs the shared RabbitMQ cluster; `attach` gets an app a user on
+                    an existing one. See the header.
+                  enum: [broker, attach]
+                # ---- broker mode ----
+                size:
+                  type: string
+                  description: (broker) CPU/memory for each node.
+                  enum: [small, medium, large]
+                  default: small
+                instances:
+                  type: integer
+                  description: >-
+                    (broker) 1 is a single node with no failover. 3 is a quorum-replicated
+                    cluster for real environments (RabbitMQ needs an odd count).
+                  enum: [1, 3]
+                  default: 1
+                storageSize:
+                  type: string
+                  description: (broker) Size of each node's volume (a Kubernetes quantity).
+                  pattern: '^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$'
+                  default: 1Gi
+                vhosts:
+                  type: array
+                  description: >-
+                    (broker) Virtual hosts to create. One per domain (e.g. `flights`): every
+                    app that exchanges messages must share one.
+                  items:
+                    type: string
+                    pattern: '^[a-z][a-z0-9-]{0,62}$'
+                allowedNamespaces:
+                  type: array
+                  description: >-
+                    (broker) Namespaces whose apps may attach (create a user here) and reach
+                    the AMQP port. Everything else is refused/blocked.
+                  items:
+                    type: string
+                # ---- attach mode ----
+                brokerRef:
+                  type: object
+                  description: (attach) The broker XR's RabbitmqCluster - its name and namespace.
+                  required: [name, namespace]
+                  properties:
+                    name:
+                      type: string
+                    namespace:
+                      type: string
+                vhost:
+                  type: string
+                  description: (attach) The vhost this app works in.
+                  pattern: '^[a-z][a-z0-9-]{0,62}$'
+                queuePrefix:
+                  type: string
+                  description: >-
+                    (attach) The app may create, bind and consume queues named
+                    `<queuePrefix>.*`, and no others.
+                  pattern: '^[a-z][a-z0-9-]{0,62}$'
+                publish:
+                  type: array
+                  description: (attach) Exchanges the app may declare and publish to.
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9._-]+$'
+                consume:
+                  type: array
+                  description: >-
+                    (attach) Exchanges the app may bind its queues to (read). It cannot
+                    publish to them.
+                  items:
+                    type: string
+                    pattern: '^[a-zA-Z0-9._-]+$'
+          required: ["spec"]

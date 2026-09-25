@@ -107,10 +107,28 @@ spec:
             <<- if hasKey $spec "persistence" >>
               <<- $persistence = $spec.persistence >>
             <<- end >>
+            # Every hangar.io/* label on the XR (app, env, cluster, component-type, ...) is copied
+            # onto the Release AND passed to the chart as commonLabels, so `kubectl get all -l
+            # hangar.io/app=<app>` finds the cache's StatefulSet/Service/Secret/Pod too, not just the
+            # XR. The chart stamps these on the XR; nothing below the Release inherited them before
+            # (checked live: only Helm's app.kubernetes.io/name=redis). commonLabels on chart 19.0.2
+            # labels every object and the pod template but NOT the StatefulSet selector (checked with
+            # helm template), so it is safe on an existing install. Only hangar.io/* is copied: the
+            # XR's app.kubernetes.io/* labels describe the APP, and would collide with the chart's own.
+            <<- $hangarLabels := dict >>
+            <<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
+              <<- if hasPrefix "hangar.io/" $k >>
+                <<- $_ := set $hangarLabels $k $v >>
+              <<- end >>
+            <<- end >>
             apiVersion: helm.m.crossplane.io/v1beta1
             kind: Release
             metadata:
               name: <<$xrName>>
+              labels:
+                <<- range $k, $v := $hangarLabels >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
               annotations:
                 <<setResourceNameAnnotation "release">>
             spec:
@@ -139,6 +157,10 @@ spec:
                     registry: docker.io
                     repository: bitnamilegacy/redis
                     tag: 7.2.4-debian-12-r9
+                  commonLabels:
+                    <<- range $k, $v := $hangarLabels >>
+                    <<$k>>: <<$v | quote>>
+                    <<- end >>
                   architecture: standalone
                   auth:
                     enabled: true

@@ -146,8 +146,31 @@
         "required": ["name"],
         "properties": {
           "name": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-          "value": { "type": "string" }
-        }
+          "value": { "type": "string" },
+          "valueFrom": {
+            "description": "Pass-through of a container env valueFrom. Use secretKeyRef to read a Secret already in this namespace, e.g. the <name>-app Secret a PostgreSQL component creates.",
+            "type": "object",
+            "minProperties": 1,
+            "properties": {
+              "secretKeyRef": {
+                "type": "object",
+                "required": ["name", "key"],
+                "properties": { "name": { "type": "string", "minLength": 1 }, "key": { "type": "string", "minLength": 1 }, "optional": { "type": "boolean" } }
+              },
+              "configMapKeyRef": {
+                "type": "object",
+                "required": ["name", "key"],
+                "properties": { "name": { "type": "string", "minLength": 1 }, "key": { "type": "string", "minLength": 1 }, "optional": { "type": "boolean" } }
+              },
+              "fieldRef": {
+                "type": "object",
+                "required": ["fieldPath"],
+                "properties": { "fieldPath": { "type": "string", "minLength": 1 } }
+              }
+            }
+          }
+        },
+        "not": { "required": ["value", "valueFrom"] }
       }
     },
 

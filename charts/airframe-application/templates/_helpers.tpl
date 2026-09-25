@@ -176,7 +176,9 @@ airframe-application.componentKind/batchContainer's own image-fallback check.
 
 {{/*
 airframe-application.workloadEnv - the container env list shared by every workload
-(main Rollout container, every jobs:/cronJobs: entry): .Values.env verbatim, plus
+(main Rollout container, every jobs:/cronJobs: entry): .Values.env verbatim (an entry
+carries either `value` or `valueFrom` - e.g. a secretKeyRef to a Secret a component such as
+PostgreSQL already created in this namespace, so nothing has to be copied into Infisical), plus
 one secretKeyRef entry per .Values.secrets entry whose `as` (default: env)
 includes env (see external-secret.yaml - same `app-secrets` target Secret, `key`
 field means the container-facing env var name here). Factored out so Job/CronJob
@@ -189,7 +191,11 @@ Usage: {{ $env := fromYamlArray (include "airframe-application.workloadEnv" $) }
 {{- define "airframe-application.workloadEnv" -}}
 {{- $env := list -}}
 {{- range .Values.env -}}
+{{- if .valueFrom -}}
+{{- $env = append $env (dict "name" .name "valueFrom" .valueFrom) -}}
+{{- else -}}
 {{- $env = append $env (dict "name" .name "value" (.value | toString)) -}}
+{{- end -}}
 {{- end -}}
 {{- range .Values.secrets -}}
 {{- $as := include "airframe-application.resolveAs" (dict "entry" . "default" "env") -}}

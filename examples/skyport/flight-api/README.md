@@ -73,6 +73,6 @@ The image is built for `linux/arm64` and `linux/amd64`. Java bytecode is the sam
 `build.sh` compiles **once, natively**, in the pipeline's Java agent, and the `Containerfile` only
 copies the jar into a JRE image. Do not compile inside the Containerfile (the scaffold's default):
 the amd64 leg runs under QEMU emulation on the arm64 build node, and Maven on a JVM there took
-over 15 minutes and was still running, versus about 30 seconds for the packaging-only leg.
+about 11 minutes (the whole two-leg image took about 17), versus about 30 seconds for the packaging-only leg.
 `FROM --platform=$BUILDPLATFORM` does not help on this platform's builder (kaniko ignores it).
 Set `build.script: ./build.sh` in `cicd.yaml` to use this shape. Leave `build.platforms` alone.

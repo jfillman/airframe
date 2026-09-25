@@ -132,7 +132,7 @@ in Skyport has to run on both:
   build stage reported `x86_64` and `BUILDPLATFORM` was empty). Compile in `build.script`
   instead, natively in the build agent, and keep the Containerfile a thin packaging step.
   `flight-api` does this; the scaffold's Java Containerfile, which compiles inside the image
-  build, was still running after 15 minutes for the emulated leg.
+  build, took about 11 minutes for the emulated leg (about 17 for the whole image).
   `boarding-api` has no native dependencies. `flight-api` and `baggage-api` must
   avoid ones without both wheels or classifiers.
 - **Component charts.** Every image a wrapped upstream chart pulls has to be a

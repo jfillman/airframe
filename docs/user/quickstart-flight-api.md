@@ -31,7 +31,8 @@ split; it links back to the section that explains each.
 - **Verified:** the build. `build.sh` compiles in the exact Java agent image in about 30 seconds, the
   thin image built from it starts, migrates and answers against a real PostgreSQL, and its emulated
   amd64 packaging leg was timed on the cluster's builder at about 30 seconds. (The scaffold's
-  in-Containerfile Maven build was still running after 15 minutes under emulation, which is why this
+  in-Containerfile Maven build did finish, but took about 17 minutes under emulation (the amd64 leg alone
+  took 11 minutes), which is why this
   guide replaces it.)
 - **Not verified:** this exact walkthrough — creating the app in Tower, the pipeline, and the
   deploy — has not been walked end to end. Where a step turns out wrong, this guide is corrected.
@@ -112,8 +113,9 @@ and the Maven Wrapper (`mvnw`, `.mvn/`). Keep `cicd.yaml` for now; you change it
 
 **Why the `Containerfile` is replaced (unlike part 1).** The scaffold's Java `Containerfile`
 compiles the app inside the image build. That build runs for two architectures, and the amd64 leg
-runs under QEMU emulation on the arm64 build node, where Maven on a JVM took over 15 minutes and
-was still going, while the native arm64 build finished in about five. Java bytecode is identical on
+runs under QEMU emulation on the arm64 build node, where Maven on a JVM took about 11 minutes,
+while the native arm64 leg took about five (the two legs run one after the other, so about 17
+minutes in all). Java bytecode is identical on
 both architectures, so the fix is to compile **once, natively**, and let only a tiny packaging
 step run per architecture: `build.sh` compiles inside the pipeline's Java agent, and the new
 `Containerfile` just copies the jar into a JRE image. Measured: the emulated amd64 packaging leg
@@ -420,7 +422,7 @@ Deleting this environment deletes its database and both volumes.
 - **Database name equals role name** — the component enforces it.
 - **Deleting the environment deletes the database.** It's dedicated, and its volume goes with it.
 - **Build Java with `build.script`, not in the Containerfile.** The amd64 image leg runs under emulation; a
-  Maven build there is 15+ minutes, the packaging-only leg is ~30 s.
+  Maven build there took ~11 minutes (17 for the whole image), the packaging-only leg ~30 s.
 - **Add probes after the first deploy**, not before: `rollout` must stay `null` until the deploy
   stage has written an image.
 - **Cross-namespace traffic needs a rule.** Namespaces deny ingress from other namespaces by

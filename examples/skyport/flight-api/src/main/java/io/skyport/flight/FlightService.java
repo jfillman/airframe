@@ -1,10 +1,14 @@
 package io.skyport.flight;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
@@ -19,9 +23,17 @@ public class FlightService {
     static final int MAX_DELAY_MINUTES = 240;
 
     private final FlightStore store;
+    private final FlightEventPublisher publisher;
+
+    @Autowired
+    public FlightService(FlightStore store, FlightEventPublisher publisher) {
+        this.store = store;
+        this.publisher = publisher;
+    }
 
     public FlightService(FlightStore store) {
-        this.store = store;
+        this(store, message -> {
+        });
     }
 
     public List<Flight> all() {
@@ -50,7 +62,9 @@ public class FlightService {
         }
         store.setGate(f.flightNumber(), g);
         store.addEvent(f.flightNumber(), "GATE_CHANGED", f.gate() + " -> " + g);
-        return get(f.flightNumber());
+        Flight after = get(f.flightNumber());
+        publishAfterCommit(after, "GATE_CHANGED", f.gate() + " -> " + g);
+        return after;
     }
 
     @Transactional
@@ -64,9 +78,31 @@ public class FlightService {
             return f;
         }
         store.setDelay(f.flightNumber(), minutes);
-        store.addEvent(f.flightNumber(), minutes == 0 ? "DELAY_CLEARED" : "DELAYED",
-                f.delayMinutes() + " -> " + minutes + " min");
-        return get(f.flightNumber());
+        String type = minutes == 0 ? "DELAY_CLEARED" : "DELAYED";
+        String detail = f.delayMinutes() + " -> " + minutes + " min";
+        store.addEvent(f.flightNumber(), type, detail);
+        Flight after = get(f.flightNumber());
+        publishAfterCommit(after, type, detail);
+        return after;
+    }
+
+    /**
+     * Only once the change is committed: a rolled-back change must not be announced. Outside a
+     * transaction (unit tests) it publishes at once.
+     */
+    private void publishAfterCommit(Flight f, String type, String detail) {
+        FlightMessage message = new FlightMessage(f.flightNumber(), type, detail, f.gate(), f.delayMinutes(),
+                Instant.now());
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    publisher.publish(message);
+                }
+            });
+        } else {
+            publisher.publish(message);
+        }
     }
 
     private static String normalise(String flightNumber) {

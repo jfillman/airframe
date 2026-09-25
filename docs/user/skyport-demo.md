@@ -109,7 +109,7 @@ Each phase ends with something you can run. Nothing later than Phase 1 is built.
 |---|---|---|---|
 | 0 | `boarding-api` (NodeJS) + Redis + canary UI — [quickstart](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Deployed on the dev cluster with Redis.** The canary and flight environment are the parts not yet walked. |
 | 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [quickstart part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Code written and tested against a real Postgres, and boarding-api verified against it. Not yet deployed through Airframe.** |
-| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Component built and verified on the dev cluster; not yet on kind-prod. No app uses it yet.** |
+| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` not started. Not yet on kind-prod.** |
 | 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
 | 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |

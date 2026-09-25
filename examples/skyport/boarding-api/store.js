@@ -19,6 +19,7 @@ function memoryStore() {
       data.set(k, v);
       if (ttlSeconds) expiry.set(k, Date.now() + ttlSeconds * 1000);
     },
+    async del(k) { data.delete(k); expiry.delete(k); },
     async incr(k) {
       const n = (live(k) ? Number(data.get(k)) : 0) + 1;
       data.set(k, String(n));
@@ -40,6 +41,7 @@ async function redisStore(url) {
     get: (k) => client.get(k),
     set: (k, v, ttl) => (ttl ? client.set(k, v, { EX: ttl }) : client.set(k, v)),
     incr: (k) => client.incr(k),
+    del: (k) => client.del(k),
     close: () => client.quit().catch(() => {}),
   };
 }

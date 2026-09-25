@@ -22,6 +22,12 @@ test('whoami reports version and cache mode', () => withApp(async (base) => {
   assert.strictEqual(body.cache, 'memory');
 }));
 
+test('whoami reports the event consumer (off by default)', () => withApp(async (base) => {
+  const body = await (await fetch(`${base}/api/whoami`)).json();
+  assert.strictEqual(body.events, 'off');
+  assert.strictEqual(body.eventsReceived, 0);
+}));
+
 test('second lookup is served from cache without calling reservations', () => withApp(async (base, calls) => {
   const a = await (await fetch(`${base}/api/boarding/ac123`)).json();
   const b = await (await fetch(`${base}/api/boarding/AC123`)).json();

@@ -2,6 +2,7 @@
 const { createApp } = require('./app');
 const { createStore } = require('./store');
 const { flightApiLookup } = require('./reservations');
+const { startConsumer } = require('./events');
 
 (async () => {
   const store = await createStore();
@@ -10,10 +11,12 @@ const { flightApiLookup } = require('./reservations');
   // Unset, the built-in stand-in answers, so the app still runs anywhere.
   const flightApi = process.env.FLIGHT_API_URL;
   const opts = flightApi ? { lookup: flightApiLookup(flightApi), flights: 'flight-api' } : {};
-  const server = createApp({ store, ...opts }).listen(port, () => {
-    console.log(`boarding-api listening on port ${port} (cache: ${store.mode()}, flights: ${opts.flights || 'built-in'})`);
+  // RABBITMQ_HOST set: consume flight events and drop the changed flight from the cache.
+  const events = startConsumer({ store });
+  const server = createApp({ store, events, ...opts }).listen(port, () => {
+    console.log(`boarding-api listening on port ${port} (cache: ${store.mode()}, flights: ${opts.flights || 'built-in'}, events: ${events.mode()})`);
   });
-  const stop = () => server.close(() => store.close().then(() => process.exit(0)));
+  const stop = () => server.close(() => events.close().then(() => store.close()).then(() => process.exit(0)));
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
 })();

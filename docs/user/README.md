@@ -15,6 +15,7 @@ API, run `kubectl apply`, or touch a Helm chart directly.
 |---|---|
 | [quickstart.md](quickstart.md) | You're creating a new service and want it running, with an environment on each tier, in the next twenty minutes. |
 | [quickstart-flight-api.md](quickstart-flight-api.md) | You want a service that owns a database: a Spring Boot app with PostgreSQL, credentials read from the component's Secret, and a call from part 1's gate board. |
+| [quickstart-broker.md](quickstart-broker.md) | You want services to talk through a shared message broker: provisioning RabbitMQ as an `InfraService`, then attaching a publisher and a consumer with least-privilege access. |
 
 For the platform architecture underneath this guide — every XRD's inputs/outputs,
 the composition graph, the plumbing — see [../admin/architecture.md](../admin/architecture.md).

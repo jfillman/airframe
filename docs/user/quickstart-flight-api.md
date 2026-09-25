@@ -329,8 +329,8 @@ curl -s -X PUT -H 'Content-Type: application/json' -d '{"gate":"B2"}' localhost:
 
 Look up `AC123` on the gate board again: it still shows the **old gate**, from the cache. It'll
 be right after the three-minute TTL. Waiting for a TTL to expire is the wrong way to keep a gate
-board accurate — the fix is for flight-api to publish `flight.gate-changed` and for boarding-api to
-evict the entry, which is Phase 2 of [Skyport](skyport-demo.md). The `flight_events` table is
+board accurate — the fix is for flight-api to publish `flight.gate_changed` and for boarding-api to
+evict the entry, which is Phase 2 of [Skyport](skyport-demo.md) and [part 3](quickstart-broker.md). The `flight_events` table is
 already there for that: every gate change is written to it in the same transaction as the change.
 
 ## 07 — Flight: the same service on `kind-prod`

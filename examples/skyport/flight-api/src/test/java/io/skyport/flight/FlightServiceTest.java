@@ -25,6 +25,33 @@ class FlightServiceTest {
     }
 
     @Test
+    void aChangeIsPublishedWithTheFlightsStateAfterIt() {
+        java.util.List<FlightMessage> sent = new java.util.ArrayList<>();
+        FlightService withBroker = new FlightService(store, sent::add);
+
+        withBroker.changeGate("ac123", "b2");
+        withBroker.delay("WS410", 45);
+
+        assertThat(sent).hasSize(2);
+        assertThat(sent.get(0).routingKey()).isEqualTo("flight.AC123.gate_changed");
+        assertThat(sent.get(0).gate()).isEqualTo("B2");
+        assertThat(sent.get(0).detail()).isEqualTo("A1 -> B2");
+        assertThat(sent.get(1).routingKey()).isEqualTo("flight.WS410.delayed");
+        assertThat(sent.get(1).delayMinutes()).isEqualTo(45);
+    }
+
+    @Test
+    void noChangeAndRejectedChangesPublishNothing() {
+        java.util.List<FlightMessage> sent = new java.util.ArrayList<>();
+        FlightService withBroker = new FlightService(store, sent::add);
+
+        withBroker.changeGate("AC123", "A1");
+        assertThatThrownBy(() -> withBroker.changeGate("AC123", "Z99")).isInstanceOf(ResponseStatusException.class);
+
+        assertThat(sent).isEmpty();
+    }
+
+    @Test
     void movingToTheSameGateIsANoOpWithNoEvent() {
         service.changeGate("AC123", "A1");
 

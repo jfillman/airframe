@@ -7,6 +7,7 @@ nav:
       - Overview: user/README.md
       - Quickstart: user/quickstart.md
       - 'Quickstart part 2: a database': user/quickstart-flight-api.md
+      - 'Quickstart part 3: a message broker': user/quickstart-broker.md
       - Skyport demo system: user/skyport-demo.md
       - Decommissioning an app: user/decommission-app.md
   - Admin guide:

@@ -236,18 +236,38 @@ same file (adding them earlier would make `rollout` non-null with no image):
 ```yaml
 rollout:
   image: { … }          # keep what the deploy stage wrote
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }   # a JVM starts CPU-bound; see below
+    limits: { memory: 1Gi }                  # memory only: no CPU limit, or startup is throttled
   readinessProbe:
     httpGet: { path: /actuator/health/readiness, port: 8080 }
-    initialDelaySeconds: 20
+    initialDelaySeconds: 30
     periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
   livenessProbe:
-    httpGet: { path: /actuator/health/liveness, port: 8080 }
+    httpGet: { path: /actuator/health/liveness, port: 8080 }   # NOT /readiness
     initialDelaySeconds: 60
     periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6
 ```
 
 Readiness is what makes the pod wait for the database: it isn't sent traffic until Postgres
 answers.
+
+**The liveness probe must use `/actuator/health/liveness`, not `/readiness`.** Readiness includes
+the database, so pointing liveness at it means a brief database or CPU stall makes the pod look
+*dead*, and Kubernetes kills and restarts a healthy pod. This was hit for real: both dev pods
+restarted 5–6 times (exit 137, `Liveness probe failed` events) until the path was corrected, after
+which the same pods started in 24–33 seconds and stayed up.
+
+**Give it a CPU request.** Spring Boot's startup is CPU-bound. Pods without a request are
+`BestEffort` and get the lowest possible CPU priority. On an idle node they still started in 24–33
+seconds, but while a pipeline build shared the node the same pods had not finished starting after
+about 100 seconds, so a probe with a short budget kills them mid-start. (That link is inferred
+from those timings; it was not isolated with a controlled test.) `timeoutSeconds: 5` also matters:
+the default of 1 second fails whenever the JVM is briefly busy.
 
 **See it.**
 
@@ -363,12 +383,19 @@ below):
 rollout:
   replicas: 2
   ports: [{ name: http, containerPort: 8080 }]
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
   readinessProbe:
     httpGet: { path: /actuator/health/readiness, port: 8080 }
-    initialDelaySeconds: 20
+    initialDelaySeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
   livenessProbe:
-    httpGet: { path: /actuator/health/liveness, port: 8080 }
+    httpGet: { path: /actuator/health/liveness, port: 8080 }   # NOT /readiness
     initialDelaySeconds: 60
+    timeoutSeconds: 5
+    failureThreshold: 6
 
 components:
   - type: postgresql
@@ -423,6 +450,7 @@ Deleting this environment deletes its database and both volumes.
 - **Deleting the environment deletes the database.** It's dedicated, and its volume goes with it.
 - **Build Java with `build.script`, not in the Containerfile.** The amd64 image leg runs under emulation; a
   Maven build there took ~11 minutes (17 for the whole image), the packaging-only leg ~30 s.
+- **Liveness is `/actuator/health/liveness`, never `/readiness`**, and give the pod a CPU request. Symptom of getting it wrong: the pod restarts repeatedly (exit 137, `Liveness probe failed`) though the database is fine.
 - **Add probes after the first deploy**, not before: `rollout` must stay `null` until the deploy
   stage has written an image.
 - **Cross-namespace traffic needs a rule.** Namespaces deny ingress from other namespaces by

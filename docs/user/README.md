@@ -14,6 +14,7 @@ API, run `kubectl apply`, or touch a Helm chart directly.
 | Doc | Read this when... |
 |---|---|
 | [quickstart.md](quickstart.md) | You're creating a new service and want it running, with an environment on each tier, in the next twenty minutes. |
+| [quickstart-flight-api.md](quickstart-flight-api.md) | You want a service that owns a database: a Spring Boot app with PostgreSQL, credentials read from the component's Secret, and a call from part 1's gate board. |
 
 For the platform architecture underneath this guide — every XRD's inputs/outputs,
 the composition graph, the plumbing — see [../admin/architecture.md](../admin/architecture.md).

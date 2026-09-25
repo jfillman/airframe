@@ -10,16 +10,17 @@ Airframe's XRDs and versioned alongside them, while `hangar` is the docs umbrell
 Each service directory is what you copy into the source repo Airframe scaffolds for
 you (see the [quickstart](quickstart.md), section 03).
 
-> **Status.** Only `boarding-api` (Phase 0) exists. Everything else is a plan. The
-> components it depends on — Postgres, RabbitMQ, MongoDB, OAuth server — are
-> **unbuilt** in Airframe today; each phase below lists what has to be built first.
+> **Status.** `boarding-api` (Phase 0) and `flight-api` (Phase 1) exist. Everything else is a
+> plan. The components the later phases depend on — RabbitMQ, MongoDB, OAuth server — are
+> **unbuilt** in Airframe today; each phase below lists what has to be built first. Postgres
+> is built: a dedicated CloudNativePG cluster per app environment.
 
 ## The five services
 
 | Service | Airframe stack | Components | What it does |
 |---|---|---|---|
 | **boarding-api** | `NodeJSApplication` | Redis · RabbitMQ (consumer) | The passenger-facing **gate board**: flight/gate lookups, boarding-pass scans, and the canary visualizer. Caches lookups in Redis. |
-| **flight-api** | `SpringBootApplication` | Postgres · RabbitMQ (producer) · OAuth (resource server) | System of record for flights and gates. A scheduled simulator delays flights and changes gates, publishing an event each time. |
+| **flight-api** | `SpringBootApplication` | Postgres · RabbitMQ (producer) · OAuth (resource server) | System of record for flights and gates. A scheduled simulator delays flights and changes gates, recording an event each time (published to the broker from Phase 2). |
 | **baggage-api** | `PythonApplication` | RabbitMQ (consumer) · MongoDB | Tracks each bag's journey as a document. Consumes flight events to re-route bags when a gate changes. |
 | **skyport-auth** | `InfraService` | `oauth-server` | The OIDC provider. Issues the tokens `flight-api` and `baggage-api` validate. |
 | **skyport-broker** | `InfraService` | `rabbitmq` | The shared message broker `flight-api`, `baggage-api` and `boarding-api` all attach to. |
@@ -78,7 +79,7 @@ two unrelated consumers of one fact, which is exactly what a queue is for.
 | Component | Used by | Demonstrates |
 |---|---|---|
 | Redis | boarding-api | Cache-aside with TTL, shared counters across replicas |
-| Postgres | flight-api | A relational system of record, schema migration on deploy |
+| Postgres | flight-api | A relational system of record, schema migration on deploy, credentials read straight from the component's Secret |
 | RabbitMQ | flight-api → boarding-api, baggage-api | Fan-out events; a shared broker via `InfraService` |
 | MongoDB | baggage-api | Document storage that doesn't fit rows |
 | OAuth server | flight-api, baggage-api, boarding-api | Service-to-service tokens; one issuer for the platform |
@@ -102,12 +103,12 @@ same way: the bar flips from 100% v1 to 100% v2 at promotion instead of ramping.
 
 ## Phases
 
-Each phase ends with something you can run. Nothing later than Phase 0 is built.
+Each phase ends with something you can run. Nothing later than Phase 1 is built.
 
 | Phase | Adds | Must exist first | Status |
 |---|---|---|---|
-| 0 | `boarding-api` (NodeJS) + Redis + canary UI — the quickstart | Redis component, `provider-helm` on the target cluster | **Code written and tested locally, including against a real Redis. Not yet deployed through Airframe.** |
-| 1 | `flight-api` (Spring) + Postgres; boarding-api calls it | `postgresql` component XRD | Planned |
+| 0 | `boarding-api` (NodeJS) + Redis + canary UI — [quickstart](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Deployed on the dev cluster with Redis.** The canary and flight environment are the parts not yet walked. |
+| 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [quickstart part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Code written and tested against a real Postgres, and boarding-api verified against it. Not yet deployed through Airframe.** |
 | 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component; a decision on shared-vs-dedicated brokers | Planned |
 | 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
 | 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |

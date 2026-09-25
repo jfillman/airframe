@@ -83,7 +83,9 @@ $('f').onsubmit = async (e) => {
   const major = parseInt(b.version, 10);
   $('out').innerHTML = row('flight', b.flight) + row('gate', b.gate) + row('to', b.destination) + row('departs', b.departs)
     + (major >= 2 ? row('boarding group', b.group) : '')
-    + row('source', b.cached ? '<span class="hit">cache hit</span>' : '<span class="miss">reservations (slow)</span>')
+    + (b.status ? row('status', b.status + (b.delayMinutes ? ' (+' + b.delayMinutes + ' min)' : '')) : '')
+    + row('source', b.cached ? '<span class="hit">cache hit</span>'
+      : '<span class="miss">' + (b.source === 'flight-api' ? 'flight-api (Postgres)' : 'reservations (built-in, slow)') + '</span>')
     + row('latency', b.latencyMs + ' ms') + row('answered by', 'v' + b.version);
 };
 $('scan').onclick = async () => {

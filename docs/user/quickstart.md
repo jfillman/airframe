@@ -408,25 +408,16 @@ components:
     spec: { size: small, persistence: false }   # environmentRef is stamped for you
 env:
   - { name: REDIS_URL, value: "redis://cache-master:6379" }
-secrets:
-  - name: redis-password      # read from this app's Infisical project
-    key: REDIS_PASSWORD       # the env var boarding-api reads
+  # The password is in the Secret the component creates, named after it (here `cache`).
+  # Read it directly - there is nothing to copy into Infisical.
+  - name: REDIS_PASSWORD
+    valueFrom: { secretKeyRef: { name: cache, key: redis-password } }
 ```
 
-(Keep the `rollout:` block the deploy stage wrote; only add the keys above.)
-
-### The one manual step
-
-Wiring the Redis connection Secret into your app **is not built** — the
-Composition's own header says so. `secrets:` entries read from Infisical by name, not
-from arbitrary Kubernetes Secrets. So copy the password across once:
-
-```bash
-kubectl get secret cache -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d
-```
-
-Add it to `boarding-api`'s Infisical project as `redis-password`. (The host and port
-are already in `REDIS_URL` above.)
+(Keep the `rollout:` block the deploy stage wrote; only add the keys above. `env:` entries with
+`valueFrom` need airframe v0.3.88 or later. On an older pin, the alternative is to copy the
+password once into `boarding-api`'s Infisical project as `redis-password` and list it under
+`secrets:` — `kubectl get secret cache -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d`.)
 
 ### See it
 

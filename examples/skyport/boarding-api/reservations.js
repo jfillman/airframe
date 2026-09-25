@@ -25,4 +25,38 @@ async function lookupFlight(code, delayMs = 400) {
   };
 }
 
-module.exports = { lookupFlight };
+class FlightLookupError extends Error {
+  constructor(message, status) { super(message); this.status = status; }
+}
+
+// The real system of record: flight-api (Spring Boot + Postgres). Same result shape as
+// lookupFlight above, plus the live status, so the gate board can use either one.
+// A missing flight is a 404 for the caller; anything else (down, slow, malformed) is a 502 -
+// never a made-up answer, and never cached (app.js caches only what this returns).
+function flightApiLookup(baseUrl, { timeoutMs = 3000, fetchImpl = fetch } = {}) {
+  const base = baseUrl.replace(/\/+$/, '');
+  return async (code) => {
+    let res;
+    try {
+      res = await fetchImpl(`${base}/api/flights/${encodeURIComponent(code)}`, { signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      throw new FlightLookupError(`flight-api unreachable: ${err.message}`, 502);
+    }
+    if (res.status === 404) throw new FlightLookupError('no such flight', 404);
+    if (!res.ok) throw new FlightLookupError(`flight-api answered ${res.status}`, 502);
+    const f = await res.json();
+    return {
+      flight: f.flight,
+      gate: f.gate,
+      destination: f.destination,
+      departs: f.estimatedDeparture,
+      status: f.status,
+      delayMinutes: f.delayMinutes,
+      capacity: f.capacity,
+      group: f.group,
+      source: 'flight-api',
+    };
+  };
+}
+
+module.exports = { lookupFlight, flightApiLookup, FlightLookupError };

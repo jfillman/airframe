@@ -10,7 +10,7 @@ const FLIGHT = /^[A-Z]{2}\d{1,4}$/;
 const CACHE_TTL_SECONDS = 180;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
 
-function createApp({ store, version = pkg.version, lookup = lookupFlight, publicDir = path.join(__dirname, 'public') }) {
+function createApp({ store, version = pkg.version, lookup = lookupFlight, flights = 'built-in', publicDir = path.join(__dirname, 'public') }) {
   const json = (res, code, body, extra = {}) => {
     res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...extra });
     res.end(JSON.stringify(body));
@@ -37,7 +37,7 @@ function createApp({ store, version = pkg.version, lookup = lookupFlight, public
       if (url.pathname === '/api/whoami') {
         return json(res, 200, {
           service: 'boarding-api', version, pod: process.env.HOSTNAME || os.hostname(),
-          cache: store.mode(),
+          cache: store.mode(), flights,
         }, { Connection: 'close' });
       }
 
@@ -69,7 +69,7 @@ function createApp({ store, version = pkg.version, lookup = lookupFlight, public
       }
       json(res, 404, { error: 'not found' });
     } catch (err) {
-      json(res, 500, { error: String(err.message || err) });
+      json(res, err.status || 500, { error: String(err.message || err) });
     }
   });
 }

@@ -116,7 +116,7 @@ artifacts, ask a human and spawn narrower runs. **None of them can apply a chang
 | Event | `disruption-responder` | On `flight.*.delayed` it drafts rebooking notices; a trigger bridge (an Airframe app on the RabbitMQ attach) starts one run per unique message. |
 | Team | `irregular-ops-team` | A planner with researcher, drafter and checker workers, each narrower than its parent. |
 
-Definitions and their tests exist (`clearance/agents/skyport/`, six Checkride cases); the runtime that
+Definitions and their tests exist (`clearance/agents/skyport/`, six Preflight cases); the runtime that
 would run them (Clearance, the `AgentRun` claim, a model proxy) is not built yet. The design, the
 safety demonstrations (prompt injection, redelivered events, an over-broad spawn, a sandbox the dev
 cluster cannot provide) and the build order are in

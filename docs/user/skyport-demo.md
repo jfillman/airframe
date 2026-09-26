@@ -11,7 +11,7 @@ Each service directory is what you copy into the source repo Airframe scaffolds 
 you (see the [quickstart](quickstart.md), section 03).
 
 > **Status.** `boarding-api` (Phase 0) and `flight-api` (Phase 1) exist. Everything else is a
-> plan. The components the later phases depend on — RabbitMQ, MongoDB, OAuth server — are
+> plan (six AI-workload phases were added 2026-09-26, see below). The components the later phases depend on — RabbitMQ, MongoDB, OAuth server — are
 > **unbuilt** in Airframe today; each phase below lists what has to be built first. Postgres
 > is built: a dedicated CloudNativePG cluster per app environment.
 
@@ -101,6 +101,28 @@ two unrelated consumers of one fact, which is exactly what a queue is for.
 The [quickstart](quickstart.md) walks a real canary with it. Blue/green works the
 same way: the bar flips from 100% v1 to 100% v2 at promotion instead of ramping.
 
+## AI workloads: one per workload shape
+
+Planned 2026-09-26. Skyport also runs six AI agents, one for each shape Autopilot supports, so every
+part of it has a real caller and a test that can fail. They read Skyport's APIs, draft, store
+artifacts, ask a human and spawn narrower runs. **None of them can apply a change.**
+
+| Shape | Agent | What it does |
+|---|---|---|
+| Task | `flight-briefer` | An ops brief for one flight from the three APIs. |
+| Session | `gate-copilot` | A chat in Tower for a gate agent; drafts announcements, never sends. |
+| Service | `passenger-assistant` | Always-on flight-status chat for passengers. An ordinary application. |
+| Scheduled | `delay-digest` | A daily delays and gate-changes report. |
+| Event | `disruption-responder` | On `flight.*.delayed` it drafts rebooking notices; a trigger bridge (an Airframe app on the RabbitMQ attach) starts one run per unique message. |
+| Team | `irregular-ops-team` | A planner with researcher, drafter and checker workers, each narrower than its parent. |
+
+Definitions and their tests exist (`clearance/agents/skyport/`, six Checkride cases); the runtime that
+would run them (Clearance, the `AgentRun` claim, a model proxy) is not built yet. The design, the
+safety demonstrations (prompt injection, redelivered events, an over-broad spawn, a sandbox the dev
+cluster cannot provide) and the build order are in
+[hangar/docs/autopilot/skyport-ai-workloads.md](https://github.com/jfillman/hangar/blob/main/docs/autopilot/skyport-ai-workloads.md).
+Diagram: `hangar/docs/autopilot/diagrams/plan/07-skyport-ai-workloads.html`.
+
 ## Phases
 
 Each phase ends with something you can run. Nothing later than Phase 1 is built.
@@ -113,6 +135,16 @@ Each phase ends with something you can run. Nothing later than Phase 1 is built.
 | 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
 | 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |
+| 6 | **First agent: `flight-briefer`** (task) | Autopilot core: Clearance, `AgentRun`, a model proxy | Planned; not started |
+| 7 | **`gate-copilot`** (session) | session channel and Tower's Agent tab | Planned |
+| 8 | **`passenger-assistant`** (service) | the chart's `agent:` block; a Redis attach | Planned |
+| 9 | **`delay-digest`** (scheduled) | trigger runner, artifact store | Planned |
+| 10 | **`disruption-responder`** (event) | trigger bridge on the RabbitMQ attach | Planned |
+| 11 | **`irregular-ops-team`** (team) | `run.spawn`, approvals | Planned |
+
+Phases 6 to 11 are numbered in the order they will be built, and slot in after phases 3 and 4 because
+the agents read `baggage-api`. Phase 5 (nginx) moves after them. The unified plan is
+[hangar/docs/autopilot/roadmap.md](https://github.com/jfillman/hangar/blob/main/docs/autopilot/roadmap.md).
 
 RabbitMQ's questions are settled (shared broker, `provider-rabbitmq` not used). The open
 design questions behind Phases 3–5 — shared vs dedicated tenancy for Mongo, what `nginx`

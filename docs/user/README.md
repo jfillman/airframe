@@ -17,6 +17,11 @@ API, run `kubectl apply`, or touch a Helm chart directly.
 | [quickstart-flight-api.md](quickstart-flight-api.md) | You want a service that owns a database: a Spring Boot app with PostgreSQL, credentials read from the component's Secret, and a call from part 1's gate board. |
 | [quickstart-broker.md](quickstart-broker.md) | You want services to talk through a shared message broker: provisioning RabbitMQ as an `InfraService`, then attaching a publisher and a consumer with least-privilege access. |
 
+Before you commit an env file, run `tools/airframe-validate platform/envs/dev.yaml` from the Airframe repo:
+it catches typos the chart would otherwise silently ignore (`rolout:`, `replcas:`) and bad component
+values (`size: gigantic`). A newly created app renders no workload until its first image is built, so it is
+safe to configure it first. AI agents: start with [`AGENTS.md`](../../AGENTS.md).
+
 For the platform architecture underneath this guide — every XRD's inputs/outputs,
 the composition graph, the plumbing — see [../admin/architecture.md](../admin/architecture.md).
 

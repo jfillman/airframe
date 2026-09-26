@@ -20,6 +20,34 @@ cluster** (a real migration of a real running app off a different mechanism
 entirely) - see "Live-verified on a real cluster" below for what that actually
 covered and the two real bugs it found.
 
+## No workload until an image exists
+
+The chart renders no `Rollout`, `RolloutWatch`, `Service` or `ServiceMonitor` until **both**
+`rollout.image.repository` and `rollout.image.tag` are set (`airframe-application.hasRollout`).
+The shipped defaults leave both empty, so a newly created app that is configured but not yet built
+renders nothing that runs, instead of a Rollout whose image is `":"`. `rollout: null` still means
+"no workload at all" (the `appType: infra` case). Namespace, ServiceAccount, NetworkPolicy and the
+Attached-tier XRs render either way.
+
+## Tests
+
+`tests/run.sh` renders fixtures with `helm template` and asserts which kinds appear (no cluster needed),
+and checks that `tools/airframe-validate` rejects the typo fixtures in `tests/validate/`
+(`rolout:`, `replcas:`, `size: gigantic`) while accepting a real env file. It fails against the
+pre-guard chart. CI runs it (`.github/workflows/airframe-chart-ci.yaml`).
+
+## Validating a values file
+
+```bash
+tools/airframe-validate platform/envs/dev.yaml          # strict keys + XRD check + helm template
+tools/airframe-validate FILE --no-render                # schema only
+```
+
+The values schema itself still accepts unknown keys (the chart ignores them silently), so this tool is
+the check that turns a typo into an error with a hint (`did you mean 'rollout'?`). It also checks
+`components[].spec` against the component's XRD, which the values schema leaves open. Rules:
+`AF-SCHEMA-001` unknown key, `AF-SCHEMA-002` wrong type or value, `AF-RENDER-001` helm failed.
+
 ## What §3 left to this implementation, and what was decided
 
 §3 explicitly deferred chart implementation to "a later session" and flagged a

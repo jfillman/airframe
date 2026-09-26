@@ -418,6 +418,10 @@ functions/
   diagnosis-holmes-dispatch/   Thin Job: hands the investigation off to HolmesGPT
 charts/
   airframe-application/        §3's Embedded+Attached tier chart - one release per (app, cluster, env)
+                               (tests/run.sh: render tests; no workload until rollout.image is set)
+tools/
+  airframe-validate            strict values-file check (unknown keys, XRD component specs) + helm template
+AGENTS.md                      what an AI agent should know, today vs planned
 xrds/
   nodejsapplication.yaml        NodeJSApplication XRD (catalog.idp.io/v1alpha1)
   applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.idp.io/v1alpha1)

@@ -131,7 +131,7 @@ Each phase ends with something you can run. Nothing later than Phase 1 is built.
 |---|---|---|---|
 | 0 | `boarding-api` (NodeJS) + Redis + canary UI — [quickstart](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Deployed on the dev cluster with Redis.** The canary and flight environment are the parts not yet walked. |
 | 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [quickstart part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Code written and tested against a real Postgres, and boarding-api verified against it. Not yet deployed through Airframe.** |
-| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` not started. Not yet on kind-prod.** |
+| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` (Python consumer of `flights.events`, re-routes bags between carousels on a gate change) built and verified on dev on 2026-09-26: a gate change in flight-api moved AC123's bags from carousel 2 to 3 within seconds. Its staging environment is not created yet, and nothing is on kind-prod for it. State is in memory, so it runs one replica until phase 3.** |
 | 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
 | 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |
@@ -165,8 +165,20 @@ in Skyport has to run on both:
   instead, natively in the build agent, and keep the Containerfile a thin packaging step.
   `flight-api` does this; the scaffold's Java Containerfile, which compiles inside the image
   build, took about 11 minutes for the emulated leg (about 17 for the whole image).
-  `boarding-api` has no native dependencies. `flight-api` and `baggage-api` must
+  `boarding-api` has no native dependencies. `baggage-api` is pure Python (pika), so it builds
+  natively on either architecture. `flight-api` and `baggage-api` must
   avoid ones without both wheels or classifiers.
+- **Python images and the scan gate (baggage-api).** `python:3.13-slim` (Debian 13) failed the
+  Trivy gate with 44 HIGH util-linux/acl CVEs that have no fix yet. `python:3.13-alpine` clears the OS
+  findings, but the vendored copies of `msgpack` and `setuptools` inside pip and setuptools then fail it
+  (GHSA-6v7p-g79w-8964, CVE-2025-47273); upgrading does not remove them, so the Containerfile runs
+  `pip uninstall -y setuptools pip` after installing dependencies. The scaffold's `Containerfile` should do
+  the same (a scorecard item).
+- **In-memory state and replicas (baggage-api).** Every replica declares the same queue and they
+  compete for its messages, so with two replicas each holds half of the event history. Run one replica until
+  the state moves to MongoDB (phase 3).
+- **First deploy.** Configure an app before it has an image with `rollout: null` on chart versions before
+  v0.3.91; from v0.3.91 the chart renders no workload until an image exists, so ordinary rollout config is safe.
 - **Component charts.** Every image a wrapped upstream chart pulls has to be a
   multi-arch index. Checked for Redis (Bitnami `redis:latest`: amd64 and arm64);
   **check each new component before it ships** — this is the easiest thing to get

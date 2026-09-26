@@ -58,9 +58,12 @@ all. §3's "Open design question", implemented here per the doc's own stated
 leaning ("optional in the same chart... for mechanism reuse") - an appType: infra
 release that's only a components: block (§ Item 7's standalone-Redis case) sets
 rollout: null (or omits it) and gets no Rollout/Service/HPA/AnalysisTemplate.
+Also false until rollout.image.repository and rollout.image.tag are both set: a
+configured-but-not-yet-built app (the default values ship both empty) renders no
+workload rather than a Rollout whose image is ":" (AF-10a).
 */}}
 {{- define "airframe-application.hasRollout" -}}
-{{- if .Values.rollout -}}true{{- end -}}
+{{- if and .Values.rollout .Values.rollout.image .Values.rollout.image.repository .Values.rollout.image.tag -}}true{{- end -}}
 {{- end -}}
 
 {{/*

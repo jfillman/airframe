@@ -1,0 +1,27 @@
+envName: dev
+rollout:
+  image:
+    repository: ghcr.io/jfillman/boarding-api
+    tag: 1.1.0-8f9acd8
+components:
+  - type: redis
+    name: cache
+    spec: {size: small, persistence: false} # environmentRef is stamped for you
+  - type: rabbitmq
+    name: board-mq # credentials land in Secret board-mq-user-credentials
+    spec:
+      mode: attach
+      brokerRef: {name: skyport-broker, namespace: app-skyport-broker-dev}
+      vhost: flights
+      queuePrefix: boarding # may create, bind and consume queues named boarding.*
+      consume: [flights.events] # may bind them to this exchange, not publish to it
+env:
+  - {name: REDIS_URL, value: "redis://cache-master:6379"}
+  - {name: FLIGHT_API_URL, value: "http://flight-api.app-flight-api-dev.svc.cluster.local:8080"}
+  - {name: RABBITMQ_HOST, valueFrom: {configMapKeyRef: {name: board-mq-connection, key: host}}}
+  - {name: RABBITMQ_VHOST, valueFrom: {configMapKeyRef: {name: board-mq-connection, key: vhost}}}
+  - {name: RABBITMQ_USER, valueFrom: {secretKeyRef: {name: board-mq-user-credentials, key: username}}}
+  - {name: RABBITMQ_PASSWORD, valueFrom: {secretKeyRef: {name: board-mq-user-credentials, key: password}}}
+secrets:
+  - name: redis-password # read from this app's Infisical project
+    key: REDIS_PASSWORD # the env var boarding-api reads

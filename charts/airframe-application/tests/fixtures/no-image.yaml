@@ -1,0 +1,5 @@
+# Configured but not yet built: rollout has ports but the image is unset (AF-10a).
+appName: guard-test
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}

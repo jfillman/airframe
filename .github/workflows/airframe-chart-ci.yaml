@@ -1,0 +1,55 @@
+name: airframe-chart-ci
+
+# AF-10b. Two jobs:
+#  - chart:     helm lint + the render tests in charts/airframe-application/tests (no secrets).
+#  - scorecard: the AI-friendliness scorecard (hangar/tools/airframe-scorecard) compared with
+#               its committed baseline; fails on any regression. It reads the live fleet files,
+#               which live in PRIVATE gitops repos, so it only runs when the FLEET_READ_TOKEN
+#               secret exists. Without it the job skips rather than scoring partial data.
+
+on:
+  pull_request:
+    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", ".github/workflows/airframe-chart-ci.yaml"]
+  push:
+    branches: [main]
+    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**"]
+
+jobs:
+  chart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: pip install pyyaml jsonschema
+      - run: helm lint charts/airframe-application
+        # the chart warns on the empty default name; only real failures matter
+      - run: charts/airframe-application/tests/run.sh
+
+  scorecard:
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.FLEET_READ_TOKEN != '' }}
+    steps:
+      - name: skip without token
+        if: env.HAS_TOKEN != 'true'
+        run: echo "FLEET_READ_TOKEN not set; scorecard skipped (fleet repos are private)."
+      - uses: actions/checkout@v4
+        if: env.HAS_TOKEN == 'true'
+        with: {path: tech/airframe}
+      - uses: azure/setup-helm@v4
+        if: env.HAS_TOKEN == 'true'
+      - name: check out sibling repos
+        if: env.HAS_TOKEN == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
+        run: |
+          cd tech
+          for r in hangar glidepath apron gitops-cluster-dev gitops-cluster-dev-tenants gitops-cluster-kind-prod; do
+            git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/jfillman/${r}.git"
+          done
+      - name: scorecard vs baseline
+        if: env.HAS_TOKEN == 'true'
+        run: |
+          pip install pyyaml
+          B=$(ls tech/hangar/tools/airframe-scorecard/baseline-*.json | sort | tail -1)
+          python3 tech/hangar/tools/airframe-scorecard/scorecard.py --tech tech --baseline "$B"

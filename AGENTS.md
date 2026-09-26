@@ -1,0 +1,45 @@
+# AGENTS.md: Airframe
+
+Airframe is Hangar's service catalog: Crossplane XRDs, compositions and the `airframe-application`
+Helm chart. This file says what is true **today**; items marked *(planned)* do not exist yet
+(see hangar/docs/autopilot/airframe-ai-friendly.md, workstreams AF-1 to AF-10).
+
+## Start here
+1. `charts/airframe-application/values.schema.json` and `values.yaml`: every chart field, its type and default.
+2. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas.
+3. `docs/user/`: the Skyport quickstarts, worked end to end.
+4. *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.validate`, `airframe.explain`.
+
+## The model in five lines
+- **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
+- **Ground** environment: `platform/envs/<env>.yaml` in the app repo, dev cluster only.
+- **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
+- **Components** (Redis, PostgreSQL, RabbitMQ, ...) are entries in `components:` of an environment's values.
+- One GitOps write path. Nothing is applied with `kubectl`.
+
+## Do
+- Validate before you open a PR: `helm template` the chart with your values file, and run `charts/airframe-application/tests/run.sh` if you changed the chart. Unknown keys are **not** rejected by the schema today, so re-read your file for typos (`rolout`, `replcas`): the chart silently ignores them. *(planned: `airframe validate`, strict.)*
+- Reference a component's connection details through the component's documented output. Never hand-write derived names such as `cache-master` or `<name>-connection`.
+- Set `devCluster` from the cluster registry: it is `kind-dev` even though the cluster is called `kiac-dev`.
+- Leave `rollout.image` and release-tracking keys to the pipeline (Glidepath writes them). Change only what a human owns: config, env vars, scaling, components.
+- Read the failure message, change the file, retry at most three times, then stop and report.
+
+## Do not
+- Hand-edit `rollout.image` or `releaseTracking` in a live env file.
+- Use `extraManifests`, `networkPolicy` or `httpRoute` without a human's approval.
+- Put a secret value in `env` or `configMaps`. Secrets are references to Infisical keys.
+- Name an environment after a pipeline stage (`build`, `test`, `deploy`, `release`).
+- Change a shared XRD or composition in place; ArgoCD self-heal reverts it. Test a copy through one XR's `spec.crossplane.compositionRef`.
+- Commit, tag or push to a shared checkout without checking the branch and using a worktree. Humans cut tags.
+
+## Rollout before an image exists
+The chart renders no Rollout, RolloutWatch, Service or ServiceMonitor until both `rollout.image.repository`
+and `rollout.image.tag` are set. A new app is safe to configure before its first build. Tests:
+`charts/airframe-application/tests/run.sh`.
+
+## Verify
+A green pipeline is not verification; the service is. Check that pods are Ready and the endpoint answers,
+and quote what you saw. *(planned: `airframe.verify` runs each component's verify contract.)*
+
+## Errors
+If a chart guard or a check blocks you and you believe it is wrong, say so in the PR. Do not work around it.

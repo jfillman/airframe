@@ -1,0 +1,932 @@
+<!doctype html><html><head><meta charset=utf-8><title>Airframe Quickstart</title><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:       #f2efe9;
+    --paper-2:     #e8e3da;
+    --surface:     #fbfaf7;
+    --ink:         #1b1f24;
+    --muted:       #5b6570;
+    --soft:        #838b93;
+    --rule:        rgba(27,31,36,0.12);
+    --rule-solid:  #c7c2b8;
+    --accent:      #b9791f;
+    --accent-tint: rgba(185,121,31,0.08);
+    --link:        #2e7ba6;
+    --link-tint:   rgba(46,123,166,0.08);
+    --font-sans:  'Geist', system-ui, sans-serif;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+    --font-mono:  'Geist Mono', ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+      --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+      --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+      --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+      --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+    --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+    --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+    --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+    --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+  }
+
+  body { font-family: var(--font-sans); background: var(--paper); color: var(--ink); padding-block: 3.5rem; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 1.5rem; }
+
+  .masthead { margin-bottom: 3rem; max-width: 74ch; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.9rem;
+  }
+  h1 {
+    font-family: var(--font-serif); font-weight: 400; font-size: clamp(2.25rem, 4vw + 1rem, 3.25rem);
+    letter-spacing: -0.01em; line-height: 1.05; color: var(--ink); text-wrap: balance; margin-bottom: 0.9rem;
+  }
+  .masthead .dek { font-size: 1.05rem; line-height: 1.6; color: var(--muted); max-width: 66ch; }
+  .masthead .dek b { color: var(--ink); font-weight: 600; }
+
+  section { margin-bottom: 3.75rem; }
+  .section-head { max-width: 68ch; margin-bottom: 1.5rem; }
+  .section-index { font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 0.6rem; }
+  h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.6rem; color: var(--ink); text-wrap: balance; margin-bottom: 0.6rem; }
+  h3 { font-family: var(--font-sans); font-weight: 600; font-size: 0.95rem; color: var(--ink); margin: 1.4rem 0 0.5rem; }
+  .section-head p, .prose p { font-size: 0.95rem; line-height: 1.65; color: var(--muted); }
+  .prose p + p, .prose ul + p, .prose p + ul { margin-top: 0.75rem; }
+  .prose ul { margin: 0.5rem 0 0.75rem 1.1rem; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
+  .prose li { margin-bottom: 0.3rem; }
+  code, .section-head code { font-family: var(--font-mono); font-size: 0.85em; color: var(--ink); background: var(--paper-2); padding: 0.05em 0.35em; border-radius: 3px; }
+
+  .diagram-container { overflow-x: auto; }
+  svg.diagram { width: 100%; min-width: 780px; display: block; }
+
+  pre {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 1rem 1.1rem; overflow-x: auto; margin: 0.9rem 0; font-family: var(--font-mono);
+    font-size: 0.8rem; line-height: 1.6; color: var(--ink);
+  }
+  pre .c { color: var(--soft); font-style: italic; }
+  .filepath {
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted);
+    letter-spacing: 0.02em; margin-bottom: -0.5rem; display: block;
+  }
+
+  .steps { counter-reset: step; margin-top: 1.5rem; }
+  .step { position: relative; padding: 0 0 2rem 2.75rem; border-left: 1px solid var(--rule); margin-left: 0.9rem; }
+  .step:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: -0.9rem; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: var(--surface); border: 1.5px solid var(--accent); color: var(--accent);
+    font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h3 { margin-top: 0; font-size: 1rem; }
+  .step .tag {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--link); border: 1px solid var(--link); border-radius: 3px;
+    padding: 0.1em 0.45em; margin-left: 0.5rem; vertical-align: middle;
+  }
+  .step .tag.ground { color: var(--muted); border-color: var(--rule-solid); }
+  .step .tag.flight { color: var(--accent); border-color: var(--accent); }
+
+  .cards { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  .cards.c2 { grid-template-columns: 1fr 1fr; }
+  .cards.c3 { grid-template-columns: 1.1fr 1fr 0.95fr; }
+  @media (max-width: 760px) { .cards.c2, .cards.c3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1.15rem 1.25rem; }
+  .card .eyebrow { font-size: 0.6rem; margin-bottom: 0.5rem; }
+  .card-head {
+    display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem; border-bottom: 1px solid var(--rule);
+  }
+  .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .card-dot.accent { background: var(--accent); } .card-dot.link { background: var(--link); }
+  .card-dot.ink { background: var(--ink); } .card-dot.muted { background: var(--muted); }
+  .card h3 { margin: 0; font-size: 0.92rem; }
+  .card p { font-size: 0.83rem; line-height: 1.6; color: var(--muted); }
+  .card ul { list-style: none; font-size: 0.83rem; line-height: 1.65; color: var(--muted); margin: 0; }
+  .card li { padding-left: 0.9rem; position: relative; margin-bottom: 0.25rem; }
+  .card li::before { content: '—'; position: absolute; left: 0; color: var(--rule-solid); }
+  .card b { color: var(--ink); font-weight: 600; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  .compare .panel { border-radius: 8px; padding: 1.4rem; }
+  .compare .panel.ground { background: var(--paper-2); border: 1px solid var(--rule-solid); }
+  .compare .panel.flight { background: var(--accent-tint); border: 1px solid var(--accent); }
+  .compare .panel .label { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.4rem; }
+  .compare .panel.ground .label { color: var(--muted); }
+  .compare .panel.flight .label { color: var(--accent); }
+  .compare .panel h3 { margin: 0 0 0.6rem; font-size: 1.1rem; font-family: var(--font-serif); font-weight: 400; }
+  .compare .panel dl { font-size: 0.83rem; line-height: 1.7; color: var(--muted); }
+  .compare .panel dt { color: var(--ink); font-weight: 600; margin-top: 0.6rem; }
+  .compare .panel dt:first-child { margin-top: 0; }
+  .compare .panel dd { margin: 0; }
+
+  .callout {
+    border-left: 2px solid var(--link); background: var(--link-tint); border-radius: 0 6px 6px 0;
+    padding: 1rem 1.25rem; margin-top: 1.25rem;
+  }
+  .callout p { font-size: 0.88rem; line-height: 1.6; color: var(--ink); }
+  .callout .label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--link); margin-bottom: 0.4rem; }
+
+  .table-scroll { overflow-x: auto; margin-top: 1.5rem; border: 1px solid var(--rule); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 600px; }
+  thead th {
+    text-align: left; font-family: var(--font-mono); font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: var(--paper-2); padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); color: var(--muted); line-height: 1.55; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.name { color: var(--ink); font-weight: 600; font-family: var(--font-sans); white-space: nowrap; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em; color: var(--soft);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  }
+
+  .f-paper{fill:var(--paper);} .f-paper2{fill:var(--paper-2);} .f-surface{fill:var(--surface);}
+  .f-ink{fill:var(--ink);} .f-muted{fill:var(--muted);} .f-soft{fill:var(--soft);}
+  .f-accent{fill:var(--accent);} .f-accenttint{fill:var(--accent-tint);}
+  .f-link{fill:var(--link);} .f-linktint{fill:var(--link-tint);} .f-none{fill:none;}
+  .s-ink{stroke:var(--ink);} .s-muted{stroke:var(--muted);} .s-soft{stroke:var(--soft);}
+  .s-accent{stroke:var(--accent);} .s-link{stroke:var(--link);}
+  .s-rule{stroke:var(--rule);} .s-rulesolid{stroke:var(--rule-solid);} .s-none{stroke:none;}
+  p.prose { font-size: 0.92rem; line-height: 1.65; color: var(--muted); margin-top: 0.6rem; }
+  .step p.prose:first-of-type { margin-top: 0.4rem; }
+  section > h3 { margin-top: 1.6rem; }
+  section > p.prose { max-width: 68ch; }
+</style>
+<div class="wrap">
+
+  <div class="masthead">
+    <p class="eyebrow">Hangar Platform · Airframe · Developer Guide</p>
+    <h1>Airframe Quickstart</h1>
+    <p class="dek">A hands-on walkthrough that ends with a <b>running application</b>: create a
+      service, get its pipeline running, pull in the code, give it a <b>ground</b> environment
+      to iterate in and a <b>flight</b> environment to run in, add a Redis cache, and finish
+      with a real <b>canary</b> rollout you can watch. We build <code>boarding-api</code>, the
+      gate board of Skyport: a small <b>NodeJS</b> service that caches gate lookups in Redis
+      and has a page built to make canary and blue/green deployments visible.</p>
+    <div class="callout">
+      <p class="label">What has and hasn't been verified</p>
+      <p><b>Verified:</b> the app (11 tests, and it ran against a real Redis with two instances
+        sharing one counter). <b>Verified live:</b> create → onboard → ground, and the
+        <b>Redis component</b>: provisioned through the catalog on both clusters, the gate board
+        reports <code>cache: redis</code>, and the password is read straight from the component's
+        Secret. Walking this guide the first time found and fixed real problems (the Redis image,
+        the <code>devCluster</code> name, the labels on the cache's resources), which is why the
+        text names them. <b>Not verified:</b> the canary in section 09.</p>
+    </div>
+    <div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+      <p class="label" style="color:var(--accent)">Two architectures</p>
+      <p>The dev cluster is arm64 and the prod cluster is amd64.
+        Leave <code>build.platforms</code> unset in <code>cicd.yaml</code> so the image is built
+        for both; narrow it and the other cluster gets <code>exec format error</code>.</p>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">01 — GROUND & FLIGHT</p>
+      <h2>Two environments, built by different mechanisms</h2>
+      <p>Every Airframe app can have two kinds of environment, with different owners and
+        different review bars. Hangar calls them <b>ground</b> and <b>flight</b>.</p>
+    </div>
+
+    <div class="compare">
+      <div class="panel ground">
+        <p class="label">Ground</p>
+        <h3>On the ramp</h3>
+        <dl>
+          <dt>What it is</dt>
+          <dd>A disposable environment on the dev cluster.</dd>
+          <dt>Declared in</dt>
+          <dd><code>platform/envs/&lt;name&gt;.yaml</code> in <b>your source repo</b></dd>
+          <dt>Gets its image from</dt>
+          <dd>Your pipeline's <code>deploy</code> stage, <b>committed straight to
+            <code>main</code></b> — no PR</dd>
+          <dt>Configured with</dt>
+          <dd>Editing <code>platform/envs/&lt;name&gt;.yaml</code> by hand</dd>
+          <dt>Cluster</dt>
+          <dd>Dev cluster only</dd>
+        </dl>
+      </div>
+      <div class="panel flight">
+        <p class="label">Flight</p>
+        <h3>Actually flying</h3>
+        <dl>
+          <dt>What it is</dt>
+          <dd>A governed environment on a real upper cluster.</dd>
+          <dt>Declared in</dt>
+          <dd>An <code>ApplicationEnvironment</code> XR, rendering
+            <code>gitops-&lt;app&gt;/&lt;cluster&gt;/&lt;env&gt;/values.yaml</code></dd>
+          <dt>Gets its image from</dt>
+          <dd>Your pipeline's <code>release</code> stage, as a <b>reviewed pull request</b></dd>
+          <dt>Configured with</dt>
+          <dd>Tower's <b>App Configuration</b> tab — each save is a PR</dd>
+          <dt>Cluster</dt>
+          <dd>Any cluster the registry marks <code>type: upper</code></dd>
+        </dl>
+      </div>
+    </div>
+
+    <p class="prose" style="margin-top:1.25rem">Both render through the same Helm chart,
+      <code>airframe-application</code>. "Ground" and "flight" name the <i>tier</i>, not a
+      field value — you'll still type real names like <code>dev</code> and
+      <code>staging</code> below. Here is the whole path:</p>
+
+    <div class="diagram-container">
+      <svg class="diagram" viewBox="0 0 720 852" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-labelledby="flow-title flow-desc">
+        <title id="flow-title">Path from new service to a canary rollout of boarding-api</title>
+        <desc id="flow-desc">A flowchart of six steps: create the app, merge the pipeline
+          onboarding pull request, pull in the code, add a ground environment, add a flight
+          environment, then add a Redis cache and roll out a canary.</desc>
+        <defs>
+          <marker id="fc-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon class="f-muted" points="0 0, 8 3, 0 6"/>
+          </marker>
+        </defs>
+        <rect width="720" height="852" class="f-paper"/>
+        <line x1="360" y1="68" x2="360" y2="104" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="160" x2="360" y2="196" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="252" x2="360" y2="288" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="344" x2="360" y2="380" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="436" x2="360" y2="472" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="528" x2="360" y2="564" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <line x1="360" y1="620" x2="360" y2="656" class="s-muted" stroke-width="1.2" marker-end="url(#fc-arrow)"/>
+        <rect x="280" y="20" width="160" height="48" rx="24" class="f-paper"/>
+        <rect x="280" y="20" width="160" height="48" rx="24" class="f-muted" fill-opacity="0.10" stroke="var(--soft)" stroke-width="1"/>
+        <text x="360" y="48" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">New service</text>
+        <rect x="280" y="104" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="104" width="160" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+        <text x="360" y="128" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Create the app</text>
+        <text x="360" y="144" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">NodeJSApplication · Tower</text>
+        <rect x="280" y="196" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="196" width="160" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+        <text x="360" y="220" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Merge the .tekton PR</text>
+        <text x="360" y="236" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pipelines-as-Code</text>
+        <rect x="280" y="288" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="288" width="160" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+        <text x="360" y="312" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pull in the code</text>
+        <text x="360" y="328" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">examples/skyport/boarding-api</text>
+        <rect x="280" y="380" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="380" width="160" height="56" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+        <text x="360" y="404" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Add a ground env</text>
+        <text x="360" y="420" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">platform/envs/dev.yaml</text>
+        <rect x="280" y="472" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="472" width="160" height="56" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+        <text x="360" y="496" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Add a flight env</text>
+        <text x="360" y="512" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ApplicationEnvironment</text>
+        <rect x="280" y="564" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="564" width="160" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+        <text x="360" y="588" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Add a Redis cache</text>
+        <text x="360" y="604" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">components: [redis]</text>
+        <rect x="280" y="656" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="280" y="656" width="160" height="56" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+        <text x="360" y="680" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Roll out a canary</text>
+        <text x="360" y="696" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">v1 → v2, watched live</text>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">02 — CREATE THE APP</p>
+      <h2>boarding-api: the gate board</h2>
+      <p>A gate screen looks up a flight, <code>boarding-api</code> returns the gate and boarding
+        info, and caches the answer for three minutes so a busy screen doesn't hammer the
+        reservations system. Its page also shows <b>which version answered</b>, which is what
+        makes the canary in section 09 visible.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Tower → Create → NodeJSApplication</h3>
+        <p class="prose">Every Bootstrap-tier stack — NodeJS, Spring Boot, Go, Python,
+          InfraService — is a Backstage Scaffolder template generated from its XRD. Fill in:</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Field</th><th>Value</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Name</td><td><code>boarding-api</code></td></tr>
+              <tr><td class="name">devCluster</td><td><code>dev</code></td></tr>
+              <tr><td class="name">description</td><td>Skyport gate board: Redis-cached flight lookups and a canary visualizer</td></tr>
+              <tr><td class="name">nodeVersion</td><td><code>20</code></td></tr>
+              <tr><td class="name">packageManager</td><td><code>npm</code></td></tr>
+              <tr><td class="name">port</td><td><code>8080</code></td></tr>
+              <tr><td class="name">visibility</td><td><code>private</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose">Submitting opens a PR into <code>gitops-cluster-dev-tenants</code> at
+          <code>tenants/boarding-api/xr-requests/boarding-api.yaml</code>.
+          <b>Merge it</b> — the <code>xr-requests</code> ApplicationSet applies that file to
+          the dev cluster as a <code>NodeJSApplication</code> XR.</p>
+      </div>
+
+      <div class="step">
+        <h3>Check the XR</h3>
+        <pre>$ kubectl get nodejsapplication boarding-api -n app-boarding-api-cicd
+NAME           SYNCED   READY   COMPOSITION                         AGE
+boarding-api   True     True    nodejsapplications.catalog.idp.io   3m</pre>
+        <p class="prose"><code>kubectl describe</code> shows the two custom conditions this
+          catalog adds: <code>DevClusterReady</code> and <code>CicdOnboarded</code> (Glidepath
+          has picked the app up).</p>
+        <p class="prose">Crossplane creates the real <code>boarding-api</code> source repo and an
+          empty <code>gitops-boarding-api</code> repo. The source repo starts with a hello-world
+          <code>index.js</code>, a <code>package.json</code>, a <code>Containerfile</code> and a
+          minimal <code>cicd.yaml</code> (<code>build</code> only, <code>agent: nodejs-20</code>,
+          unit tests off). You have a repo — but no running pipeline, and nothing deployed.</p>
+      </div>
+    </div>
+
+    <div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+      <p class="label" style="color:var(--accent)">Use dev exactly</p>
+      <p>Type <code>dev</code> for <code>devCluster</code>, even if your dev cluster goes by another
+        name. The dev ApplicationSets hard-code <code>cluster: dev</code> when
+        they render an environment's ExternalSecret, so it reads the store
+        <code>&lt;app&gt;-dev</code>. An app created with any other value gets a store
+        named <code>&lt;app&gt;-&lt;that value&gt;</code>, its ExternalSecret never syncs, and its pods sit in
+        <code>CreateContainerConfigError</code>. And never remove <code>dev</code> from the
+        cluster-registry: every existing app is pinned to it, and removing it turns their stores
+        <code>InvalidProviderConfig</code> fleet-wide.</p>
+    </div>
+
+    <div class="callout">
+      <p class="label">Starting over?</p>
+      <p>If a previous <code>boarding-api</code> was decommissioned, finish that first: delete its
+        Infisical projects (<code>boarding-api-dev</code>, <code>boarding-api-prod</code>)
+        and any <code>boarding-api</code> key in the prod cluster's <code>secretstore-provisioner</code>
+        ConfigMap, or the new app tries to adopt a dead project. Move any old local
+        <code>boarding-api</code> checkout out of the way too — section 04 clones into that name.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">03 — PIPELINE ONBOARDING</p>
+      <h2>Merge the .tekton pull request</h2>
+      <p>Pipelines run through Pipelines-as-Code, which reads pipeline definitions from a
+        <code>.tekton/</code> folder in the source repo. You don't write those files —
+        Glidepath does — but they have to get into your repo, and that takes one pull
+        request that you merge.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Find the onboarding PR</h3>
+        <p class="prose">Once the app is registered, Glidepath's onboarding hook notices your
+          repo has no <code>.tekton/onboarding-resync.yaml</code> and opens a PR against
+          <b><code>boarding-api</code></b> (and <code>gitops-boarding-api</code>) adding the
+          generated <code>.tekton/*.yaml</code> files. Find it in GitHub or in Tower's
+          <b>Pull Requests</b> tab.</p>
+      </div>
+      <div class="step">
+        <h3>Merge it</h3>
+        <p class="prose">Until it's merged, pushing to <code>main</code> does nothing — PaC
+          finds no pipeline to run. Once merged, a push runs the scaffolded
+          <code>build</code> stage and publishes a multi-arch image to
+          <code>ghcr.io/&lt;owner&gt;/boarding-api</code>.</p>
+        <p class="prose">These files are never hand-edited. <b>Every later push that changes
+          <code>cicd.yaml</code> opens a fresh PR</b> regenerating <code>.tekton/</code> if
+          anything changed — merge those too. If nothing happens after you push, first check
+          that the platform's GitHub App has access to the repo.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">04 — PULL IN THE CODE</p>
+      <h2>Replace the hello-world with the real app</h2>
+      <p>The real <code>boarding-api</code> lives in the <code>airframe</code> repo under
+        <code>examples/skyport/boarding-api/</code>. Copy it over the scaffold.</p>
+    </div>
+    <pre>git clone https://github.com/jfillman/airframe.git /tmp/airframe
+git clone https://github.com/jfillman/boarding-api.git &amp;&amp; cd boarding-api   <span class="c"># fails if ./boarding-api exists</span>
+
+cp -R /tmp/airframe/examples/skyport/boarding-api/. .
+git add -A &amp;&amp; git commit -m "boarding-api: gate board with Redis-backed lookups"</pre>
+    <p class="prose">This overwrites <code>index.js</code> and <code>package.json</code> and adds
+      <code>app.js</code>, <code>store.js</code>, <code>reservations.js</code>, <code>public/</code>,
+      <code>test/</code> and <code>test.sh</code>. <b>Keep the scaffolded
+      <code>Containerfile</code></b> and, for now, <code>cicd.yaml</code> — you change it in
+      section 06 and push then. Try it locally first:</p>
+    <pre>npm install &amp;&amp; npm test        <span class="c"># 6 passing</span>
+PORT=8080 node index.js        <span class="c"># open http://localhost:8080</span></pre>
+    <p class="prose">With no <code>REDIS_URL</code> the header says <code>cache: memory</code>: the
+      app falls back to an in-process store so it runs anywhere. With two replicas each pod keeps
+      its own counts — the exact problem Redis fixes in section 08.</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td class="name"><code>GET /</code></td><td>The gate board: flight lookup, boarding-pass scans, version tally</td></tr>
+          <tr><td class="name"><code>GET /api/boarding/:flight</code></td><td>Boarding info for a flight like <code>AC123</code>; cached 3 minutes; reports <code>cached</code> and <code>latencyMs</code></td></tr>
+          <tr><td class="name"><code>POST /api/boarding/:flight/scan</code></td><td>Increments that flight's boarded counter</td></tr>
+          <tr><td class="name"><code>GET /api/whoami</code></td><td>Version, pod and cache mode — what the canary tally polls</td></tr>
+          <tr><td class="name"><code>GET /healthz</code></td><td>Liveness / readiness</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="margin-top:1rem">The cache-aside lookup at the heart of it, from
+      <code>app.js</code>: check the cache, fall back to the slow path on a miss, set a short TTL
+      so a gate change shows up within minutes without an invalidation path.</p>
+    <pre>async function boardingInfo(code) {
+  const key = `boarding:${code}`;
+  const started = Date.now();
+  const hit = await store.get(key).catch(() =&gt; null);
+  if (hit) return { ...JSON.parse(hit), cached: true, latencyMs: Date.now() - started };
+  const info = await lookup(code);                                  <span class="c">// the slow path</span>
+  await store.set(key, JSON.stringify(info), CACHE_TTL_SECONDS).catch(() =&gt; {});  <span class="c">// 180 s</span>
+  return { ...info, cached: false, latencyMs: Date.now() - started };
+}</pre>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">05 — NOTHING IS DEPLOYED YET</p>
+      <h2>The app starts with no deployment</h2>
+      <p>At this point <code>boarding-api</code> has an image and no environment: nothing is
+        running anywhere. Onboarding creates the app, its repos and its pipeline; it does not
+        create a Deployment. Environments are separate objects, added next, and each tier is
+        configured in a different place.</p>
+    </div>
+    <div class="cards c2">
+      <div class="card">
+        <div class="card-head"><span class="card-dot muted"></span><h3>Ground → edit the file yourself</h3></div>
+        <p>You edit <code>platform/envs/dev.yaml</code> in your own repo (section 06). The
+          App Configuration tab can't see ground environments.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot accent"></span><h3>Flight → Tower's App Configuration tab</h3></div>
+        <p>The tab edits <code>gitops-&lt;app&gt;/&lt;cluster&gt;/&lt;env&gt;/values.yaml</code>
+          through pull requests (section 07). It only lists environments your
+          <code>cicd.yaml</code> declares under <code>deploy.upperEnvironments</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">06 — GROUND</p>
+      <h2>A running environment on the dev cluster</h2>
+      <p>A ground environment is two things: a file that creates the namespace, and a
+        pipeline stage that puts an image in it.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Declare the environment</h3>
+        <span class="filepath">boarding-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+        <pre># envName, not env — env is a reserved key in the chart's container env-var list.
+# rollout: null must be explicit — omitting it makes the chart render its own
+# default rollout with an empty image (two InvalidImageName pods).
+envName: dev
+rollout: null</pre>
+        <p class="prose">A dev-cluster-only <code>ApplicationSet</code>
+          (<code>boarding-api-lower-envs</code>) watches <code>platform/envs/*.yaml</code> in
+          your repo. Within a sync interval you get an empty namespace,
+          <code>app-boarding-api-dev</code>, with the baseline ServiceAccount and
+          NetworkPolicy and no workload.</p>
+      </div>
+
+      <div class="step">
+        <h3>Let the pipeline deploy to it</h3>
+        <p class="prose">Replace the scaffolded <code>cicd.yaml</code> with a flow that builds,
+          tests and deploys to <code>dev</code>:</p>
+        <span class="filepath">boarding-api/cicd.yaml <span class="tag ground">ground</span></span>
+        <pre>apiVersion: platform/v1
+kind: PipelineConfig
+
+build:
+  agent: nodejs-20
+  unitTest:
+    enabled: true         # runs ./test.sh, which the code you copied in provides
+
+deploy:
+  lowerEnvironments: [dev]
+
+pipelines:
+  ci:
+    trigger: { source: git, event: push, branch: main }
+    steps:
+      - stage: build
+      - stage: test
+        env: dev
+      - stage: deploy
+        env: dev</pre>
+      </div>
+
+      <div class="step">
+        <h3>Commit both files, merge the .tekton PR</h3>
+        <p class="prose">Changing <code>cicd.yaml</code> triggers section 03's resync: a new PR
+          regenerates <code>.tekton/</code>. Merge it. Separately, ArgoCD reads the new
+          <code>cicd.yaml</code> and provisions the deploy RBAC for
+          <code>app-boarding-api-dev</code>.</p>
+      </div>
+
+      <div class="step">
+        <h3>Run it, then look at it</h3>
+        <p class="prose">Push to <code>main</code>. The <code>deploy</code> stage
+          <b>commits <code>rollout.image.repository</code> and <code>rollout.image.tag</code>
+          directly into <code>platform/envs/dev.yaml</code> on <code>main</code></b> — no
+          branch, no PR. <code>git pull</code> before your next push, or you'll be rebasing
+          over the bot's commit.</p>
+        <span class="filepath">platform/envs/dev.yaml after the first deploy</span>
+        <pre>envName: dev
+rollout:
+  image:
+    repository: ghcr.io/jfillman/boarding-api
+    tag: 0.1.0-a1b2c3d</pre>
+        <p class="prose">Chart defaults cover the rest: two replicas, port <code>8080</code> named
+          <code>http</code>, no probes.</p>
+        <pre>kubectl port-forward -n app-boarding-api-dev svc/boarding-api 8080:8080</pre>
+        <p class="prose">Open <code>http://localhost:8080</code>. Look up <code>AC123</code> twice:
+          the second answer is a <b>cache hit</b>, a few milliseconds instead of ~400. Press
+          <b>Scan a boarding pass</b> several times: the counter jumps around, because the two
+          pods each count on their own (<code>counter: memory</code>). Keep that in mind for
+          section 08. To change ground settings, edit <code>platform/envs/dev.yaml</code>
+          directly.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">07 — FLIGHT</p>
+      <h2>A governed environment on an upper cluster</h2>
+      <p>Four steps: declare the environment in <code>cicd.yaml</code>, create the
+        <code>ApplicationEnvironment</code>, configure it in Tower, then release an image
+        into it.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Declare it in cicd.yaml</h3>
+        <p class="prose">The <code>release</code> stage supplies the image to a flight env, and
+          Tower's App Configuration tab builds its environment list from
+          <code>upperEnvironments</code>:</p>
+        <span class="filepath">boarding-api/cicd.yaml — additions <span class="tag flight">flight</span></span>
+        <pre>deploy:
+  lowerEnvironments: [dev]
+  upperEnvironments:
+    - { name: staging, cluster: prod }
+
+governance:
+  allowedCommitSigners:
+    - you@example.com   # with no signers every release fails the
+                        # commit-signature gate
+
+pipelines:
+  ci:
+    trigger: { source: git, event: push, branch: main }
+    steps:
+      - stage: build
+      - stage: test
+        env: dev
+      - stage: deploy
+        env: dev
+      - stage: release
+        env: staging</pre>
+        <p class="prose">Merge the <code>.tekton/</code> PR this push opens. Glidepath's
+          <code>examples/04-multi-env-promotion.yaml</code> and
+          <code>10-production-grade.yaml</code> show the governance options.</p>
+      </div>
+
+      <div class="step">
+        <h3>Tower → Create → ApplicationEnvironment</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Name</td><td><code>boarding-api-prod-staging</code></td><td>The XR's own name. Convention is <code>&lt;app&gt;-&lt;cluster&gt;-&lt;env&gt;</code>, as with every existing env.</td></tr>
+              <tr><td class="name">Namespace</td><td><code>app-boarding-api-cicd</code></td><td>The app's tenant namespace. The <code>xr-requests</code> AppProject only permits this one.</td></tr>
+              <tr><td class="name">Owner</td><td><code>group:default/jfillman</code></td><td>Same as every existing env.</td></tr>
+              <tr><td class="name">appName</td><td><code>boarding-api</code></td><td>Required. Labels the env and drives a deletion-protection <code>Usage</code> on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist.</td></tr>
+              <tr><td class="name">cluster</td><td><code>prod</code></td><td>Required. Live-checked against the cluster registry: must be <code>type: upper</code> and <code>crossplaneReady</code>. A dev cluster is rejected — the XR reports <code>ClusterReady: False</code> and creates nothing.</td></tr>
+              <tr><td class="name">env</td><td><code>staging</code></td><td>Required. A DNS label, max 20 characters (<code>^[a-z0-9]([-a-z0-9]*[a-z0-9])?$</code>) — it becomes part of the namespace <code>app-boarding-api-staging</code> and a git path.</td></tr>
+              <tr><td class="name">configMapGenerator</td><td>off</td><td>Opt-in to a Kustomize <code>configMapGenerator</code> source for this env's config files. Leave off unless you need it.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose">The Crossplane Settings page can stay at its defaults. Submitting
+          opens a PR into <code>gitops-cluster-dev-tenants</code>
+          (<code>tenants/boarding-api/xr-requests/boarding-api-prod-staging.yaml</code>).
+          Merge it. Crossplane commits a bootstrap <code>values.yaml</code> to
+          <code>gitops-boarding-api/prod/staging/</code> and an onboarding entry to
+          <code>prod</code>'s own tenants repo, so <b>the prod cluster's own ArgoCD</b> picks
+          the env up — no cross-cluster credential is involved.</p>
+        <pre>$ kubectl get applicationenvironment -n app-boarding-api-cicd
+NAME                             SYNCED   READY   COMPOSITION                              AGE
+boarding-api-prod-staging   True     True    applicationenvironments.catalog.idp.io   2m</pre>
+        <p class="prose"><code>kubectl describe</code> shows <code>ClusterReady: True</code> and
+          <code>WorkloadDeployed: False</code>. The bootstrap file is <code>rollout: null</code>:
+          a namespace, no workload.</p>
+      </div>
+
+      <div class="step">
+        <h3>Configure it: Tower → boarding-api → App Configuration</h3>
+        <p class="prose">Pick environment <code>staging</code>. The active environment is shown
+          prominently at the top; check it before saving. Turn on the <b>Deployment</b> switch —
+          an env with <code>rollout: null</code> deploys no Rollout, Service, HPA or PDB — and
+          fill in:</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Section</th><th>For boarding-api</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Deployment</td><td>On</td></tr>
+              <tr><td class="name">Scaling</td><td>Replicas <code>4</code> (a canary splits by pod count, so four gives readable 25% steps)</td></tr>
+              <tr><td class="name">Resources</td><td>Requests <code>100m</code> / <code>128Mi</code>, limits <code>500m</code> / <code>256Mi</code></td></tr>
+              <tr><td class="name">Service</td><td>Port name <code>http</code>, containerPort <code>8080</code></td></tr>
+              <tr><td class="name">Health checks</td><td>Liveness and readiness: HTTP GET <code>/healthz</code> on <code>8080</code></td></tr>
+              <tr><td class="name">Canary steps</td><td>Leave the default, or build a weight / pause / analysis sequence</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="prose"><b>Save</b> opens a pull request into <code>gitops-boarding-api</code> —
+          never a direct commit, in any environment. The tab validates the change against the
+          chart's own <code>values.schema.json</code> first. Merge the PR. There is no image
+          field: the image comes from the release pipeline in the next step, so until it runs
+          the Rollout has no image to start.</p>
+      </div>
+
+      <div class="step">
+        <h3>Release an image</h3>
+        <p class="prose">Push to <code>main</code>. After <code>build</code>, <code>test</code>
+          and <code>deploy</code> to dev, the <code>release</code> stage opens a PR against
+          <code>gitops-boarding-api</code> setting <code>rollout.image</code> for
+          <code>staging</code>. Merge it as a <b>signed</b> commit — GitHub's merge button
+          produces an unsigned one (see Glidepath's <code>docs/admin/commit-signing.md</code>,
+          "Merge strategy matters"). The prod cluster's ArgoCD syncs it, and
+          <code>WorkloadDeployed</code> flips to <code>True</code> once a real Rollout exists.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">08 — REDIS</p>
+      <h2>Adding a Redis cache</h2>
+      <p>Verified live: the component has been provisioned on both clusters and the gate board
+        reads and writes through it. It needed one platform fix on the way: Bitnami removed its
+        versioned images, so the Composition now pins the last chart and image that still pull.</p>
+    </div>
+
+    <h3>What kind of thing is Redis?</h3>
+    <p class="prose">Redis is an <b>Attached-tier component</b>: not a Bootstrap object (no Create
+      form) and not an Embedded setting. You add one by putting an entry in the
+      <code>components:</code> list of an environment's values. The chart renders it into a
+      <code>Redis</code> XR, whose Composition renders a <code>provider-helm</code>
+      <code>Release</code> of Bitnami's <code>redis</code> chart: standalone, one instance per
+      entry, password-protected, in your app's namespace.</p>
+
+    <h3>Where it can work</h3>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Cluster</th><th>provider-helm</th><th>Redis XRD</th></tr></thead>
+        <tbody>
+          <tr><td class="name">dev (arm64)</td><td>installed, healthy</td><td>installed</td></tr>
+          <tr><td class="name">prod (amd64)</td><td>installed, healthy</td><td>installed</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="prose" style="margin-top:0.75rem">Both tiers have what they need, both clusters run
+      airframe v0.3.83 (which includes the Redis naming fix), and every image involved is
+      multi-arch.</p>
+
+    <h3>Ground: add it to platform/envs/dev.yaml</h3>
+    <p class="prose">Name the component anything; we use <code>cache</code>. The Composition sets
+      the chart's <code>fullnameOverride</code> to that name, so the Service is
+      <code>cache-master</code> and the password Secret is <code>cache</code>. (Before v0.3.79
+      the name had to be <code>redis</code>; every cluster is past that now.)</p>
+    <span class="filepath">platform/envs/dev.yaml — additions <span class="tag ground">ground</span></span>
+    <pre>components:
+  - type: redis
+    name: cache
+    spec: { size: small, persistence: false }   # environmentRef is stamped for you
+env:
+  - { name: REDIS_URL, value: "redis://cache-master:6379" }
+  # The password is in the Secret the component creates, named after it (here `cache`).
+  - name: REDIS_PASSWORD
+    valueFrom: { secretKeyRef: { name: cache, key: redis-password } }</pre>
+    <p class="prose">Keep the <code>rollout:</code> block the deploy stage wrote; only add these
+      keys.</p>
+
+    <h3>Nothing to copy</h3>
+    <p class="prose">The component creates a Secret named after itself, and the container reads its
+      password from it directly with <code>valueFrom.secretKeyRef</code>. There is no step where you
+      copy the password into Infisical. This needs airframe <b>v0.3.88 or later</b>; on an older
+      pin the fallback is to copy it once into <code>boarding-api</code>'s Infisical project as
+      <code>redis-password</code> and list it under <code>secrets:</code>.</p>
+    <p class="prose">Everything the component creates carries <code>hangar.io/app=boarding-api</code>, so one
+      selector finds the app and its cache together:</p>
+    <pre>kubectl get all,pvc,secret,cm -n app-boarding-api-dev -l hangar.io/app=boarding-api</pre>
+
+    <h3>See it</h3>
+    <p class="prose">Once the pods restart, the header says <code>cache: redis</code>. Scan a
+      boarding pass repeatedly: the counter now climbs by exactly one each time, whichever pod
+      answers — and survives a pod restart if you set <code>persistence: true</code>.</p>
+
+    <div class="callout">
+      <p class="label">Shared Redis: not supported yet</p>
+      <p>One Redis serving several apps is not a feature of this catalog: <code>Redis</code> has
+        no attach mode, and a standalone <code>InfraService</code> hosting the instance is
+        unproven. Skyport's plan uses <code>InfraService</code> for RabbitMQ and the OAuth
+        server once those components exist.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">09 — CANARY</p>
+      <h2>Roll out a new version and watch it split</h2>
+      <p>The gate board polls <code>/api/whoami</code> twice a second and draws a bar of
+        <b>which version answered</b>; the header colour comes from that version. Version 2 also
+        adds a "boarding group" line to lookups, so a canary changes behaviour as well as colour.
+        Unverified: no canary has been run with this app.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <h3>Start with v1 in flight</h3>
+        <p class="prose">Section 07 done, image released. Port-forward to the staging Service and
+          open the board: one solid bar, <code>v1.0.0: 100%</code>.</p>
+      </div>
+      <div class="step">
+        <h3>Make v2</h3>
+        <p class="prose">Set <code>"version": "2.0.0"</code> in <code>package.json</code>, commit
+          and push to <code>main</code>. The pipeline builds, tests, deploys to dev and opens a
+          release PR for <code>staging</code>; merge it as a signed commit.</p>
+      </div>
+      <div class="step">
+        <h3>Watch the canary</h3>
+        <p class="prose">The Rollout doesn't replace v1; it steps. With the default canary steps
+          and four replicas the bar goes from all-v1 to about a quarter v2, then half, then all.
+          The chart has no traffic router, so the split is by <b>pod count</b>, not request
+          weight. A step that pauses without a duration waits for you.</p>
+        <pre>kubectl argo rollouts get rollout boarding-api -n app-boarding-api-staging --watch
+kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   <span class="c"># if paused</span></pre>
+        <p class="prose">Press <b>Reset tally</b> between steps to see the current mix rather than
+          a running average. Look up <code>AC123</code>: only v2 pods show the boarding-group
+          line, and <code>answered by</code> names the version you got.</p>
+      </div>
+      <div class="step">
+        <h3>Blue/green, or roll back</h3>
+        <p class="prose">Set the env's <code>rollout.strategy: blueGreen</code> and the chart
+          renders two Services, <code>boarding-api</code> (active) and
+          <code>boarding-api-preview</code>. Port-forward to the preview to see v2 at 100% while
+          active still shows v1; after promotion the bar flips in one step. To roll back, abort
+          the rollout or revert the release PR.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">THE FINISHED SHAPE</p>
+      <h2>What's running when you're done</h2>
+      <p>Each environment carries its own Redis cache. Flight runs four replicas that a new
+        release steps through. The dashed box is the canary, which hasn't been run yet.</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg class="diagram" viewBox="0 0 1000 380" xmlns="http://www.w3.org/2000/svg" role="img"
+           aria-labelledby="final-title final-desc">
+        <title id="final-title">The finished boarding-api topology</title>
+        <desc id="final-desc">Tower creates a ground environment on the dev cluster and a flight
+          environment on the prod cluster. In each, boarding-api reads and writes a Redis cache component.
+          The flight environment runs four replicas for a canary that has not yet been run.</desc>
+        <defs>
+          <marker id="fn-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon class="f-muted" points="0 0, 8 3, 0 6"/>
+          </marker>
+          <marker id="fn-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+            <polygon class="f-accent" points="0 0, 8 3, 0 6"/>
+          </marker>
+        </defs>
+        <rect width="1000" height="380" class="f-paper"/>
+
+        <rect x="40" y="120" width="440" height="140" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+        <rect x="52" y="124" width="96" height="12" class="f-paper"/>
+        <text x="56" y="133" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">DEV CLUSTER</text>
+
+        <rect x="520" y="120" width="440" height="140" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+        <rect x="532" y="124" width="120" height="12" class="f-paper"/>
+        <text x="536" y="133" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">PROD · UPPER</text>
+
+        <path d="M460,76 V105 Q460,113 452,113 H144 Q136,113 136,121 V148"
+              fill="none" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#fn-arrow)"/>
+        <path d="M540,76 V105 Q540,113 548,113 H608 Q616,113 616,121 V148"
+              fill="none" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#fn-arrow)"/>
+        <rect x="478" y="82" width="44" height="13" rx="2" class="f-paper"/>
+        <text x="500" y="92" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">CREATE</text>
+
+        <line x1="216" y1="186" x2="304" y2="186" class="s-accent" stroke-width="1.4" marker-end="url(#fn-arrow-accent)"/>
+        <rect x="232" y="164" width="56" height="13" rx="2" class="f-paper"/>
+        <text x="260" y="174" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">GET / SET</text>
+        <line x1="696" y1="186" x2="784" y2="186" class="s-accent" stroke-width="1.4" marker-end="url(#fn-arrow-accent)"/>
+        <rect x="712" y="164" width="56" height="13" rx="2" class="f-paper"/>
+        <text x="740" y="174" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">GET / SET</text>
+
+        <rect x="420" y="20" width="160" height="56" rx="6" class="f-paper"/>
+        <rect x="420" y="20" width="160" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+        <text x="500" y="44" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tower</text>
+        <text x="500" y="59" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">create app + envs</text>
+
+        <rect x="56" y="148" width="160" height="76" rx="6" class="f-paper"/>
+        <rect x="56" y="148" width="160" height="76" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+        <text x="136" y="176" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">boarding-api</text>
+        <text x="136" y="192" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">ground · 2 replicas</text>
+        <text x="136" y="208" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">app-boarding-api-dev</text>
+
+        <rect x="304" y="148" width="160" height="76" rx="6" class="f-paper"/>
+        <rect x="304" y="148" width="160" height="76" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1"/>
+        <text x="384" y="176" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis</text>
+        <text x="384" y="192" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cache-master:6379</text>
+        <text x="384" y="208" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">component · verified</text>
+
+        <rect x="536" y="148" width="160" height="76" rx="6" class="f-paper"/>
+        <rect x="536" y="148" width="160" height="76" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="616" y="176" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">boarding-api</text>
+        <text x="616" y="192" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">flight · staging</text>
+        <text x="616" y="208" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">4 replicas · canary</text>
+
+        <rect x="784" y="148" width="160" height="76" rx="6" class="f-paper"/>
+        <rect x="784" y="148" width="160" height="76" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1"/>
+        <text x="864" y="176" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis</text>
+        <text x="864" y="192" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cache-master:6379</text>
+        <text x="864" y="208" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">component · verified</text>
+
+        <line x1="40" y1="300" x2="960" y2="300" class="s-rule" stroke-width="0.8"/>
+        <line x1="40" y1="322" x2="68" y2="322" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#fn-arrow)"/>
+        <text x="76" y="325" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Provisioning (Tower)</text>
+        <line x1="240" y1="322" x2="268" y2="322" class="s-accent" stroke-width="1.4" marker-end="url(#fn-arrow-accent)"/>
+        <text x="276" y="325" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Runtime traffic</text>
+        <rect x="440" y="316" width="14" height="10" rx="2" class="f-surface" stroke="var(--accent)" stroke-width="1" stroke-dasharray="3,3"/>
+        <text x="460" y="325" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Canary not yet run</text>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-head">
+      <p class="section-index">CHEAT SHEET</p>
+      <h2>What will actually bite you</h2>
+    </div>
+    <div class="cards c2">
+      <div class="card">
+        <div class="card-head"><span class="card-dot accent"></span><h3>Merge the .tekton PR</h3></div>
+        <p>After creating the app, and again after every <code>cicd.yaml</code> change. No merge,
+          no pipeline.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot accent"></span><h3>Nothing is deployed after onboarding</h3></div>
+        <p>Ground needs <code>platform/envs/dev.yaml</code> plus a <code>deploy</code> stage.
+          Flight needs an <code>ApplicationEnvironment</code>, App Configuration and a
+          <code>release</code> stage.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot link"></span><h3>Keep the scaffolded Containerfile</h3></div>
+        <p>Copy the demo code over the scaffold, but keep its <code>Containerfile</code> and
+          don't narrow <code>build.platforms</code>.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot link"></span><h3>Ground deploys commit to main</h3></div>
+        <p>The pipeline writes the image into <code>platform/envs/dev.yaml</code> itself —
+          <code>git pull</code> before you push.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot ink"></span><h3>envName, never env; rollout: null</h3></div>
+        <p>In <code>platform/envs/*.yaml</code>, <code>env:</code> collides with the chart's
+          reserved key, and <code>rollout: null</code> must be explicit.</p>
+      </div>
+      <div class="card">
+        <div class="card-head"><span class="card-dot ink"></span><h3>Flight rules</h3></div>
+        <p>App Configuration only lists envs from <code>deploy.upperEnvironments</code>;
+          <code>ApplicationEnvironment</code> rejects dev clusters; merge release PRs as signed
+          commits. Redis is a component: its Service is <code>&lt;name&gt;-master</code> and its
+          password is read with <code>valueFrom</code>. A canary splits by pod count, so use four
+          replicas.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Airframe Quickstart · Hangar platform · developer guide</span>
+    <span>Companion to: Airframe Service Catalog · revised 2026-09-24</span>
+  </footer>
+
+</div>
+
+</body></html>

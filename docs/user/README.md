@@ -38,4 +38,4 @@ See [quickstart.md](quickstart.md#01--ground--flight) for the full comparison.
 
 This guide also exists as a fully illustrated, interactive walkthrough with worked
 diagrams — same content, richer format:
-**[Airframe Quickstart](https://claude.ai/artifact/WDPmWSD9BMBGurFzqATDWG)**
+**[Airframe Quickstart](html/quickstart.html)**

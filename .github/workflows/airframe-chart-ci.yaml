@@ -1,7 +1,10 @@
 name: airframe-chart-ci
 
-# AF-10b. Two jobs:
-#  - chart:     helm lint + the render tests in charts/airframe-application/tests (no secrets).
+# AF-10b, AF-2. Two jobs:
+#  - chart:     helm lint + the render tests in charts/airframe-application/tests (no secrets),
+#               plus the AF-2 gates: values.yaml is generated from values.schema.json and must
+#               never drift (--check), description coverage must stay >= 95%, and the compiled
+#               schema must still validate cleanly (0% typo acceptance).
 #  - scorecard: the AI-friendliness scorecard (hangar/tools/airframe-scorecard) compared with
 #               its committed baseline; fails on any regression. It reads the live fleet files,
 #               which live in PRIVATE gitops repos, so it only runs when the FLEET_READ_TOKEN
@@ -24,6 +27,7 @@ jobs:
       - run: helm lint charts/airframe-application
         # the chart warns on the empty default name; only real failures matter
       - run: charts/airframe-application/tests/run.sh
+      - run: python3 tools/gen_airframe_schema.py --check --coverage
 
   scorecard:
     runs-on: ubuntu-latest
@@ -44,12 +48,19 @@ jobs:
           GH_TOKEN: ${{ secrets.FLEET_READ_TOKEN }}
         run: |
           cd tech
-          for r in hangar glidepath apron gitops-cluster-dev gitops-cluster-dev-tenants gitops-cluster-kind-prod; do
+          for r in hangar glidepath apron gitops-cluster-dev gitops-cluster-dev-tenants gitops-cluster-kind-prod \
+                   flight-api baggage-api boarding-api \
+                   gitops-flight-api gitops-baggage-api gitops-boarding-api gitops-infra-skyport-broker; do
             git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/jfillman/${r}.git"
           done
       - name: scorecard vs baseline
         if: env.HAS_TOKEN == 'true'
         run: |
-          pip install pyyaml
+          pip install pyyaml jsonschema
           B=$(ls tech/hangar/tools/airframe-scorecard/baseline-*.json | sort | tail -1)
           python3 tech/hangar/tools/airframe-scorecard/scorecard.py --tech tech --baseline "$B"
+      - name: AF-2 mutation test against the live fleet
+        if: env.HAS_TOKEN == 'true'
+        run: |
+          pip install pyyaml jsonschema
+          cd tech/airframe && python3 tools/test_af2_mutations.py

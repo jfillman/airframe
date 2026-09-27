@@ -1,26 +1,69 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "airframe-application values",
-  "description": "Structural validation for this chart's values.yaml, matching the schema documented inline in values.yaml (idp/docs/service-catalog-design.md §3 plus this chart's own additions). Deliberately loose (additionalProperties: true / bare object|array) on every field that's an intentional raw passthrough escape hatch in the chart itself - rollout.steps, rollout.canaryAnalysis, rollout.blueGreen, rollout.podSpec, rollout.extraContainers, cronJobs[].*, jobs[].*, extraManifests, components[].spec - since those are meant to accept arbitrary shapes the chart doesn't validate either. Everything else is validated as strictly as the chart's own comments document it.",
+  "description": "The single source of truth for this chart's values shape (AF-2). values.yaml is GENERATED from this file by tools/gen_airframe_schema.py --write-values (defaults + these descriptions become its comments) - never hand-edit values.yaml, edit this file and regenerate. additionalProperties:false is baked directly into every object below except the escape hatches the chart deliberately leaves as raw passthroughs: rollout.steps, rollout.canaryAnalysis, rollout.blueGreen, rollout.podSpec, rollout.podSecurityContext, rollout.containerSecurityContext, rollout.extraContainers[], cronJobs[].containerSecurityContext, jobs[].containerSecurityContext, analysisTemplates[].metrics[], networkPolicy.extraIngressRules/extraEgressRules, components[].spec (validated separately, per-type, by the compiled schema - see airframe_schema.compiled_schema()), componentKinds (a lookup map), releaseTracking (opaque, written by platform-cicd), and extraManifests[] (raw Kubernetes objects). Everything else rejects an unknown key.",
   "type": "object",
+  "additionalProperties": false,
   "properties": {
-    "appName": { "type": "string" },
-    "appType": { "type": "string", "enum": ["app", "infra"] },
-    "cluster": { "type": "string" },
-    "envName": { "type": "string" },
-    "devClusterName": { "type": "string" },
-
+    "appName": {
+      "type": "string",
+      "description": "This application's name. Used as the Helm release name's basis, the default ServiceAccount name, and the default databaseName for a PostgreSQL component. A DNS-1123 label: lowercase alphanumeric and hyphens, must start and end with an alphanumeric.",
+      "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+      "default": ""
+    },
+    "appType": {
+      "type": "string",
+      "enum": [
+        "app",
+        "infra"
+      ],
+      "description": "app runs a workload (Rollout); infra provisions components/environments only (naming-conventions.md's existing distinction).",
+      "default": "app"
+    },
+    "cluster": {
+      "type": "string",
+      "description": "Which cluster this release runs on. Not in the original service-catalog design's schema block - the chart needs it to know its own identity (e.g. to compare against devClusterName below), and the ApplicationEnvironment composition that commits this file already knows it.",
+      "default": ""
+    },
+    "envName": {
+      "type": "string",
+      "description": "The environment name (dev, staging, prod, or a PR number). Named envName, not env, because env is already this schema's top-level container env-var list - a same-named field would collide in one flat values map.",
+      "default": ""
+    },
+    "devClusterName": {
+      "type": "string",
+      "description": "The name of this fleet's dev cluster, compared against `cluster` to decide dev-vs-upper behavior (e.g. secretsScope). Not the literal cluster context name in every case - see docs/admin - override only if a fleet's dev cluster is ever named something other than kind-dev.",
+      "default": "kind-dev"
+    },
     "namespace": {
       "type": "object",
+      "additionalProperties": false,
+      "description": "Extra labels/annotations stamped on this release's own Namespace object.",
       "properties": {
-        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "e.g. hangar.io/ephemeral-env: \"true\" for the PR-preview TTL sweep selector."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations on this release's Namespace object."
+        }
       }
     },
-
     "release": {
-      "description": "Machine-owned: written by the release pipeline (Glidepath), not by hand. Lives in the release file, never in the human-owned env file. Takes precedence over the deprecated rollout.image.",
-      "type": ["object", "null"],
+      "description": "Machine-owned: written by the release pipeline (Glidepath) into the release file, never by hand in a human-owned env file. Takes precedence over the deprecated rollout.image. No workload renders (Rollout/Service/ServiceMonitor) until both release.image fields are set.",
+      "type": [
+        "object",
+        "null"
+      ],
       "additionalProperties": false,
       "x-hangar-owner": "release",
       "properties": {
@@ -29,450 +72,1484 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "repository": { "type": "string", "description": "Image repository without a tag, e.g. ghcr.io/jfillman/boarding-api." },
-            "tag": { "type": "string", "description": "Image tag." }
+            "repository": {
+              "type": "string",
+              "description": "Image repository without a tag, e.g. ghcr.io/jfillman/boarding-api."
+            },
+            "tag": {
+              "type": "string",
+              "description": "Image tag."
+            }
           }
         }
       }
     },
-
     "releaseTracking": {
-      "description": "Written by platform-cicd's open-release-pr.yaml, not hand-authored. Opaque/loose by design.",
-      "type": ["object", "null"]
+      "description": "Opaque escape hatch, deliberately excluded from the strictness rule: written whole-block by platform-cicd's open-release-pr.yaml (relayUrl, chainId, flowStartTime, appNamespace, etc. - see docs/user for the full field list), never hand-authored. Null when this env hasn't gone through a release pipeline yet.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "default": null
     },
-
     "serviceAccount": {
       "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "create": true,
+        "name": "",
+        "annotations": {},
+        "imagePullSecrets": []
+      },
       "properties": {
-        "create": { "type": "boolean" },
-        "name": { "type": "string" },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether this chart creates the object."
+        },
+        "name": {
+          "type": "string",
+          "description": "Defaults to appName when empty.",
+          "default": ""
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Escape hatch, e.g. a cloud workload-identity annotation.",
+          "default": {}
+        },
         "imagePullSecrets": {
           "type": "array",
+          "description": "Merged with the always-on registry-credentials Secret every namespace already gets via a ClusterExternalSecret.",
+          "default": [],
           "items": {
             "type": "object",
-            "required": ["name"],
-            "properties": { "name": { "type": "string", "minLength": 1 } }
-          }
-        }
-      }
-    },
-
-    "platformSecretStore": {
-      "type": "object",
-      "properties": {
-        "name": { "type": "string" },
-        "kind": { "type": "string" }
-      }
-    },
-
-    "rollout": {
-      "type": ["object", "null"],
-      "description": "Set to null for an infra-type release with no custom workload.",
-      "properties": {
-        "image": {
-          "description": "DEPRECATED: use release.image. Still read when release.image is not set.",
-          "type": "object",
-          "properties": {
-            "repository": { "type": "string" },
-            "tag": { "type": "string" }
-          }
-        },
-        "replicas": { "type": "integer", "minimum": 0 },
-        "resources": {
-          "type": "object",
-          "properties": {
-            "requests": {
-              "type": "object",
-              "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name."
               }
             },
-            "limits": {
-              "type": "object",
-              "properties": {
-                "cpu": { "type": "string" },
-                "memory": { "type": "string" }
-              }
-            }
+            "description": "One existing image-pull Secret."
           }
+        }
+      },
+      "description": "Kubernetes ServiceAccount for every workload this chart renders."
+    },
+    "platformSecretStore": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "This cluster's Infisical-backed ClusterSecretStore, used by the release-tracking relay token ExternalSecret.",
+      "default": {
+        "name": "platform-secret-store",
+        "kind": "ClusterSecretStore"
+      },
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "platform-secret-store",
+          "description": "The ClusterSecretStore's name."
         },
-        "strategy": { "type": "string", "enum": ["canary", "blueGreen"] },
-        "steps": {
-          "description": "Escape hatch - a raw Argo Rollouts canary/blueGreen step list. Tower's Config tab offers a structured builder for the common {setWeight}/{pause}/{analysis} shapes but falls back to raw YAML for anything else, matching this schema's own looseness here.",
-          "type": "array",
-          "items": { "type": "object" }
-        },
-        "canaryAnalysis": {
-          "description": "Raw passthrough - spec.strategy.canary.analysis. Typical shape: {templates: [{templateName}], args: [...], startingStep}.",
-          "type": "object"
-        },
-        "blueGreen": {
-          "description": "Raw passthrough - the blueGreen strategy block minus activeService/previewService (chart-owned).",
-          "type": "object"
-        },
-        "command": { "type": "array", "items": { "type": "string" } },
-        "args": { "type": "array", "items": { "type": "string" } },
-        "ports": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name", "containerPort"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "containerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-              "protocol": { "type": "string", "enum": ["TCP", "UDP", "SCTP"] }
-            }
-          }
-        },
-        "livenessProbe": { "$ref": "#/definitions/probe" },
-        "readinessProbe": { "$ref": "#/definitions/probe" },
-        "podSecurityContext": { "type": "object" },
-        "containerSecurityContext": { "type": "object" },
-        "extraContainers": { "type": "array", "items": { "type": "object" } },
-        "podSpec": {
-          "description": "Raw map, deep-merged onto .spec.template.spec last - not for containers[0] or additional containers.",
-          "type": "object"
+        "kind": {
+          "type": "string",
+          "default": "ClusterSecretStore",
+          "description": "The ClusterSecretStore kind."
         }
       }
     },
-
-    "analysisTemplates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name"],
-        "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "args": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["name"],
-              "properties": { "name": { "type": "string", "minLength": 1 } }
+    "rollout": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "description": "The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a standalone component-only env).",
+      "properties": {
+        "image": {
+          "description": "DEPRECATED: use release.image instead. Still read when release.image is not set.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": {
+              "type": "string",
+              "description": "Image repository without a tag."
+            },
+            "tag": {
+              "type": "string",
+              "description": "Image tag."
+            }
+          }
+        },
+        "replicas": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 2,
+          "description": "Desired pod count."
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "requests": {
+              "$ref": "#/definitions/resourceList",
+              "description": "Minimum CPU/memory guaranteed to the container."
+            },
+            "limits": {
+              "$ref": "#/definitions/resourceList",
+              "description": "Maximum CPU/memory the container may use."
             }
           },
-          "metrics": { "type": "array", "items": { "type": "object" } }
+          "description": "Container resources for the main workload."
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "canary",
+            "blueGreen"
+          ],
+          "description": "Platform default steps used unless rollout.steps is set.",
+          "default": "canary"
+        },
+        "steps": {
+          "description": "Raw passthrough escape hatch - a real Argo Rollouts canary/blueGreen step list (setWeight/pause/analysis/experiment). Tower's Config tab offers a structured builder for the common shapes but falls back to raw YAML for anything else, matching this schema's own looseness here. Empty uses the platform default steps.",
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "description": "One raw Argo Rollouts step."
+          }
+        },
+        "canaryAnalysis": {
+          "description": "Raw passthrough - spec.strategy.canary.analysis. Typical shape: {templates: [{templateName}], args: [...], startingStep}. Rendered only when strategy is canary and this is non-empty.",
+          "type": "object",
+          "default": {}
+        },
+        "blueGreen": {
+          "description": "Raw passthrough for the blueGreen strategy block, minus activeService/previewService (chart-owned). Rendered only when strategy is blueGreen.",
+          "type": "object",
+          "default": {}
+        },
+        "command": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "One argv element."
+          },
+          "default": [],
+          "description": "Overrides the container's entrypoint."
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "description": "One argument."
+          },
+          "default": [],
+          "description": "Overrides the container's command args."
+        },
+        "ports": {
+          "type": "array",
+          "default": [
+            {
+              "name": "http",
+              "containerPort": 8080
+            }
+          ],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "containerPort"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name."
+              },
+              "containerPort": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "description": "The port the container listens on."
+              },
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "TCP",
+                  "UDP",
+                  "SCTP"
+                ],
+                "description": "Transport protocol."
+              }
+            },
+            "description": "Ports this rule applies to; omit for all ports."
+          },
+          "description": "Container ports to expose on the main workload."
+        },
+        "livenessProbe": {
+          "$ref": "#/definitions/probe",
+          "description": "Liveness probe for the main container."
+        },
+        "readinessProbe": {
+          "$ref": "#/definitions/probe",
+          "description": "Readiness probe for the main container."
+        },
+        "podSecurityContext": {
+          "type": "object",
+          "description": "Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here.",
+          "default": {}
+        },
+        "containerSecurityContext": {
+          "type": "object",
+          "description": "Raw passthrough - Kubernetes SecurityContext, not modeled field-by-field here.",
+          "default": {}
+        },
+        "extraContainers": {
+          "type": "array",
+          "description": "Raw passthrough - additional container specs, appended as-is.",
+          "default": [],
+          "items": {
+            "type": "object",
+            "description": "One raw additional container spec."
+          }
+        },
+        "podSpec": {
+          "description": "Raw passthrough map, deep-merged last onto .spec.template.spec. NOT for containers[0] (use the curated fields above) or additional containers (use extraContainers).",
+          "type": "object",
+          "default": {}
         }
       }
     },
-
-    "env": {
+    "analysisTemplates": {
+      "description": "App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.",
       "type": "array",
+      "default": [],
       "items": {
         "type": "object",
-        "required": ["name"],
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
-          "value": { "type": "string" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "args": {
+            "type": "array",
+            "default": [],
+            "description": "Required whenever a metric's query references {{args.<name>}} - just the arg NAME, the value comes from whichever Rollout step or canaryAnalysis references this template.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Name."
+                }
+              },
+              "description": "One argument name the template's metrics reference."
+            }
+          },
+          "metrics": {
+            "type": "array",
+            "description": "Raw passthrough - the AnalysisTemplate's own metrics list.",
+            "default": [],
+            "items": {
+              "type": "object",
+              "description": "One raw AnalysisTemplate metric."
+            }
+          }
+        },
+        "description": "One custom Argo Rollouts AnalysisTemplate."
+      }
+    },
+    "env": {
+      "description": "Container environment variables for the main workload.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "Name."
+          },
+          "value": {
+            "type": "string",
+            "description": "A literal env var value. Mutually exclusive with valueFrom."
+          },
           "valueFrom": {
             "description": "Pass-through of a container env valueFrom. Use secretKeyRef to read a Secret already in this namespace, e.g. the <name>-app Secret a PostgreSQL component creates.",
             "type": "object",
+            "additionalProperties": false,
             "minProperties": 1,
             "properties": {
               "secretKeyRef": {
                 "type": "object",
-                "required": ["name", "key"],
-                "properties": { "name": { "type": "string", "minLength": 1 }, "key": { "type": "string", "minLength": 1 }, "optional": { "type": "boolean" } }
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name."
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The key to read."
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "description": "If true, a missing key/name is not an error."
+                  }
+                },
+                "description": "Read the value from a Secret key."
               },
               "configMapKeyRef": {
                 "type": "object",
-                "required": ["name", "key"],
-                "properties": { "name": { "type": "string", "minLength": 1 }, "key": { "type": "string", "minLength": 1 }, "optional": { "type": "boolean" } }
+                "additionalProperties": false,
+                "required": [
+                  "name",
+                  "key"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "Name."
+                  },
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The key to read."
+                  },
+                  "optional": {
+                    "type": "boolean",
+                    "description": "If true, a missing key/name is not an error."
+                  }
+                },
+                "description": "Read the value from a ConfigMap key."
               },
               "fieldRef": {
                 "type": "object",
-                "required": ["fieldPath"],
-                "properties": { "fieldPath": { "type": "string", "minLength": 1 } }
+                "additionalProperties": false,
+                "required": [
+                  "fieldPath"
+                ],
+                "properties": {
+                  "fieldPath": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "A Kubernetes downward-API field path, e.g. status.hostIP."
+                  }
+                },
+                "description": "Read the value from this pod's own downward-API field."
               }
             }
           }
         },
-        "not": { "required": ["value", "valueFrom"] }
-      }
-    },
-
-    "configMaps": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name"],
-        "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "as": { "type": "string", "enum": ["env", "volume", "both"] },
-          "mountPath": { "type": "string" },
-          "data": { "type": "object", "additionalProperties": { "type": "string" } },
-          "existingConfigMap": { "type": "string" }
+        "not": {
+          "required": [
+            "value",
+            "valueFrom"
+          ]
         },
-        "not": { "required": ["data", "existingConfigMap"] },
-        "anyOf": [{ "required": ["data"] }, { "required": ["existingConfigMap"] }]
+        "description": "One container environment variable."
       }
     },
-
-    "secrets": {
+    "configMaps": {
+      "description": "ConfigMaps mounted or projected as env vars into the main workload.",
       "type": "array",
+      "default": [],
       "items": {
         "type": "object",
-        "required": ["name"],
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "as": { "type": "string", "enum": ["env", "volume", "both"] },
-          "key": { "type": "string" },
-          "mountPath": { "type": "string" },
-          "shared": { "type": "boolean" }
-        }
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "as": {
+            "type": "string",
+            "enum": [
+              "env",
+              "volume",
+              "both"
+            ],
+            "description": "env renders envFrom (every data key becomes an env var verbatim). Defaults to volume.",
+            "default": "volume"
+          },
+          "mountPath": {
+            "type": "string",
+            "description": "Only used when as includes volume. Defaults to /config/<name>."
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Chart-owned ConfigMap content. Mutually exclusive with existingConfigMap."
+          },
+          "existingConfigMap": {
+            "type": "string",
+            "description": "Reference a ConfigMap already created outside this chart (e.g. a Kustomize configMapGenerator with a fixed name). Mutually exclusive with data."
+          }
+        },
+        "not": {
+          "required": [
+            "data",
+            "existingConfigMap"
+          ]
+        },
+        "anyOf": [
+          {
+            "required": [
+              "data"
+            ]
+          },
+          {
+            "required": [
+              "existingConfigMap"
+            ]
+          }
+        ],
+        "description": "One ConfigMap."
       }
     },
-
+    "secrets": {
+      "description": "Secrets, aggregated into one app-secrets Secret via ExternalSecret/ClusterSecretStore, consumed by the main container.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "secretKey in the rendered Secret AND the Infisical property name read from the store."
+          },
+          "as": {
+            "type": "string",
+            "enum": [
+              "env",
+              "volume",
+              "both"
+            ],
+            "description": "volume mode shares one app-secrets Secret volume, each entry mounted via subPath.",
+            "default": "env"
+          },
+          "key": {
+            "type": "string",
+            "description": "Env var name (only used when as includes env). Defaults to name, uppercased."
+          },
+          "mountPath": {
+            "type": "string",
+            "description": "Only used when as includes volume - the exact file path (not a directory). Defaults to /secrets/<name>."
+          },
+          "shared": {
+            "type": "boolean",
+            "description": "false (default, on upper clusters) reads this env's own isolated Infisical environment. true reads the wide shared one instead. On kind-dev both read the one shared store, separated by a path prefix.",
+            "default": false
+          }
+        },
+        "description": "One secret reference."
+      }
+    },
     "notifications": {
       "type": "object",
+      "additionalProperties": false,
+      "description": "AI-triage diagnosis notifications, threaded into the RolloutWatch XR this chart renders unconditionally.",
       "properties": {
         "slack": {
           "type": "object",
+          "additionalProperties": false,
           "properties": {
-            "enabled": { "type": "boolean" },
-            "channel": { "type": "string" }
-          }
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Turns this feature on."
+            },
+            "channel": {
+              "type": "string",
+              "description": "e.g. #your-channel. Optional; the webhook's own configured default is used otherwise.",
+              "default": ""
+            }
+          },
+          "description": "Slack notification settings for AI-triage diagnosis."
         }
       }
     },
-
     "volumes": {
+      "description": "PVC-backed volumes for the main workload.",
       "type": "array",
+      "default": [],
       "items": {
         "type": "object",
-        "required": ["name", "size", "mountPath"],
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "size",
+          "mountPath"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "size": { "type": "string", "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$" },
-          "storageClassName": { "type": "string" },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "size": {
+            "type": "string",
+            "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$",
+            "description": "A Kubernetes storage quantity, e.g. 10Gi."
+          },
+          "storageClassName": {
+            "type": "string",
+            "description": "Omit for the cluster default."
+          },
           "accessModes": {
             "type": "array",
-            "items": { "type": "string", "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany", "ReadWriteOncePod"] }
+            "default": [
+              "ReadWriteOnce"
+            ],
+            "items": {
+              "type": "string",
+              "enum": [
+                "ReadWriteOnce",
+                "ReadOnlyMany",
+                "ReadWriteMany",
+                "ReadWriteOncePod"
+              ],
+              "description": "One access mode."
+            },
+            "description": "Volume access modes."
           },
-          "mountPath": { "type": "string", "minLength": 1 }
-        }
-      }
-    },
-
-    "cronJobs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name", "schedule"],
-        "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "schedule": { "type": "string", "minLength": 1 },
-          "concurrencyPolicy": { "type": "string", "enum": ["Forbid", "Allow", "Replace"] },
-          "suspend": { "type": "boolean" },
-          "successfulJobsHistoryLimit": { "type": "integer", "minimum": 0 },
-          "failedJobsHistoryLimit": { "type": "integer", "minimum": 0 },
-          "backoffLimit": { "type": "integer", "minimum": 0 }
-        }
-      }
-    },
-
-    "jobs": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["name"],
-        "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "hook": { "type": "boolean" },
-          "backoffLimit": { "type": "integer", "minimum": 0 }
-        }
-      }
-    },
-
-    "autoscaling": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "min": { "type": "integer", "minimum": 1 },
-        "max": { "type": "integer", "minimum": 1 },
-        "targetCPUPercent": { "type": "integer", "minimum": 1, "maximum": 100 }
-      }
-    },
-
-    "podDisruptionBudget": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "minAvailable": { "type": ["string", "integer", "null"] },
-        "maxUnavailable": { "type": ["string", "integer", "null"] }
-      }
-    },
-
-    "ingress": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "host": { "type": "string" },
-        "path": { "type": "string", "minLength": 1 },
-        "pathType": { "type": "string", "enum": ["Prefix", "Exact", "ImplementationSpecific"] },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } },
-        "tls": { "type": "boolean" },
-        "tlsSecretName": { "type": "string" }
-      },
-      "if": { "properties": { "enabled": { "const": true } } },
-      "then": { "properties": { "host": { "type": "string", "minLength": 1 } }, "required": ["host"] }
-    },
-
-    "httpRoute": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "hostnames": { "type": "array", "items": { "type": "string", "minLength": 1 } },
-        "parentRefs": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "required": ["name"],
-            "properties": {
-              "name": { "type": "string", "minLength": 1 },
-              "namespace": { "type": "string" },
-              "sectionName": { "type": "string" }
-            }
+          "mountPath": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Filesystem path to mount at."
           }
         },
-        "path": { "type": "string", "minLength": 1 },
-        "pathType": { "type": "string", "enum": ["PathPrefix", "Exact", "RegularExpression"] },
-        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
-      },
-      "if": { "properties": { "enabled": { "const": true } } },
-      "then": {
-        "properties": {
-          "hostnames": { "type": "array", "minItems": 1 },
-          "parentRefs": { "type": "array", "minItems": 1 }
-        },
-        "required": ["hostnames", "parentRefs"]
+        "description": "One PVC-backed volume."
       }
     },
-
-    "serviceMonitor": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "path": { "type": "string", "minLength": 1 },
-        "port": { "type": "string" },
-        "interval": { "type": "string", "pattern": "^[0-9]+(ms|s|m|h)$" },
-        "additionalLabels": { "type": "object", "additionalProperties": { "type": "string" } }
-      }
-    },
-
-    "networkPolicy": {
-      "type": "object",
-      "properties": {
-        "enabled": { "type": "boolean" },
-        "allowIngressFromIngressController": { "type": "boolean" },
-        "ingressControllerNamespaceSelector": { "type": "object" },
-        "allowIngressFrom": { "type": "array", "items": { "$ref": "#/definitions/networkPolicyPeer" } },
-        "allowEgressTo": { "type": "array", "items": { "$ref": "#/definitions/networkPolicyPeer" } },
-        "extraIngressRules": { "type": "array", "items": { "type": "object" } },
-        "extraEgressRules": { "type": "array", "items": { "type": "object" } }
-      }
-    },
-
-    "components": {
+    "cronJobs": {
+      "description": "Scheduled batch tasks (nightly cleanup, report generation, ...). Share env/secrets/configMaps/volumes with the main container automatically.",
       "type": "array",
+      "default": [],
       "items": {
         "type": "object",
-        "required": ["type", "name"],
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "schedule"
+        ],
         "properties": {
-          "type": { "type": "string", "minLength": 1 },
-          "name": { "type": "string", "minLength": 1 },
-          "spec": { "type": "object" }
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "schedule": {
+            "type": "string",
+            "minLength": 1,
+            "description": "A cron schedule expression."
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional; defaults to rollout.image. Fails if omitted and rollout is not set.",
+            "properties": {
+              "repository": {
+                "type": "string",
+                "description": "Image repository without a tag."
+              },
+              "tag": {
+                "type": "string",
+                "description": "Image tag."
+              }
+            }
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "One argv element."
+            },
+            "default": [],
+            "description": "Overrides the container's entrypoint."
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "One argument."
+            },
+            "default": [],
+            "description": "Overrides the container's command args."
+          },
+          "resources": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {},
+            "properties": {
+              "requests": {
+                "$ref": "#/definitions/resourceList",
+                "description": "Minimum CPU/memory guaranteed to the container."
+              },
+              "limits": {
+                "$ref": "#/definitions/resourceList",
+                "description": "Maximum CPU/memory the container may use."
+              }
+            },
+            "description": "CPU/memory requests and limits."
+          },
+          "containerSecurityContext": {
+            "type": "object",
+            "description": "Raw passthrough.",
+            "default": {}
+          },
+          "concurrencyPolicy": {
+            "type": "string",
+            "enum": [
+              "Forbid",
+              "Allow",
+              "Replace"
+            ],
+            "default": "Forbid",
+            "description": "What happens if the previous run is still going when the next is due."
+          },
+          "suspend": {
+            "type": "boolean",
+            "default": false,
+            "description": "Pause future scheduled runs without deleting the CronJob."
+          },
+          "successfulJobsHistoryLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 3,
+            "description": "How many completed run records to keep."
+          },
+          "failedJobsHistoryLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 1,
+            "description": "How many failed run records to keep."
+          },
+          "backoffLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 3,
+            "description": "Retries before the job is marked failed."
+          }
+        },
+        "description": "One scheduled batch task."
+      }
+    },
+    "jobs": {
+      "description": "One-off batch tasks - the common 'run a DB migration before the new Rollout comes up' pattern. Same image/env/secrets/configMaps/volumes defaulting as cronJobs.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "image": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Optional; defaults to rollout.image.",
+            "properties": {
+              "repository": {
+                "type": "string",
+                "description": "Image repository without a tag."
+              },
+              "tag": {
+                "type": "string",
+                "description": "Image tag."
+              }
+            }
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "One argv element."
+            },
+            "default": [],
+            "description": "Overrides the container's entrypoint."
+          },
+          "args": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "One argument."
+            },
+            "default": [],
+            "description": "Overrides the container's command args."
+          },
+          "resources": {
+            "type": "object",
+            "additionalProperties": false,
+            "default": {},
+            "properties": {
+              "requests": {
+                "$ref": "#/definitions/resourceList",
+                "description": "Minimum CPU/memory guaranteed to the container."
+              },
+              "limits": {
+                "$ref": "#/definitions/resourceList",
+                "description": "Maximum CPU/memory the container may use."
+              }
+            },
+            "description": "CPU/memory requests and limits."
+          },
+          "containerSecurityContext": {
+            "type": "object",
+            "description": "Raw passthrough.",
+            "default": {}
+          },
+          "backoffLimit": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 3,
+            "description": "Retries before the job is marked failed."
+          },
+          "hook": {
+            "type": "boolean",
+            "description": "true (default): a real Helm pre-install/pre-upgrade hook, always re-run without a name change. false: a plain persistent Job - rerunning it is on the developer.",
+            "default": true
+          }
+        },
+        "description": "One one-off batch task."
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": false,
+        "min": 2,
+        "max": 10,
+        "targetCPUPercent": 70
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turns this feature on."
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 2,
+          "description": "Lower bound."
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10,
+          "description": "Upper bound."
+        },
+        "targetCPUPercent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 70,
+          "description": "Target average CPU utilization percent that triggers scaling."
+        }
+      },
+      "description": "HorizontalPodAutoscaler settings for the main workload."
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Set at most one of minAvailable/maxUnavailable.",
+      "default": {
+        "enabled": false,
+        "minAvailable": 1,
+        "maxUnavailable": null
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turns this feature on."
+        },
+        "minAvailable": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ],
+          "default": 1,
+          "description": "Minimum pods that must stay available during a voluntary disruption."
+        },
+        "maxUnavailable": {
+          "type": [
+            "string",
+            "integer",
+            "null"
+          ],
+          "default": null,
+          "description": "Maximum pods that may be unavailable during a voluntary disruption."
         }
       }
     },
-
-    "slos": {
-      "description": "Mirrors airframe/xrds/slo.yaml's own spec schema exactly.",
+    "ingress": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Classic Ingress. Gateway API (httpRoute below) is the mechanism most new callers actually want on this fleet's real clusters.",
+      "default": {
+        "enabled": false,
+        "host": "",
+        "path": "/",
+        "pathType": "Prefix",
+        "annotations": {},
+        "tls": false,
+        "tlsSecretName": ""
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turns this feature on."
+        },
+        "host": {
+          "type": "string",
+          "default": "",
+          "description": "The hostname this rule matches."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "default": "/",
+          "description": "URL/mount path."
+        },
+        "pathType": {
+          "type": "string",
+          "enum": [
+            "Prefix",
+            "Exact",
+            "ImplementationSpecific"
+          ],
+          "default": "Prefix",
+          "description": "How path is matched."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations, merged in as-is."
+        },
+        "tls": {
+          "type": "boolean",
+          "description": "Requests a cert-manager-issued TLS cert for host.",
+          "default": false
+        },
+        "tlsSecretName": {
+          "type": "string",
+          "description": "Defaults to <release-name>-tls when tls is true and this is empty.",
+          "default": ""
+        }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "host": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "host"
+        ]
+      }
+    },
+    "httpRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.kiac.local.",
+      "default": {
+        "enabled": false,
+        "hostnames": [],
+        "parentRefs": [],
+        "path": "/",
+        "pathType": "PathPrefix",
+        "annotations": {}
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Turns this feature on."
+        },
+        "hostnames": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One hostname."
+          },
+          "default": [],
+          "description": "Hostnames this route matches."
+        },
+        "parentRefs": {
+          "type": "array",
+          "default": [],
+          "description": "The platform Gateway(s) this route attaches to.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Name."
+              },
+              "namespace": {
+                "type": "string",
+                "description": "Optional - defaults to this HTTPRoute's own namespace."
+              },
+              "sectionName": {
+                "type": "string",
+                "description": "Optional - target one specific listener by name."
+              }
+            },
+            "description": "One Gateway this route attaches to."
+          }
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "default": "/",
+          "description": "URL/mount path."
+        },
+        "pathType": {
+          "type": "string",
+          "enum": [
+            "PathPrefix",
+            "Exact",
+            "RegularExpression"
+          ],
+          "default": "PathPrefix",
+          "description": "How path is matched."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations, merged in as-is."
+        }
+      },
+      "if": {
+        "properties": {
+          "enabled": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "hostnames": {
+            "type": "array",
+            "minItems": 1
+          },
+          "parentRefs": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": [
+          "hostnames",
+          "parentRefs"
+        ]
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Prometheus scraping of the main workload's first rollout.ports entry, via kube-prometheus-stack.",
+      "default": {
+        "enabled": true,
+        "path": "/metrics",
+        "port": "",
+        "interval": "30s",
+        "additionalLabels": {}
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Turns this feature on."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "default": "/metrics",
+          "description": "URL/mount path."
+        },
+        "port": {
+          "type": "string",
+          "description": "Defaults to the first rollout.ports entry's name.",
+          "default": ""
+        },
+        "interval": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h)$",
+          "default": "30s",
+          "description": "Scrape interval."
+        },
+        "additionalLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Some kube-prometheus-stack installs require a label (e.g. release: <helm-release-name>) for their Prometheus CR to pick this up.",
+          "default": {}
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "default": {
+        "enabled": true,
+        "allowIngressFromIngressController": true,
+        "ingressControllerNamespaceSelector": {
+          "matchLabels": {
+            "kubernetes.io/metadata.name": "kiac-gateway"
+          }
+        },
+        "allowIngressFrom": [],
+        "allowEgressTo": [],
+        "extraIngressRules": [],
+        "extraEgressRules": []
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Turns this feature on."
+        },
+        "allowIngressFromIngressController": {
+          "type": "boolean",
+          "description": "Gates the allow-rule for both ingress and httpRoute (same selector, same data-plane namespace either way).",
+          "default": true
+        },
+        "ingressControllerNamespaceSelector": {
+          "type": "object",
+          "default": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "kiac-gateway"
+            }
+          },
+          "description": "Namespace selector identifying the ingress controller/gateway."
+        },
+        "allowIngressFrom": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/networkPolicyPeer",
+            "description": "One allowed ingress peer."
+          },
+          "description": "Extra allowed ingress peers, each its own rule."
+        },
+        "allowEgressTo": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/networkPolicyPeer",
+            "description": "One allowed egress peer."
+          },
+          "description": "Extra allowed egress peers, each its own rule."
+        },
+        "extraIngressRules": {
+          "type": "array",
+          "description": "Raw passthrough - real Kubernetes NetworkPolicy ingress rule objects, for shapes allowIngressFrom's flat form can't express (UDP/SCTP, multiple ORed peers in one rule).",
+          "default": [],
+          "items": {
+            "type": "object",
+            "description": "One raw NetworkPolicy ingress rule."
+          }
+        },
+        "extraEgressRules": {
+          "type": "array",
+          "description": "Raw passthrough, same shape as extraIngressRules.",
+          "default": [],
+          "items": {
+            "type": "object",
+            "description": "One raw NetworkPolicy egress rule."
+          }
+        }
+      },
+      "description": "Traffic policy for the main workload's namespace."
+    },
+    "components": {
+      "description": "Attached-tier component instances (Redis, PostgreSQL, RabbitMQ, ...). Each entry's spec is validated against that component's own XRD schema by the compiled schema (airframe_schema.compiled_schema()), not by this file directly - see tools/airframe-validate.",
       "type": "array",
+      "default": [],
       "items": {
         "type": "object",
-        "required": ["name", "service", "objective", "indicator"],
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "name"
+        ],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
-          "service": { "type": "string", "minLength": 1, "pattern": "^[a-zA-Z0-9_.-]+$" },
-          "objective": { "type": "number", "exclusiveMinimum": 0, "maximum": 100 },
+          "type": {
+            "type": "string",
+            "minLength": 1,
+            "description": "One of componentKinds' keys (redis, postgresql, rabbitmq today)."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "spec": {
+            "type": "object",
+            "description": "Component-specific. See that component's XRD in xrds/ for its real shape."
+          }
+        },
+        "description": "One attached component instance."
+      }
+    },
+    "slos": {
+      "description": "Rendered into the SLO XRD (xrds/slo.yaml), which wraps Sloth. No window/burn-rate fields here - Sloth computes those from just objective.",
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "service",
+          "objective",
+          "indicator"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Name."
+          },
+          "service": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.-]+$",
+            "description": "PromQL label-matcher value."
+          },
+          "objective": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 100,
+            "description": "Target percentage (e.g. 99.9) over the cluster-wide compliance window."
+          },
           "indicator": {
             "type": "object",
-            "required": ["type", "metric", "totalFilter"],
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "metric",
+              "totalFilter"
+            ],
             "properties": {
-              "type": { "type": "string", "enum": ["availability", "latency"] },
-              "metric": { "type": "string", "minLength": 1 },
-              "totalFilter": { "type": "string", "minLength": 1 },
-              "errorFilter": { "type": "string", "minLength": 1 },
-              "latencyThreshold": { "type": "string", "minLength": 1 }
+              "type": {
+                "type": "string",
+                "enum": [
+                  "availability",
+                  "latency"
+                ],
+                "description": "Discriminator."
+              },
+              "metric": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The Prometheus metric name this indicator queries."
+              },
+              "totalFilter": {
+                "type": "string",
+                "minLength": 1,
+                "description": "PromQL label matcher selecting the total/denominator series."
+              },
+              "errorFilter": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required when type is availability."
+              },
+              "latencyThreshold": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Required when type is latency, instead of errorFilter."
+              }
             },
             "allOf": [
               {
-                "if": { "properties": { "type": { "const": "availability" } } },
-                "then": { "required": ["errorFilter"] }
+                "if": {
+                  "properties": {
+                    "type": {
+                      "const": "availability"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "errorFilter"
+                  ]
+                }
               },
               {
-                "if": { "properties": { "type": { "const": "latency" } } },
-                "then": { "required": ["latencyThreshold"] }
+                "if": {
+                  "properties": {
+                    "type": {
+                      "const": "latency"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "latencyThreshold"
+                  ]
+                }
               }
-            ]
+            ],
+            "description": "How this SLO's compliance is measured."
           }
-        }
+        },
+        "description": "One SLO."
       }
     },
-
-    "attachedResourceApiVersion": { "type": "string" },
-    "componentKinds": { "type": "object", "additionalProperties": { "type": "string" } },
-
+    "attachedResourceApiVersion": {
+      "type": "string",
+      "description": "The apiVersion group used to look up component/SLO XRs by componentKinds. Update here, not per-template, if the group ever changes.",
+      "default": "catalog.idp.io/v1alpha1"
+    },
+    "componentKinds": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet (oauth-server, database, queue are placeholders).",
+      "default": {
+        "redis": "Redis",
+        "postgresql": "PostgreSQL",
+        "rabbitmq": "RabbitMQ",
+        "oauth-server": "OAuthServer",
+        "database": "Database",
+        "queue": "Queue"
+      }
+    },
     "extraManifests": {
-      "description": "Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is.",
+      "description": "Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is, no labels stamped.",
       "type": "array",
-      "items": { "type": "object" }
+      "default": [],
+      "items": {
+        "type": "object",
+        "description": "One raw Kubernetes object, rendered as-is."
+      }
     }
   },
-
   "definitions": {
+    "resourceList": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cpu": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?m?$",
+          "description": "A Kubernetes CPU quantity, e.g. 250m or 1."
+        },
+        "memory": {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$",
+          "description": "A Kubernetes memory quantity, e.g. 256Mi."
+        }
+      },
+      "description": "A cpu/memory pair."
+    },
     "probe": {
       "type": "object",
-      "description": "Empty object ({}) means no probe of this kind is set - the chart doesn't render one at all. Exactly one of httpGet/tcpSocket/exec when non-empty.",
+      "additionalProperties": false,
+      "description": "Empty object ({}) means no probe of this kind is set. Exactly one of httpGet/tcpSocket/exec when non-empty.",
+      "default": {},
       "properties": {
         "httpGet": {
           "type": "object",
-          "required": ["path", "port"],
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "port"
+          ],
           "properties": {
-            "path": { "type": "string", "minLength": 1 },
-            "port": { "type": ["integer", "string"] }
-          }
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "URL/mount path."
+            },
+            "port": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "description": "Port to probe or route to."
+            }
+          },
+          "description": "An HTTP GET probe."
         },
         "tcpSocket": {
           "type": "object",
-          "required": ["port"],
-          "properties": { "port": { "type": ["integer", "string"] } }
+          "additionalProperties": false,
+          "required": [
+            "port"
+          ],
+          "properties": {
+            "port": {
+              "type": [
+                "integer",
+                "string"
+              ],
+              "description": "Port to probe or route to."
+            }
+          },
+          "description": "A TCP connect probe."
         },
         "exec": {
           "type": "object",
-          "required": ["command"],
-          "properties": { "command": { "type": "array", "items": { "type": "string" }, "minItems": 1 } }
+          "additionalProperties": false,
+          "required": [
+            "command"
+          ],
+          "properties": {
+            "command": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "description": "One argv element."
+              },
+              "minItems": 1,
+              "description": "The command to run inside the container; exit 0 counts as success."
+            }
+          },
+          "description": "A command-exec probe."
         },
-        "initialDelaySeconds": { "type": "integer", "minimum": 0 },
-        "periodSeconds": { "type": "integer", "minimum": 1 },
-        "timeoutSeconds": { "type": "integer", "minimum": 1 },
-        "successThreshold": { "type": "integer", "minimum": 1 },
-        "failureThreshold": { "type": "integer", "minimum": 1 }
+        "initialDelaySeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds after container start before the first probe."
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds between probes."
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Seconds before a probe attempt times out."
+        },
+        "successThreshold": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Consecutive successes needed to consider the probe passed after a failure."
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Consecutive failures needed to consider the probe failed."
+        }
       }
     },
     "networkPolicyPeer": {
       "type": "object",
+      "additionalProperties": false,
       "description": "Exactly one of namespace/cidr (mutually exclusive peer kinds).",
       "properties": {
-        "namespace": { "type": "string" },
-        "podLabels": { "type": "object", "additionalProperties": { "type": "string" } },
-        "cidr": { "type": "string" },
-        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+        "namespace": {
+          "type": "string",
+          "description": "Namespace to match."
+        },
+        "podLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Pod labels to match, ANDed with namespace."
+        },
+        "cidr": {
+          "type": "string",
+          "description": "An external CIDR peer instead of namespace/podLabels."
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "Ports this rule applies to; omit for all ports."
+          },
+          "description": "Ports this rule applies to; omit for all ports."
+        }
       },
-      "not": { "required": ["namespace", "cidr"] }
+      "not": {
+        "required": [
+          "namespace",
+          "cidr"
+        ]
+      }
     }
   }
 }

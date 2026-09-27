@@ -1,0 +1,10 @@
+appName: fromcomponent-bad-output
+rollout:
+  image: {repository: registry.example/fromcomponent-bad-output, tag: v1}
+env:
+  - name: CACHE_BOGUS
+    fromComponent: {name: cache, output: bogus}
+components:
+  - type: redis
+    name: cache
+    spec: {size: small}

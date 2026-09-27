@@ -1,0 +1,75 @@
+# GENERATED FILE - do not hand-edit. Source: xrds/*.meta.yaml (AF-3).
+# Regenerate with: python3 tools/gen_component_outputs.py
+postgresql:
+  database:
+    key: dbname
+    kind: secretKeyRef
+    secret: '{name}-app'
+  host:
+    key: host
+    kind: secretKeyRef
+    secret: '{name}-app'
+  jdbcUri:
+    key: jdbc-uri
+    kind: secretKeyRef
+    secret: '{name}-app'
+  password:
+    key: password
+    kind: secretKeyRef
+    secret: '{name}-app'
+  port:
+    key: port
+    kind: secretKeyRef
+    secret: '{name}-app'
+  uri:
+    description: A full postgres:// connection string, credentials included.
+    key: uri
+    kind: secretKeyRef
+    secret: '{name}-app'
+  username:
+    key: username
+    kind: secretKeyRef
+    secret: '{name}-app'
+rabbitmq:
+  host:
+    configMap: '{name}-connection'
+    key: host
+    kind: configMapKeyRef
+  password:
+    key: password
+    kind: secretKeyRef
+    secret: '{name}-user-credentials'
+  port:
+    configMap: '{name}-connection'
+    key: port
+    kind: configMapKeyRef
+  username:
+    key: username
+    kind: secretKeyRef
+    secret: '{name}-user-credentials'
+  vhost:
+    configMap: '{name}-connection'
+    key: vhost
+    kind: configMapKeyRef
+redis:
+  host:
+    description: The master Service's in-cluster DNS name.
+    kind: literal
+    value: '{name}-master.{namespace}.svc.cluster.local'
+  password:
+    description: The Crossplane-composed connection Secret (writeConnectionSecretToRef),
+      not the raw Bitnami chart Secret (which also exists, named `{name}`, key `redis-password`
+      - the connection Secret copies the same value here so every component type has
+      one canonical `<name>-connection` output surface).
+    key: password
+    kind: secretKeyRef
+    secret: '{name}-connection'
+  port:
+    kind: literal
+    value: 6379
+  url:
+    description: host:port only, no credentials embedded (auth.enabled is true on
+      this component, so a connection still needs the password output supplied separately
+      - e.g. as its own env var).
+    kind: literal
+    value: redis://{name}-master.{namespace}.svc.cluster.local:6379

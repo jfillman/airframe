@@ -1,0 +1,26 @@
+appName: fromcomponent-test
+rollout:
+  image: {repository: registry.example/fromcomponent-test, tag: v1}
+  ports:
+    - {name: http, containerPort: 8080}
+env:
+  - name: CACHE_HOST
+    fromComponent: {name: cache, output: host}
+  - name: CACHE_PORT
+    fromComponent: {name: cache, output: port}
+  - name: CACHE_PASSWORD
+    fromComponent: {name: cache, output: password}
+  - name: DB_URI
+    fromComponent: {name: db, output: uri}
+  - name: MQ_HOST
+    fromComponent: {name: mq, output: host}
+components:
+  - type: redis
+    name: cache
+    spec: {size: small}
+  - type: postgresql
+    name: db
+    spec: {size: small, instances: 1}
+  - type: rabbitmq
+    name: mq
+    spec: {mode: attach, brokerRef: {name: broker, namespace: app-broker-dev}, vhost: flights, queuePrefix: fromcomponent}

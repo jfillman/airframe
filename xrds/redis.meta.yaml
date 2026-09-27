@@ -1,0 +1,38 @@
+# Sidecar meta for the Redis component (AF-3). Verified against compositions/redis/templates/release.yaml,
+# not illustrative: outputs below are exactly what that Composition's connectionDetails/
+# writeConnectionSecretToRef actually produce. A Kubernetes CRD's structural schema rejects unknown `x-`
+# keys, so this vocabulary lives beside the XRD instead, keyed by output name; tools/component_outputs.py
+# reads every `xrds/*.meta.yaml` and the chart's `fromComponent` feature resolves against it.
+kind: Redis
+summary: A Redis cache or shared-counter store, dedicated to one application environment.
+outputs:
+  # {name} is the components[] entry's own `name` field; {namespace} is the release namespace.
+  host:
+    kind: literal
+    value: "{name}-master.{namespace}.svc.cluster.local"
+    description: The master Service's in-cluster DNS name.
+  port:
+    kind: literal
+    value: 6379
+  url:
+    kind: literal
+    value: "redis://{name}-master.{namespace}.svc.cluster.local:6379"
+    description: >-
+      host:port only, no credentials embedded (auth.enabled is true on this component, so a
+      connection still needs the password output supplied separately - e.g. as its own env var).
+  password:
+    kind: secretKeyRef
+    secret: "{name}-connection"
+    key: password
+    description: >-
+      The Crossplane-composed connection Secret (writeConnectionSecretToRef), not the raw Bitnami chart
+      Secret (which also exists, named `{name}`, key `redis-password` - the connection Secret copies the
+      same value here so every component type has one canonical `<name>-connection` output surface).
+verify:
+  - id: xr-ready
+    check: The Redis XR's Ready condition is True.
+  - id: secret-exists
+    check: Secret {name}-connection exists in the app namespace and has a non-empty password key.
+  - id: reachable
+    check: A TCP connect to {name}-master:6379 succeeds from the app namespace.
+owner: human

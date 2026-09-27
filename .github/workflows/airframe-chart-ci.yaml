@@ -28,6 +28,7 @@ jobs:
         # the chart warns on the empty default name; only real failures matter
       - run: charts/airframe-application/tests/run.sh
       - run: python3 tools/gen_airframe_schema.py --check --coverage
+      - run: python3 tools/gen_component_outputs.py --check
 
   scorecard:
     runs-on: ubuntu-latest

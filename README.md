@@ -421,6 +421,7 @@ charts/
                                (tests/run.sh: render tests; no workload until rollout.image is set)
 tools/
   airframe-validate            strict values-file check (unknown keys, XRD component specs) + helm template
+  validate.Containerfile       the image CI runs it from (ghcr.io/jfillman/airframe-validate:<tag>, built on release tags)
 AGENTS.md                      what an AI agent should know, today vs planned
 xrds/
   nodejsapplication.yaml        NodeJSApplication XRD (catalog.idp.io/v1alpha1)

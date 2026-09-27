@@ -8,7 +8,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 1. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
 2. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas. `xrds/<type>.meta.yaml` (redis, postgresql, rabbitmq today, AF-3) declares that component's real outputs - Secret/ConfigMap names and keys, or a literal - for `fromComponent` to resolve against.
 3. `docs/user/`: the Skyport quickstarts, worked end to end.
-4. `tools/airframe-validate` (built, now validating against `tools/airframe_schema.py`'s compiled schema - the base schema plus a discriminated `components[]` union generated fresh from the XRDs). *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.explain`.
+4. `tools/airframe-validate` (built: schema + discriminated `components[]` union + `tools/deadend_rules.py`'s AF-4b convention/policy rules, in one pass; `--format json` for tooling). *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.explain`.
 
 ## The model in five lines
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
@@ -24,6 +24,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - Set `devCluster` from the cluster registry: it is `kind-dev` even though the cluster is called `kiac-dev`.
 - Leave `release` (the image) and `releaseTracking` to the pipeline (Glidepath writes them). Change only what a human owns: config, env vars, scaling, components.
 - Read the failure message, change the file, retry at most three times, then stop and report.
+- Notice a `warn ... AF-COMP-003` on a file you're already touching? Migrate that reference to `fromComponent` while you're there - it's the exact gap AF-3 exists to close, just not yet enforced fleet-wide.
 
 ## Do not
 - Hand-edit `release` (the image), `releaseTracking` or the deprecated `rollout.image` in a live env file. `airframe-validate` warns (AF-OWNER-001) when they appear in a human-owned file.

@@ -40,6 +40,16 @@ if helm template t . -f tests/fixtures/no-image.yaml | grep -qE "image: '?\"?:'?
   echo "FAIL: image ':' rendered"; fail=1
 fi
 
+# AF-3: fromComponent resolves for all three output kinds (literal, secretKeyRef, configMapKeyRef)
+# and fails loudly on a reference nothing declares.
+out=$(helm template t . -f tests/fixtures/from-component.yaml 2>&1)
+echo "$out" | grep -q "value: cache-master.default.svc.cluster.local" || { echo "FAIL: fromComponent literal (redis host) did not resolve"; fail=1; }
+echo "$out" | grep -A4 "name: CACHE_PASSWORD" | grep -q "name: cache-connection" || { echo "FAIL: fromComponent secretKeyRef (redis password) did not resolve to cache-connection"; fail=1; }
+echo "$out" | grep -A4 "name: DB_URI" | grep -q "name: db-app" || { echo "FAIL: fromComponent secretKeyRef (postgresql uri) did not resolve to db-app"; fail=1; }
+echo "$out" | grep -A4 "name: MQ_HOST" | grep -q "name: mq-connection" || { echo "FAIL: fromComponent configMapKeyRef (rabbitmq host) did not resolve to mq-connection"; fail=1; }
+helm template t . -f tests/fixtures/from-component-bad-name.yaml 2>&1 | grep -q "no components\[\] entry named 'nonexistent'" || { echo "FAIL: fromComponent did not reject an unknown component name"; fail=1; }
+helm template t . -f tests/fixtures/from-component-bad-output.yaml 2>&1 | grep -q "has no output 'bogus'" || { echo "FAIL: fromComponent did not reject an unknown output name"; fail=1; }
+
 # AF-4a: airframe validate rejects the typo cases and accepts a real file.
 V=../../tools/airframe-validate
 for f in typo-top-level-key typo-nested-key bad-component-size typo-release-key.release; do

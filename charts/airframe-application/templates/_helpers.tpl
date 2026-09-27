@@ -195,10 +195,59 @@ airframe-application.componentKind/batchContainer's own image-fallback check.
 {{- end -}}
 
 {{/*
+airframe-application.resolveFromComponent - AF-3. Resolves one `env[].fromComponent: {name, output}`
+entry to a real `value` or `valueFrom`, against charts/airframe-application/files/component-outputs.yaml
+(generated from xrds/*.meta.yaml by tools/gen_component_outputs.py - see that file's own header) and the
+matching entry in .Values.components. Fails loudly (not silently) on a reference nothing declares -
+tools/airframe-validate's AF-COMP-002 lint is meant to catch this before merge, but the chart must not
+render broken YAML if it somehow gets here anyway.
+
+Usage: {{ $resolved := include "airframe-application.resolveFromComponent" (dict "root" $ "ref" .fromComponent) | fromYaml }}
+*/}}
+{{- define "airframe-application.resolveFromComponent" -}}
+{{- $root := .root -}}
+{{- $ref := .ref -}}
+{{- $comp := "" -}}
+{{- range $root.Values.components -}}
+{{- if eq .name $ref.name -}}{{- $comp = . -}}{{- end -}}
+{{- end -}}
+{{- if not $comp -}}
+{{- fail (printf "fromComponent: no components[] entry named '%s'" $ref.name) -}}
+{{- end -}}
+{{- $allOutputs := $root.Files.Get "files/component-outputs.yaml" | fromYaml -}}
+{{- $typeOutputs := index $allOutputs $comp.type -}}
+{{- if not $typeOutputs -}}
+{{- fail (printf "fromComponent: component type '%s' declares no outputs" $comp.type) -}}
+{{- end -}}
+{{- $out := index $typeOutputs $ref.output -}}
+{{- if not $out -}}
+{{- fail (printf "fromComponent: component '%s' (%s) has no output '%s' - see xrds/%s.meta.yaml" $ref.name $comp.type $ref.output $comp.type) -}}
+{{- end -}}
+{{- $ns := include "airframe-application.namespace" $root -}}
+{{- $subst := (dict "n" $ref.name "ns" $ns) -}}
+{{- if eq $out.kind "literal" -}}
+value: {{ ($out.value | toString | replace "{name}" $subst.n | replace "{namespace}" $subst.ns) | quote }}
+{{- else if eq $out.kind "secretKeyRef" -}}
+valueFrom:
+  secretKeyRef:
+    name: {{ ($out.secret | replace "{name}" $subst.n | replace "{namespace}" $subst.ns) | quote }}
+    key: {{ $out.key | quote }}
+{{- else if eq $out.kind "configMapKeyRef" -}}
+valueFrom:
+  configMapKeyRef:
+    name: {{ ($out.configMap | replace "{name}" $subst.n | replace "{namespace}" $subst.ns) | quote }}
+    key: {{ $out.key | quote }}
+{{- else -}}
+{{- fail (printf "fromComponent: unknown output kind '%s' for %s.%s" $out.kind $comp.type $ref.output) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 airframe-application.workloadEnv - the container env list shared by every workload
 (main Rollout container, every jobs:/cronJobs: entry): .Values.env verbatim (an entry
-carries either `value` or `valueFrom` - e.g. a secretKeyRef to a Secret a component such as
-PostgreSQL already created in this namespace, so nothing has to be copied into Infisical), plus
+carries `value`, `valueFrom` - e.g. a secretKeyRef to a Secret a component such as
+PostgreSQL already created in this namespace, so nothing has to be copied into Infisical - or
+`fromComponent`, resolved via airframe-application.resolveFromComponent above), plus
 one secretKeyRef entry per .Values.secrets entry whose `as` (default: env)
 includes env (see external-secret.yaml - same `app-secrets` target Secret, `key`
 field means the container-facing env var name here). Factored out so Job/CronJob
@@ -209,9 +258,13 @@ defined.
 Usage: {{ $env := fromYamlArray (include "airframe-application.workloadEnv" $) }}
 */}}
 {{- define "airframe-application.workloadEnv" -}}
+{{- $root := . -}}
 {{- $env := list -}}
 {{- range .Values.env -}}
-{{- if .valueFrom -}}
+{{- if .fromComponent -}}
+{{- $resolved := include "airframe-application.resolveFromComponent" (dict "root" $root "ref" .fromComponent) | fromYaml -}}
+{{- $env = append $env (merge (dict "name" .name) $resolved) -}}
+{{- else if .valueFrom -}}
 {{- $env = append $env (dict "name" .name "valueFrom" .valueFrom) -}}
 {{- else -}}
 {{- $env = append $env (dict "name" .name "value" (.value | toString)) -}}

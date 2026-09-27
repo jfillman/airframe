@@ -11,9 +11,11 @@ tools/airframe_schema.py) - in a single validation pass, then renders it with `h
 
 Exit 0 = all files valid, 1 = a problem (each printed as: path | rule | message | hint).
 Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed,
-AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key
-(`release`, `releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else
-in a release file. A release file is named `*.release.yaml` or `release.yaml`.
+AF-COMP-002 (AF-3): an env[].fromComponent reference names a components[] entry or output that
+doesn't exist, AF-OWNER-001 (warning until the release-file split lands, then an error): a
+release-owned key (`release`, `releaseTracking`, the deprecated `rollout.image`) in a human
+file, or anything else in a release file. A release file is named `*.release.yaml` or
+`release.yaml`.
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
@@ -28,8 +30,40 @@ from jsonschema import Draft202012Validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from airframe_schema import CHART, compiled_schema
+from component_outputs import known_outputs
 
 RELEASE_KEYS = {"release", "releaseTracking"}
+
+
+def component_output_problems(data):
+    """AF-COMP-002: every env[].fromComponent reference resolves to a real components[] entry and a
+    real output that component's type declares. Static (no helm needed), so it still runs under
+    --no-render - the chart's own resolveFromComponent template would also fail loudly at render
+    time, but that path is skipped whenever --no-render is passed."""
+    if not isinstance(data, dict):
+        return []
+    by_name = {c["name"]: c for c in (data.get("components") or []) if isinstance(c, dict) and c.get("name")}
+    problems = []
+    for i, e in enumerate(data.get("env") or []):
+        if not isinstance(e, dict) or not isinstance(e.get("fromComponent"), dict):
+            continue
+        ref = e["fromComponent"]
+        loc = f"/env/{i}/fromComponent"
+        comp = by_name.get(ref.get("name"))
+        if comp is None:
+            problems.append((loc, "AF-COMP-002", f"no components[] entry named '{ref.get('name')}'",
+                              "components[].name must match exactly - check for a typo"))
+            continue
+        kind = str(comp.get("type", "")).lower()
+        outputs = known_outputs(kind)
+        if not outputs:
+            problems.append((loc, "AF-COMP-002", f"component type '{kind}' declares no outputs",
+                              "only components with a real xrds/<type>.meta.yaml support fromComponent"))
+        elif ref.get("output") not in outputs:
+            near = difflib.get_close_matches(str(ref.get("output")), outputs, n=1)
+            hint = f"did you mean '{near[0]}'?" if near else f"see xrds/{kind}.meta.yaml"
+            problems.append((loc, "AF-COMP-002", f"'{kind}' has no output '{ref.get('output')}'", hint))
+    return problems
 
 
 def known_keys(schema, instance_path):
@@ -95,6 +129,7 @@ def check_file(path, schema, args):
             continue  # scaffolding around the real per-branch errors, which jsonschema also yields
         else:
             problems.append((loc, "AF-SCHEMA-002", err.message[:160], "see the field's schema in values.schema.json"))
+    problems.extend(component_output_problems(data))
     if not problems and not args.no_render:
         parents = Path(path).resolve().parents
         app = args.app or (parents[2].name if len(parents) > 2 else None)

@@ -1,0 +1,36 @@
+# Sidecar meta for the RabbitMQ component (AF-3), attach mode only - verified against
+# compositions/rabbitmq/templates/attach.yaml. Broker mode has no consumer-facing outputs (it's the shared
+# infrastructure other apps attach to, not something an app's own env references via fromComponent).
+kind: RabbitMQ
+summary: >-
+  attach mode: a user + permissions on an existing shared broker, scoped to this app's own queue prefix
+  and exchanges. broker mode (no outputs below apply): the shared broker itself.
+outputs:
+  username:
+    kind: secretKeyRef
+    secret: "{name}-user-credentials"
+    key: username
+  password:
+    kind: secretKeyRef
+    secret: "{name}-user-credentials"
+    key: password
+  host:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: host
+  port:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: port
+  vhost:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: vhost
+verify:
+  - id: xr-ready
+    check: The RabbitMQ XR's Ready condition is True (attach mode).
+  - id: secret-exists
+    check: Secret {name}-user-credentials exists in the app namespace and has a non-empty password key.
+  - id: configmap-exists
+    check: ConfigMap {name}-connection exists in the app namespace with host/port/vhost keys.
+owner: human

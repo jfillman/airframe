@@ -1,0 +1,44 @@
+# Sidecar meta for the PostgreSQL component (AF-3). Verified against compositions/postgresql/templates/
+# cluster.yaml and xrds/postgresql.yaml's own header: CNPG's bootstrap.initdb creates the database and its
+# owning role together and writes the generated password into the `{name}-app` Secret it manages itself
+# (not rendered by this Composition - CNPG's own convention, documented and unchanged since).
+kind: PostgreSQL
+summary: A dedicated PostgreSQL database (CloudNativePG), one per application environment.
+outputs:
+  host:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: host
+  port:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: port
+  username:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: username
+  password:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: password
+  database:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: dbname
+  uri:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: uri
+    description: A full postgres:// connection string, credentials included.
+  jdbcUri:
+    kind: secretKeyRef
+    secret: "{name}-app"
+    key: jdbc-uri
+verify:
+  - id: xr-ready
+    check: The PostgreSQL XR's Ready condition is True.
+  - id: secret-exists
+    check: Secret {name}-app exists in the app namespace and has a non-empty password key.
+  - id: reachable
+    check: A TCP connect to {name}-rw:5432 succeeds from the app namespace (CNPG's read-write Service).
+owner: human

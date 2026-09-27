@@ -472,15 +472,25 @@
                 "description": "Read the value from this pod's own downward-API field."
               }
             }
+          },
+          "fromComponent": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "output"],
+            "description": "AF-3: resolve this env var from a components[] entry's own declared output (see that component's xrds/<type>.meta.yaml), instead of a hand-written valueFrom. Mutually exclusive with value/valueFrom.",
+            "properties": {
+              "name": { "type": "string", "minLength": 1, "description": "The components[] entry's own name to read from." },
+              "output": { "type": "string", "minLength": 1, "description": "The output name that component's type declares, e.g. host, port, password." }
+            }
           }
         },
-        "not": {
-          "required": [
-            "value",
-            "valueFrom"
-          ]
-        },
-        "description": "One container environment variable."
+        "oneOf": [
+          { "not": { "anyOf": [{ "required": ["value"] }, { "required": ["valueFrom"] }, { "required": ["fromComponent"] }] } },
+          { "required": ["value"] },
+          { "required": ["valueFrom"] },
+          { "required": ["fromComponent"] }
+        ],
+        "description": "One container environment variable. At most one of value/valueFrom/fromComponent."
       }
     },
     "configMaps": {

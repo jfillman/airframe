@@ -20,6 +20,8 @@ apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: postgresqls.catalog.idp.io
+  annotations:
+    hangar.io/agent-summary: "A dedicated PostgreSQL database (CloudNativePG), one per application environment."
 spec:
   group: catalog.idp.io
   names:

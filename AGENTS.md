@@ -5,10 +5,12 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 (see hangar/docs/autopilot/airframe-ai-friendly.md, workstreams AF-1 to AF-10).
 
 ## Start here
-1. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
-2. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas. `xrds/<type>.meta.yaml` (redis, postgresql, rabbitmq today, AF-3) declares that component's real outputs - Secret/ConfigMap names and keys, or a literal - for `fromComponent` to resolve against.
-3. `docs/user/`: the Skyport quickstarts, worked end to end.
-4. `tools/airframe-validate` (built: schema + discriminated `components[]` union + `tools/deadend_rules.py`'s AF-4b convention/policy rules, in one pass; `--format json` for tooling). *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.explain`.
+1. [`llms.txt`](llms.txt): the index - what to read first, in what order, for a cold start.
+2. `contract/airframe-contract.json` (AF-1b): every chart field, every XRD's shape and summary, every component's real outputs, in one generated file. Query it with `tools/airframe-capabilities <components|component|xrds|xrd|field|output> ...` instead of grepping source - that's the whole point of the bundle. Regenerate with `python3 tools/gen_contract.py` after changing any of its sources (never hand-edit it); CI's `--check` fails if it drifts.
+3. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
+4. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas, each carrying a `hangar.io/agent-summary` annotation (AF-1b). `xrds/<type>.meta.yaml` (redis, postgresql, rabbitmq today, AF-3) declares that component's real outputs - Secret/ConfigMap names and keys, or a literal - for `fromComponent` to resolve against.
+5. `docs/user/`: the Skyport quickstarts, worked end to end.
+6. `tools/airframe-validate` (built: schema + discriminated `components[]` union + `tools/deadend_rules.py`'s AF-4b convention/policy rules, in one pass; `--format json` for tooling). *(planned)* `airframe.plan`, `airframe.explain`.
 
 ## The model in five lines
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.

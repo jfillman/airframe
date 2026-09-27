@@ -1,0 +1,29 @@
+# Airframe
+
+> Hangar's service catalog: Crossplane XRDs, compositions and the `airframe-application` Helm chart.
+> One GitOps write path - nothing is applied with `kubectl`. Components (Redis, PostgreSQL, RabbitMQ)
+> are entries in an environment's `components:` list; applications onboard through the bootstrap-tier
+> XRDs (PythonApplication, NodeJSApplication, GoApplication, SpringBootApplication, InfraService).
+
+## Start here
+
+- [AGENTS.md](AGENTS.md): what an agent may and may not touch, today - the human-and-agent-readable rules.
+- [contract/airframe-contract.json](contract/airframe-contract.json): every chart field, every XRD's shape and summary, every component's real outputs (Secret/ConfigMap names and keys) - generated, never hand-edited. Query it with `tools/airframe-capabilities` instead of grepping source.
+- [charts/airframe-application/values.schema.json](charts/airframe-application/values.schema.json): the single source of truth for the chart's values shape (descriptions, defaults, strictness). `values.yaml` is generated from it.
+
+## Tools
+
+- `tools/airframe-validate FILE...`: validate an environment values file against the strict schema, component output references, and dead-end convention rules. `--format json` for tooling.
+- `tools/airframe-capabilities <components|component|xrds|xrd|field|output> ...`: answer "what exists and what does it do" from the contract bundle alone.
+- `tools/gen_airframe_schema.py`, `tools/gen_component_outputs.py`, `tools/gen_contract.py`: regenerate the generated files above after editing their sources. Each has a `--check` mode for CI.
+
+## Docs
+
+- [docs/user/quickstart.md](docs/user/quickstart.md): onboard a new app end to end.
+- [docs/user/quickstart-flight-api.md](docs/user/quickstart-flight-api.md), [docs/user/quickstart-broker.md](docs/user/quickstart-broker.md): worked component examples (RabbitMQ publish/consume).
+- [docs/user/decommission-app.md](docs/user/decommission-app.md): tear down an app.
+
+## Optional
+
+- [xrds/](xrds/): every XRD's real OpenAPI schema, if the contract bundle's summary isn't enough. `xrds/<type>.meta.yaml` is a component's sidecar output contract, the source `gen_contract.py` reads.
+- [compositions/](compositions/): what each XRD actually renders, if you need to know exactly which Kubernetes objects a component creates.

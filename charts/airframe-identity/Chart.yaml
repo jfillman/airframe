@@ -25,11 +25,13 @@ description: >-
   remaining gap is a brand-new tenant's very first-ever sync, where the
   ApplicationSet creates both Applications together and their initial syncs aren't
   ordered against each other. Unlike the old single-Application deadlock, this
-  isn't permanent: if airframe-application's first attempt beats this chart's own
-  first sync, its PreSync hook Job fails, but selfHeal keeps retrying that
-  Application on its own schedule independent of this one, so it self-resolves
-  once this chart's Application finishes creating the ServiceAccount - no hook on
-  either side is gated on the other's completion.
+  isn't a deadlock, but it does NOT self-resolve on its own: if
+  airframe-application's first attempt beats this chart's own first sync, its PreSync hook Job fails,
+  and selfHeal does not retry a failed sync OPERATION (it reacts to drift in live resources). CORRECTION
+  2026-09-27: an earlier version of this note said selfHeal keeps retrying; it does not. Found on
+  baggage-api-staging, which stayed failed with the ServiceAccount missing at the time and present later.
+  The fix is a `retry` policy on the Flight Application (syncPolicy.retry: limit 5, backoff 30s x2, max
+  10m), set in the tenant-onboarding ApplicationSet in apron and gitops-cluster-kind-prod.
 type: application
 version: 0.1.0
 appVersion: "1.0.0"

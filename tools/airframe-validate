@@ -1,25 +1,33 @@
 #!/usr/bin/env python3
-"""airframe validate (AF-4a + AF-2).
+"""airframe validate (AF-4a/b + AF-2/AF-3).
 
 Checks an environment values file against the ONE compiled schema - values.schema.json (strict:
 additionalProperties:false baked in on every object except its documented passthroughs) plus a
 discriminated union spliced into components[].items, one arm per component type with a real XRD
 (redis, postgresql, rabbitmq today, generated fresh from xrds/*.yaml every run - see
-tools/airframe_schema.py) - in a single validation pass, then renders it with `helm template`.
+tools/airframe_schema.py) - then a set of dead-end convention/policy rules (tools/deadend_rules.py,
+AF-4b), then renders it with `helm template`.
 
-    tools/airframe-validate FILE [FILE...] [--app NAME] [--cluster NAME] [--no-render]
+    tools/airframe-validate FILE [FILE...] [--app NAME] [--cluster NAME] [--no-render] [--format text|json]
 
-Exit 0 = all files valid, 1 = a problem (each printed as: path | rule | message | hint).
+Exit 0 = all files valid, 1 = a problem. Text output (default): one line per problem, `path | rule |
+message | hint`. `--format json` emits one JSON object per file with a `problems` and `warnings` list
+(same fields, plus `severity`) - for a CI step or another tool to consume, not just eyeball.
+
 Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed,
 AF-COMP-002 (AF-3): an env[].fromComponent reference names a components[] entry or output that
-doesn't exist, AF-OWNER-001 (warning until the release-file split lands, then an error): a
-release-owned key (`release`, `releaseTracking`, the deprecated `rollout.image`) in a human
-file, or anything else in a release file. A release file is named `*.release.yaml` or
-`release.yaml`.
+doesn't exist. AF-4b dead-end rules (tools/deadend_rules.py): AF-CLUSTER-001 (devClusterName isn't
+the registry's canonical dev value), AF-ENV-001 (envName named like a pipeline stage), AF-COMP-001
+(unknown component type), AF-SECRET-001 (a secret-shaped literal in env/configMaps), AF-COMP-003
+(warning: a hand-written valueFrom matches a real component's own output - use fromComponent).
+AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key
+(`release`, `releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else
+in a release file. A release file is named `*.release.yaml` or `release.yaml`.
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
 import difflib
+import json
 import subprocess
 import sys
 import tempfile
@@ -31,6 +39,7 @@ from jsonschema import Draft202012Validator
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from airframe_schema import CHART, compiled_schema
 from component_outputs import known_outputs
+from deadend_rules import all_deadend_problems
 
 RELEASE_KEYS = {"release", "releaseTracking"}
 
@@ -108,13 +117,14 @@ def ownership_warnings(path, data):
 
 
 def check_file(path, schema, args):
-    problems = []
+    """Returns (errors, warnings), each a list of (loc, rule, msg, hint) tuples."""
     try:
         data = yaml.safe_load(Path(path).read_text())
     except yaml.YAMLError as e:
-        return [(str(path), "AF-SCHEMA-002", f"not valid YAML: {e}", "fix the YAML syntax")]
+        return [(str(path), "AF-SCHEMA-002", f"not valid YAML: {e}", "fix the YAML syntax")], []
     if data is None:
         data = {}
+    errors, warnings = [], []
     v = Draft202012Validator(schema)
     for err in sorted(v.iter_errors(data), key=lambda e: list(map(str, e.absolute_path))):
         loc = "/" + "/".join(map(str, err.absolute_path))
@@ -124,13 +134,16 @@ def check_file(path, schema, args):
             for bad in [k for k in err.instance if k not in allowed]:
                 near = difflib.get_close_matches(bad, allowed, n=1)
                 hint = f"did you mean '{near[0]}'?" if near else "no such field; see values.schema.json"
-                problems.append((f"{loc}/{bad}", "AF-SCHEMA-001", f"unknown key '{bad}'", hint))
+                errors.append((f"{loc}/{bad}", "AF-SCHEMA-001", f"unknown key '{bad}'", hint))
         elif err.validator in ("if", "then", "allOf"):
             continue  # scaffolding around the real per-branch errors, which jsonschema also yields
         else:
-            problems.append((loc, "AF-SCHEMA-002", err.message[:160], "see the field's schema in values.schema.json"))
-    problems.extend(component_output_problems(data))
-    if not problems and not args.no_render:
+            errors.append((loc, "AF-SCHEMA-002", err.message[:160], "see the field's schema in values.schema.json"))
+    errors.extend(component_output_problems(data))
+    for loc, rule, msg, hint, severity in all_deadend_problems(data, schema):
+        (errors if severity == "error" else warnings).append((loc, rule, msg, hint))
+    warnings.extend(ownership_warnings(path, data))
+    if not errors and not args.no_render:
         parents = Path(path).resolve().parents
         app = args.app or (parents[2].name if len(parents) > 2 else None)
         with tempfile.TemporaryDirectory() as td:
@@ -141,8 +154,8 @@ def check_file(path, schema, args):
                                capture_output=True, text=True)
             if r.returncode != 0:
                 msg = (r.stderr.strip().splitlines() or ["helm failed"])[-1][:200]
-                problems.append(("/", "AF-RENDER-001", msg, "fix the value the message names, then re-run"))
-    return problems
+                errors.append(("/", "AF-RENDER-001", msg, "fix the value the message names, then re-run"))
+    return errors, warnings
 
 
 def main():
@@ -151,24 +164,30 @@ def main():
     ap.add_argument("--app")
     ap.add_argument("--cluster", default="kind-dev")
     ap.add_argument("--no-render", action="store_true")
+    ap.add_argument("--format", choices=["text", "json"], default="text")
     a = ap.parse_args()
     schema = compiled_schema()
     bad = 0
+    results = []
     for f in a.files:
-        probs = check_file(f, schema, a)
-        try:
-            warns = ownership_warnings(f, yaml.safe_load(Path(f).read_text()))
-        except Exception:
-            warns = []
-        if probs:
+        errors, warnings = check_file(f, schema, a)
+        if errors:
             bad += 1
-            print(f"FAIL {f}")
-            for loc, rule, msg, hint in probs:
-                print(f"  {loc} | {rule} | {msg} | {hint}")
-        else:
-            print(f"ok   {f}")
-        for loc, rule, msg, hint in warns:
-            print(f"  warn {loc} | {rule} | {msg} | {hint}")
+        results.append({"file": f, "valid": not errors,
+                         "problems": [{"loc": l, "rule": r, "message": m, "hint": h} for l, r, m, h in errors],
+                         "warnings": [{"loc": l, "rule": r, "message": m, "hint": h} for l, r, m, h in warnings]})
+    if a.format == "json":
+        print(json.dumps(results, indent=2))
+    else:
+        for res in results:
+            if res["problems"]:
+                print(f"FAIL {res['file']}")
+                for p in res["problems"]:
+                    print(f"  {p['loc']} | {p['rule']} | {p['message']} | {p['hint']}")
+            else:
+                print(f"ok   {res['file']}")
+            for w in res["warnings"]:
+                print(f"  warn {w['loc']} | {w['rule']} | {w['message']} | {w['hint']}")
     return 1 if bad else 0
 
 

@@ -58,4 +58,16 @@ done
 $V --no-render tests/validate/good.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good release file"; fail=1; }
 $V --no-render tests/validate/good-boarding-api-dev.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file"; fail=1; }
 
+# AF-4b: dead-end rules, each with its own seeded failing fixture.
+for f in bad-cluster-name bad-env-name unknown-component-type secret-literal; do
+  $V --no-render "tests/validate/$f.yaml" >/dev/null 2>&1 && { echo "FAIL: validate accepted $f"; fail=1; }
+done
+$V --no-render tests/validate/bad-cluster-name.yaml 2>&1 | grep -q AF-CLUSTER-001 || { echo "FAIL: AF-CLUSTER-001 did not fire"; fail=1; }
+$V --no-render tests/validate/bad-env-name.yaml 2>&1 | grep -q AF-ENV-001 || { echo "FAIL: AF-ENV-001 did not fire"; fail=1; }
+$V --no-render tests/validate/unknown-component-type.yaml 2>&1 | grep -q AF-COMP-001 || { echo "FAIL: AF-COMP-001 did not fire"; fail=1; }
+$V --no-render tests/validate/secret-literal.yaml 2>&1 | grep -q AF-SECRET-001 || { echo "FAIL: AF-SECRET-001 did not fire"; fail=1; }
+# AF-COMP-003 is an advisory warning, not a failure - the boarding-api fixture (real hand-written names) proves it fires without blocking.
+$V --no-render tests/validate/good-boarding-api-dev.yaml 2>&1 | grep -q "warn.*AF-COMP-003" || { echo "FAIL: AF-COMP-003 advisory did not fire on the boarding-api fixture"; fail=1; }
+$V --no-render --format json tests/validate/good-boarding-api-dev.yaml | python3 -c "import json,sys; json.load(sys.stdin)" || { echo "FAIL: --format json did not produce valid JSON"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok" || exit 1

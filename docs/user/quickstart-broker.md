@@ -16,7 +16,7 @@ Do parts 1 and 2 first. This guide assumes `boarding-api` and `flight-api` are r
 environments and doesn't repeat how to create an app or merge a pipeline PR.
 
 **What has and hasn't been verified.** See [the end of this guide](#what-was-verified) before you rely
-on section 08: the ground steps were walked live, the flight (`kind-prod`) steps were not.
+on section 08: the ground steps were walked live, the flight (prod cluster) steps were not.
 
 ## 01 — What you're building
 
@@ -51,11 +51,11 @@ no source code.
 | Field | Value |
 |---|---|
 | Name | `skyport-broker` |
-| `devCluster` | `kind-dev` |
+| `devCluster` | `dev` |
 | `description` | Skyport shared message broker (RabbitMQ) |
 | `visibility` | `private` |
 
-Use `kind-dev` for `devCluster` exactly, as in [part 1](quickstart.md#02--create-the-app).
+Use `dev` for `devCluster` exactly, as in [part 1](quickstart.md#02--create-the-app).
 
 Tower opens a PR against the tenants repo. **Merge it.** Within a few minutes:
 
@@ -295,29 +295,29 @@ can edit an app's environment file can *request* any permission on the vhost for
 of namespaces, not the permission text, is what protects the broker. That's acceptable for this demo;
 a shared production broker would also want an admission policy on what an app may ask for.
 
-## 08 — Flight: the same on `kind-prod`
+## 08 — Flight: the same on `prod`
 
 > **Not walked.** Everything in this section is written from how the pieces work and from the
-> component being verified on `kind-prod` (below); it was not run end to end. `kind-prod` was also
-> short of memory when this was written, and the broker adds about 1Gi. Check `podman` VM headroom
-> first.
+> component being verified on the prod cluster (below); it was not run end to end. The prod cluster
+> was also short of memory when this was written, and the broker adds about 1Gi. Check the cluster's
+> memory headroom first.
 
 The flight environment for the broker works as in [part 1, section 07](quickstart.md#07--flight-a-governed-environment-on-an-upper-cluster)
-and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-kind-prod):
+and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-prod):
 
-1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-kind-prod-staging`, `Namespace`
-   `app-skyport-broker-cicd`, `appName` `skyport-broker`, `cluster` `kind-prod`, `env` `staging`, and
+1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-prod-staging`, `Namespace`
+   `app-skyport-broker-cicd`, `appName` `skyport-broker`, `cluster` `prod`, `env` `staging`, and
    **`appType` `infra`**. Merge the PR. (Needs airframe v0.3.90. `appType` tells the environment that
    its deploy repo is `gitops-infra-skyport-broker`, not `gitops-skyport-broker`. Without it the values
    file is written to a repo that doesn't exist, and the environment reports
    `Unready resources: app-usage`. Both were found when someone created this environment.)
-2. In the PR that adds `gitops-infra-skyport-broker/kind-prod/staging/values.yaml`, use the same
+2. In the PR that adds `gitops-infra-skyport-broker/prod/staging/values.yaml`, use the same
    `components:` block as section 03 with `allowedNamespaces: [app-flight-api-staging,
    app-boarding-api-staging]`.
 3. In each app's staging values, add its `attach` component and the `env` entries from sections 04 and
    05, pointing `brokerRef` at `app-skyport-broker-staging`.
 
-`kind-prod` has the RabbitMQ operators, cert-manager and the RabbitMQ component installed, and the
+The prod cluster has the RabbitMQ operators, cert-manager and the RabbitMQ component installed, and the
 component was verified there: broker and attach both reached Ready with the app baseline
 NetworkPolicy in place, a pod in an allowed namespace connected on 5672, and a pod in a namespace not
 on the list was blocked.
@@ -332,9 +332,9 @@ on the list was blocked.
 - **Verified by test, against real RabbitMQ:** the component's broker and attach modes on both
   clusters, and every allowed and refused action in section 07 (over AMQP, on the dev cluster).
   `flight-api`: 21 unit tests. `boarding-api`: 18.
-- **Verified in the component on `kind-prod`** (Calico, which enforces NetworkPolicy): broker and
+- **Verified in the component on the prod cluster** (Calico, which enforces NetworkPolicy): broker and
   attach modes Ready; allowed namespace connects, other namespace blocked.
-- **Not walked:** section 08 end to end, and the `kind-prod` staging environments for either app.
+- **Not walked:** section 08 end to end, and the prod staging environments for either app.
 - **Verified end to end, live:** with both apps on their final images (`flight-api` 1.1.0 on Spring
   Boot 3.5.16, `boarding-api` 1.1.0), a lookup of `AC123` was a cache hit on gate A1; after
   `PUT …/gate` to B2 the same lookup returned B2 at once with `"cached": false`, and `eventsReceived`

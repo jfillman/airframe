@@ -27,12 +27,12 @@ to make canary and blue/green deployments *visible*.
 
 **Starting over?** If a previous `boarding-api` was decommissioned, finish
 [decommissioning](decommission-app.md) first — in particular delete its Infisical
-projects (`boarding-api-kind-dev`, `boarding-api-kind-prod`) and any
-`boarding-api` key in kind-prod's `secretstore-provisioner` ConfigMap, or the new
+projects (`boarding-api-dev`, `boarding-api-prod`) and any
+`boarding-api` key in the prod cluster's `secretstore-provisioner` ConfigMap, or the new
 app tries to adopt a dead project. Also move any old local `boarding-api` checkout
 out of the way: section 04 clones into that directory name.
 
-**Two architectures.** The dev cluster (`kiac-dev`) is arm64 and `kind-prod` is
+**Two architectures.** The dev cluster is arm64 and the prod cluster is
 amd64. Leave `build.platforms` unset in `cicd.yaml` so your image is built for both;
 if you set it to one, the other cluster gets `exec format error`.
 
@@ -62,14 +62,14 @@ its XRD. Fill in:
 | Field | Value |
 |---|---|
 | Name | `boarding-api` |
-| `devCluster` | `kind-dev` |
+| `devCluster` | `dev` |
 | `description` | Skyport gate board: Redis-cached flight lookups and a canary visualizer |
 | `nodeVersion` | `20` |
 | `packageManager` | `npm` |
 | `port` | `8080` |
 | `visibility` | `private` |
 
-**Use `kind-dev` exactly, even though the dev cluster is `kiac-dev`.** The dev ApplicationSets hard-code `cluster: kind-dev` when they render an environment's ExternalSecret, so it reads the store `<app>-kind-dev`. An app created with `devCluster: kiac-dev` gets a store named `<app>-kiac-dev`, its ExternalSecret never syncs, and its pods sit in `CreateContainerConfigError`. And don't remove `kind-dev` from the cluster-registry: every existing app is pinned to it, and removing it turns their stores `InvalidProviderConfig` fleet-wide.
+**Use `dev` exactly, even if your dev cluster goes by another name.** The dev ApplicationSets hard-code `cluster: dev` when they render an environment's ExternalSecret, so it reads the store `<app>-dev`. An app created with any other `devCluster` value gets a store named `<app>-<that value>`, its ExternalSecret never syncs, and its pods sit in `CreateContainerConfigError`. And don't remove `dev` from the cluster-registry: every existing app is pinned to it, and removing it turns their stores `InvalidProviderConfig` fleet-wide.
 
 Submitting opens a pull request into `gitops-cluster-dev-tenants` at
 `tenants/boarding-api/xr-requests/boarding-api.yaml`. **Merge it** — the
@@ -274,7 +274,7 @@ environment list from this `upperEnvironments` block:
 deploy:
   lowerEnvironments: [dev]
   upperEnvironments:
-    - { name: staging, cluster: kind-prod }
+    - { name: staging, cluster: prod }
 
 governance:
   allowedCommitSigners:
@@ -304,27 +304,27 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 
 | Field | Value | Notes |
 |---|---|---|
-| Name | `boarding-api-kind-prod-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
+| Name | `boarding-api-prod-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
 | Namespace | `app-boarding-api-cicd` | The app's tenant namespace, `app-<app>-cicd`. The `xr-requests` AppProject only permits this namespace. |
 | Owner | `group:default/jfillman` | Same as every existing env. |
 | `appName` | `boarding-api` | Required. Labels the env and drives a deletion-protection `Usage` on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist. |
-| `cluster` | `kind-prod` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
+| `cluster` | `prod` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
 | `env` | `staging` | Required. A DNS label, max 20 characters (`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) — it becomes part of the namespace `app-boarding-api-staging` and a git path. |
 | `configMapGenerator` | off | Opt-in to a Kustomize `configMapGenerator` source for this env's config files. Leave off unless you need it. |
 
 The Crossplane Settings page can stay at its defaults.
 
 Submitting opens a PR into `gitops-cluster-dev-tenants`
-(`tenants/boarding-api/xr-requests/boarding-api-kind-prod-staging.yaml`). Merge
+(`tenants/boarding-api/xr-requests/boarding-api-prod-staging.yaml`). Merge
 it. Crossplane then commits a bootstrap `values.yaml` to
-`gitops-boarding-api/kind-prod/staging/` and an onboarding entry to
-`kind-prod`'s own tenants repo, so **kind-prod's own ArgoCD** picks the env up — no
+`gitops-boarding-api/prod/staging/` and an onboarding entry to
+the prod cluster's own tenants repo, so **the prod cluster's own ArgoCD** picks the env up — no
 cross-cluster credential is involved.
 
 ```
 $ kubectl get applicationenvironment -n app-boarding-api-cicd
 NAME                             SYNCED   READY   COMPOSITION                              AGE
-boarding-api-kind-prod-staging   True     True    applicationenvironments.catalog.idp.io   2m
+boarding-api-prod-staging   True     True    applicationenvironments.catalog.idp.io   2m
 ```
 
 `kubectl describe` shows `ClusterReady: True` and `WorkloadDeployed: False`. The
@@ -359,7 +359,7 @@ step, so until it runs the Rollout has no image to start.
 Push to `main`. After `build`, `test` and `deploy` to dev, the `release` stage
 opens a PR against `gitops-boarding-api` setting `rollout.image` for `staging`.
 Merge it — as a **signed** commit; GitHub's merge button produces an unsigned one,
-see Glidepath's `docs/admin/commit-signing.md` ("Merge strategy matters"). kind-prod's
+see Glidepath's `docs/admin/commit-signing.md` ("Merge strategy matters"). The prod cluster's
 ArgoCD syncs it and `WorkloadDeployed` flips to `True` once a real Rollout exists.
 
 ## 08 — Add a Redis cache
@@ -386,8 +386,8 @@ A component only works where Crossplane can reconcile it — `provider-helm` and
 
 | Cluster | `provider-helm` | `Redis` XRD |
 |---|---|---|
-| dev (`kiac-dev`, arm64) | installed, healthy | installed |
-| `kind-prod` (amd64) | installed, healthy | installed (delivered by the `idp-service-catalog-redis` Application) |
+| dev (arm64) | installed, healthy | installed |
+| prod (amd64) | installed, healthy | installed (delivered by the `idp-service-catalog-redis` Application) |
 
 Both tiers have what they need, and both clusters run airframe v0.3.83, which
 includes the Redis naming fix. All the images involved are multi-arch, checked

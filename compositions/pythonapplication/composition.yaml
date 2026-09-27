@@ -362,6 +362,31 @@ spec:
                 content: |
                   # No dependencies yet - main.py is stdlib-only.
                 commitMessage: "PythonApplication scaffold: requirements.txt"
+            ---
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-src-version-file
+              annotations:
+                <<setResourceNameAnnotation "src-repo-version-file">>
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:VERSION:" $xrName) (index (.observed.resources | default dict) "src-repo-version-file" | default dict)>>"
+            spec:
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: VERSION
+                overwriteOnCreate: false
+                content: |
+                  0.1.0
+                # requirements.txt (the pip branch, unlike poetry/uv's pyproject.toml above) has no
+                # version field of its own - build-image.yaml's version-selection chain (known-gap
+                # #1: every pip-based app image was permanently "0.0.0-<sha>") falls back to a plain
+                # VERSION file when no manifest has one; this seeds a real starting value instead of
+                # leaving a pip app to rediscover the gap the hard way.
+                commitMessage: "PythonApplication scaffold: VERSION"
             <<- else >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile

@@ -1,0 +1,553 @@
+<!doctype html><html><head><meta charset=utf-8><title>Airframe Broker Quickstart</title><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:       #f2efe9;
+    --paper-2:     #e8e3da;
+    --surface:     #fbfaf7;
+    --ink:         #1b1f24;
+    --muted:       #5b6570;
+    --soft:        #838b93;
+    --rule:        rgba(27,31,36,0.12);
+    --rule-solid:  #c7c2b8;
+    --accent:      #b9791f;
+    --accent-tint: rgba(185,121,31,0.08);
+    --link:        #2e7ba6;
+    --link-tint:   rgba(46,123,166,0.08);
+    --font-sans:  'Geist', system-ui, sans-serif;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+    --font-mono:  'Geist Mono', ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+      --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+      --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+      --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+      --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+    --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+    --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+    --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+    --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+  }
+
+  body { font-family: var(--font-sans); background: var(--paper); color: var(--ink); padding-block: 3.5rem; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 1.5rem; }
+
+  .masthead { margin-bottom: 3rem; max-width: 74ch; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.9rem;
+  }
+  h1 {
+    font-family: var(--font-serif); font-weight: 400; font-size: clamp(2.25rem, 4vw + 1rem, 3.25rem);
+    letter-spacing: -0.01em; line-height: 1.05; color: var(--ink); text-wrap: balance; margin-bottom: 0.9rem;
+  }
+  .masthead .dek { font-size: 1.05rem; line-height: 1.6; color: var(--muted); max-width: 66ch; }
+  .masthead .dek b { color: var(--ink); font-weight: 600; }
+
+  section { margin-bottom: 3.75rem; }
+  .section-head { max-width: 68ch; margin-bottom: 1.5rem; }
+  .section-index { font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 0.6rem; }
+  h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.6rem; color: var(--ink); text-wrap: balance; margin-bottom: 0.6rem; }
+  h3 { font-family: var(--font-sans); font-weight: 600; font-size: 0.95rem; color: var(--ink); margin: 1.4rem 0 0.5rem; }
+  .section-head p, .prose p { font-size: 0.95rem; line-height: 1.65; color: var(--muted); }
+  .prose p + p, .prose ul + p, .prose p + ul { margin-top: 0.75rem; }
+  .prose ul { margin: 0.5rem 0 0.75rem 1.1rem; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
+  .prose li { margin-bottom: 0.3rem; }
+  code, .section-head code { font-family: var(--font-mono); font-size: 0.85em; color: var(--ink); background: var(--paper-2); padding: 0.05em 0.35em; border-radius: 3px; }
+
+  .diagram-container { overflow-x: auto; }
+  svg.diagram { width: 100%; min-width: 780px; display: block; }
+
+  pre {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 1rem 1.1rem; overflow-x: auto; margin: 0.9rem 0; font-family: var(--font-mono);
+    font-size: 0.8rem; line-height: 1.6; color: var(--ink);
+  }
+  pre .c { color: var(--soft); font-style: italic; }
+  .filepath {
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted);
+    letter-spacing: 0.02em; margin-bottom: -0.5rem; display: block;
+  }
+
+  .steps { counter-reset: step; margin-top: 1.5rem; }
+  .step { position: relative; padding: 0 0 2rem 2.75rem; border-left: 1px solid var(--rule); margin-left: 0.9rem; }
+  .step:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: -0.9rem; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: var(--surface); border: 1.5px solid var(--accent); color: var(--accent);
+    font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h3 { margin-top: 0; font-size: 1rem; }
+  .step .tag {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--link); border: 1px solid var(--link); border-radius: 3px;
+    padding: 0.1em 0.45em; margin-left: 0.5rem; vertical-align: middle;
+  }
+  .step .tag.ground { color: var(--muted); border-color: var(--rule-solid); }
+  .step .tag.flight { color: var(--accent); border-color: var(--accent); }
+
+  .cards { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  .cards.c2 { grid-template-columns: 1fr 1fr; }
+  .cards.c3 { grid-template-columns: 1.1fr 1fr 0.95fr; }
+  @media (max-width: 760px) { .cards.c2, .cards.c3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1.15rem 1.25rem; }
+  .card .eyebrow { font-size: 0.6rem; margin-bottom: 0.5rem; }
+  .card-head {
+    display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem; border-bottom: 1px solid var(--rule);
+  }
+  .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .card-dot.accent { background: var(--accent); } .card-dot.link { background: var(--link); }
+  .card-dot.ink { background: var(--ink); } .card-dot.muted { background: var(--muted); }
+  .card h3 { margin: 0; font-size: 0.92rem; }
+  .card p { font-size: 0.83rem; line-height: 1.6; color: var(--muted); }
+  .card ul { list-style: none; font-size: 0.83rem; line-height: 1.65; color: var(--muted); margin: 0; }
+  .card li { padding-left: 0.9rem; position: relative; margin-bottom: 0.25rem; }
+  .card li::before { content: '—'; position: absolute; left: 0; color: var(--rule-solid); }
+  .card b { color: var(--ink); font-weight: 600; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  .compare .panel { border-radius: 8px; padding: 1.4rem; }
+  .compare .panel.ground { background: var(--paper-2); border: 1px solid var(--rule-solid); }
+  .compare .panel.flight { background: var(--accent-tint); border: 1px solid var(--accent); }
+  .compare .panel .label { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.4rem; }
+  .compare .panel.ground .label { color: var(--muted); }
+  .compare .panel.flight .label { color: var(--accent); }
+  .compare .panel h3 { margin: 0 0 0.6rem; font-size: 1.1rem; font-family: var(--font-serif); font-weight: 400; }
+  .compare .panel dl { font-size: 0.83rem; line-height: 1.7; color: var(--muted); }
+  .compare .panel dt { color: var(--ink); font-weight: 600; margin-top: 0.6rem; }
+  .compare .panel dt:first-child { margin-top: 0; }
+  .compare .panel dd { margin: 0; }
+
+  .callout {
+    border-left: 2px solid var(--link); background: var(--link-tint); border-radius: 0 6px 6px 0;
+    padding: 1rem 1.25rem; margin-top: 1.25rem;
+  }
+  .callout p { font-size: 0.88rem; line-height: 1.6; color: var(--ink); }
+  .callout .label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--link); margin-bottom: 0.4rem; }
+
+  .table-scroll { overflow-x: auto; margin-top: 1.5rem; border: 1px solid var(--rule); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 600px; }
+  thead th {
+    text-align: left; font-family: var(--font-mono); font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: var(--paper-2); padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); color: var(--muted); line-height: 1.55; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.name { color: var(--ink); font-weight: 600; font-family: var(--font-sans); white-space: nowrap; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em; color: var(--soft);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  }
+
+  .f-paper{fill:var(--paper);} .f-paper2{fill:var(--paper-2);} .f-surface{fill:var(--surface);}
+  .f-ink{fill:var(--ink);} .f-muted{fill:var(--muted);} .f-soft{fill:var(--soft);}
+  .f-accent{fill:var(--accent);} .f-accenttint{fill:var(--accent-tint);}
+  .f-link{fill:var(--link);} .f-linktint{fill:var(--link-tint);} .f-none{fill:none;}
+  .s-ink{stroke:var(--ink);} .s-muted{stroke:var(--muted);} .s-soft{stroke:var(--soft);}
+  .s-accent{stroke:var(--accent);} .s-link{stroke:var(--link);}
+  .s-rule{stroke:var(--rule);} .s-rulesolid{stroke:var(--rule-solid);} .s-none{stroke:none;}
+  p.prose { font-size: 0.92rem; line-height: 1.65; color: var(--muted); margin-top: 0.6rem; }
+  .step p.prose:first-of-type { margin-top: 0.4rem; }
+  section > h3 { margin-top: 1.6rem; }
+  section > p.prose { max-width: 68ch; }
+</style>
+<div class="wrap">
+<div class="masthead">
+<p class="eyebrow">Hangar Platform · Airframe · Developer Guide · Part 3</p>
+<h1>A shared message broker</h1>
+<p class="dek"><a href="quickstart.html" style="color:var(--link)">Part 1</a> built a NodeJS service with a cache and <a href="quickstart-flight-api.html" style="color:var(--link)">part 2</a> a Spring Boot service with its own database, and ended on a problem: move a flight's gate and the gate board keeps the old one until a three-minute cache expires. This part fixes it. You provision <code>skyport-broker</code> (RabbitMQ) once, then attach <code>flight-api</code> as a <b>publisher</b> and <code>boarding-api</code> as a <b>consumer</b>, so the board is right the moment a flight changes.</p>
+<div class="callout">
+<p class="label">What has and hasn't been verified</p>
+<p><b>Walked live on the dev cluster (2026-09-25):</b> creating the <code>InfraService</code> (which found a real gap, section 02), declaring the broker in its environment file, both apps attaching and getting their credentials, <code>boarding-api</code> connecting with its real credentials and waiting for the exchange, and the pipeline builds (which found the image-scan failure in section 04). <b>Tested against real RabbitMQ:</b> the component in both modes on both clusters, and every allowed and refused action in section 07. <b>Unit tests:</b> flight-api 21, boarding-api 18. <b>Not walked:</b> section 08, the flight environments on <code>prod</code>. <b>End to end, live:</b> a lookup was a cache hit on gate A1; after <code>PUT …/gate</code> to B2 the same lookup returned B2 at once with <code>cached: false</code>, and <code>eventsReceived</code> climbed, with both apps on their final images (flight-api 1.1.0 on Spring Boot 3.5.16).</p>
+</div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Needs airframe v0.3.89 or later</p>
+<p>The <code>rabbitmq</code> component arrives in v0.3.89 (section 08 needs v0.3.90). Do parts 1 and 2 first: this guide assumes <code>boarding-api</code> and <code>flight-api</code> are running in their dev environments and links back rather than repeating the mechanics.</p>
+</div>
+</div>
+
+<section>
+<div class="section-head">
+<p class="section-index">THE PATH</p>
+<h2>You write two things; the platform does the rest</h2>
+<p>Provisioning the broker is one form and one file. Everything between them is Git and ArgoCD.</p>
+</div>
+<div class="diagram-container"><svg class="diagram" viewBox="0 0 960 130" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="fl-title fl-desc">
+<title id="fl-title">How the skyport-broker gets provisioned</title>
+<desc id="fl-desc">Six steps left to right. You create an InfraService in Tower, which commits a request to the tenants repo, which creates the gitops-infra repo. You then add platform/envs/dev.yaml to that repo, ArgoCD's per-app ApplicationSet picks it up, and a RabbitMQ XR brings the broker up. Steps one and four are yours; the rest are automatic.</desc>
+<defs><marker id="f-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-muted" points="0 0, 8 3, 0 6"/></marker></defs>
+<rect width="960" height="130" class="f-paper"/>
+<line x1="140" y1="56" x2="168" y2="56" class="s-muted" stroke-width="1.2" marker-end="url(#f-arrow)"/>
+<line x1="300" y1="56" x2="328" y2="56" class="s-muted" stroke-width="1.2" marker-end="url(#f-arrow)"/>
+<line x1="460" y1="56" x2="488" y2="56" class="s-muted" stroke-width="1.2" marker-end="url(#f-arrow)"/>
+<line x1="620" y1="56" x2="648" y2="56" class="s-muted" stroke-width="1.2" marker-end="url(#f-arrow)"/>
+<line x1="780" y1="56" x2="808" y2="56" class="s-muted" stroke-width="1.2" marker-end="url(#f-arrow)"/>
+<rect x="10" y="24" width="130" height="64" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+<text x="75" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tower create</text>
+<text x="75" y="68" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">InfraService</text>
+<rect x="170" y="24" width="130" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="235" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Tenants repo</text>
+<text x="235" y="68" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">xr-requests/*.yaml</text>
+<rect x="330" y="24" width="130" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="395" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Empty deploy repo</text>
+<text x="395" y="68" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">gitops-infra-…</text>
+<rect x="490" y="24" width="130" height="64" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+<text x="555" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">You add a file</text>
+<text x="555" y="68" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">platform/envs/dev.yaml</text>
+<rect x="650" y="24" width="130" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="715" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ArgoCD</text>
+<text x="715" y="68" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">lower-envs AppSet</text>
+<rect x="810" y="24" width="130" height="64" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+<text x="875" y="52" class="f-ink" font-size="11" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Broker running</text>
+<text x="875" y="68" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">RabbitMQ XR Ready</text>
+<text x="75" y="112" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">YOU</text>
+<text x="555" y="112" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">YOU</text>
+<text x="235" y="112" class="f-soft" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">AUTOMATIC</text>
+<text x="395" y="112" class="f-soft" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">AUTOMATIC</text>
+<text x="715" y="112" class="f-soft" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">AUTOMATIC</text>
+<text x="875" y="112" class="f-soft" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.1em">AUTOMATIC</text>
+</svg></div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">01 — WHAT YOU'RE BUILDING</p>
+<h2>One broker, three namespaces, least privilege</h2>
+<p>This is the first time in the series that apps share something. The broker lives in <b>its own namespace</b> and isn't dedicated to any app: the point is that several talk through it. Each app gets its <b>own broker user</b>, and the broker itself, not convention, decides what that user may do.</p>
+</div>
+<div class="diagram-container"><svg class="diagram" viewBox="0 0 1000 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="ar-title ar-desc">
+<title id="ar-title">flight-api publishes to the broker and boarding-api consumes from it</title>
+<desc id="ar-desc">Three namespaces. In the left one, flight-api publishes to the flights.events topic exchange in the vhost flights on the broker in the middle namespace. A queue named boarding.flight-events, bound with flight.#, delivers to boarding-api in the right namespace, which deletes the changed flight from its Redis cache. Each app namespace holds an attach component that creates its broker user and Secret. The broker lists the two app namespaces as allowed.</desc>
+<defs>
+<marker id="b-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-muted" points="0 0, 8 3, 0 6"/></marker>
+<marker id="b-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-accent" points="0 0, 8 3, 0 6"/></marker>
+</defs>
+<rect width="1000" height="470" class="f-paper"/>
+<rect x="40" y="60" width="290" height="330" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+<rect x="52" y="54" width="132" height="12" class="f-paper"/>
+<text x="56" y="63" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">APP-FLIGHT-API-DEV</text>
+<rect x="360" y="60" width="320" height="330" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+<rect x="372" y="54" width="158" height="12" class="f-paper"/>
+<text x="376" y="63" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">APP-SKYPORT-BROKER-DEV</text>
+<rect x="710" y="60" width="270" height="330" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+<rect x="722" y="54" width="140" height="12" class="f-paper"/>
+<text x="726" y="63" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">APP-BOARDING-API-DEV</text>
+
+<rect x="380" y="88" width="280" height="204" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+<text x="392" y="106" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.1em">VHOST · FLIGHTS</text>
+
+<line x1="310" y1="140" x2="410" y2="150" class="s-accent" stroke-width="1.4" marker-end="url(#b-arrow-accent)"/>
+<line x1="520" y1="194" x2="520" y2="226" class="s-muted" stroke-width="1" marker-end="url(#b-arrow)"/>
+<line x1="630" y1="248" x2="732" y2="150" class="s-accent" stroke-width="1.4" marker-end="url(#b-arrow-accent)"/>
+<line x1="845" y1="170" x2="845" y2="222" class="s-accent" stroke-width="1.4" marker-end="url(#b-arrow-accent)"/>
+<line x1="185" y1="232" x2="185" y2="174" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#b-arrow)"/>
+<line x1="945" y1="314" x2="945" y2="176" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#b-arrow)"/>
+
+<rect x="330" y="122" width="56" height="13" rx="2" class="f-paper"/>
+<text x="358" y="132" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">PUBLISH</text>
+<rect x="654" y="200" width="56" height="13" rx="2" class="f-paper"/>
+<text x="682" y="210" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">DELIVER</text>
+<rect x="526" y="203" width="52" height="13" rx="2" class="f-paper2"/>
+<text x="552" y="213" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">flight.#</text>
+<rect x="852" y="188" width="118" height="13" rx="2" class="f-paper"/>
+<text x="911" y="198" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">DEL boarding:AC123</text>
+
+<rect x="60" y="110" width="250" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="185" y="134" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flight-api</text>
+<text x="185" y="150" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Spring Boot · publisher</text>
+<text x="185" y="164" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">after the database commits</text>
+<rect x="60" y="232" width="250" height="56" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="185" y="256" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flight-mq</text>
+<text x="185" y="272" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">attach · publish flights.events</text>
+
+<rect x="410" y="128" width="220" height="66" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+<text x="520" y="152" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flights.events</text>
+<text x="520" y="168" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">topic exchange</text>
+<text x="520" y="182" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">owned by flight-api</text>
+<rect x="410" y="226" width="220" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="520" y="250" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">boarding.flight-events</text>
+<text x="520" y="266" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">queue · owned by boarding-api</text>
+<rect x="380" y="316" width="280" height="56" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="520" y="340" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">allowedNamespaces</text>
+<text x="520" y="356" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">the trust boundary · 1 pod, RabbitMQ 4.2</text>
+
+<rect x="730" y="110" width="230" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="845" y="134" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">boarding-api</text>
+<text x="845" y="150" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">NodeJS · consumer</text>
+<text x="845" y="164" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">retries until the exchange exists</text>
+<rect x="730" y="222" width="200" height="56" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="830" y="246" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis cache</text>
+<text x="830" y="262" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cache-master · part 1</text>
+<rect x="730" y="314" width="230" height="56" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="845" y="338" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">board-mq</text>
+<text x="845" y="354" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">attach · queues boarding.*</text>
+
+<line x1="40" y1="422" x2="960" y2="422" class="s-rule" stroke-width="0.8"/>
+<line x1="760" y1="440" x2="788" y2="440" class="s-accent" stroke-width="1.4" marker-end="url(#b-arrow-accent)"/>
+<text x="796" y="443" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Message path</text>
+<line x1="760" y1="456" x2="788" y2="456" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#b-arrow)"/>
+<text x="796" y="459" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Credentials and connection details</text>
+</svg></div>
+<div class="cards c3">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Shared, on purpose</h3></div><p>A database or cache is <b>dedicated</b> to one app environment. A broker can't be: the publisher and every consumer must sit on the same one, so it lives in its own namespace and is owned by an <code>InfraService</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>One vhost per domain</h3></div><p>A vhost is a namespace <i>inside</i> the broker, and messages don't cross between them. Apps that exchange messages must share one, so it's named for the domain (<code>flights</code>), not for an app.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>Each app, its own user</h3></div><p>Permissions are generated from a few names, never hand-written regexes. A leaked <code>boarding-api</code> credential can't forge a flight event or read anyone else's queue.</p></div>
+</div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">02 — CREATE THE BROKER</p>
+<h2>An InfraService: a deploy repo with no code</h2>
+<p>The broker is a component, like Redis and PostgreSQL, but a shared one, so it needs somewhere to live that isn't any app's environment. That's an <code>InfraService</code>.</p>
+</div>
+<div class="steps"><div class="step">
+<h3>Tower → Create → InfraService</h3>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td class="name">Name</td><td><code>skyport-broker</code></td></tr><tr><td class="name">devCluster</td><td><code>dev</code></td></tr><tr><td class="name">description</td><td>Skyport shared message broker (RabbitMQ)</td></tr><tr><td class="name">visibility</td><td><code>private</code></td></tr></tbody></table></div>
+<p class="prose"><code>dev</code> exactly, as in part 1. Tower opens a PR against the tenants repo; <b>merge it</b>. Within a few minutes:</p>
+<pre>$ kubectl get infraservice skyport-broker -n app-skyport-broker-cicd
+NAME             SYNCED   READY   COMPOSITION                    AGE
+skyport-broker   True     True    infraservices.catalog.idp.io   2m</pre>
+<p class="prose">It created one repo, <code>gitops-infra-skyport-broker</code>, holding only a <code>README.md</code> and a stub <code>cicd.yaml</code>. There is no application to build, so there is no pipeline.</p>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Found by walking it</p>
+<p>If the request stays <code>OutOfSync</code> with <b><code>InfraService is not permitted in project idp-onboarding</code></b>, the dev cluster's onboarding project predates <code>InfraService</code>: add it to the <code>namespaceResourceWhitelist</code> in <code>02-argocd-apps/xr-requests/appproject.yaml</code> (gitops-cluster-dev, or apron for a new cluster). <code>InfraService</code> had never been created on a live cluster before this walk, and this was the first thing that broke.</p>
+</div>
+</div>
+</div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">03 — DECLARE THE BROKER</p>
+<h2>One file in the new repo</h2>
+<p>An app's environment is a file, <code>platform/envs/&lt;env&gt;.yaml</code>, in the repo the app is built from. For an <code>InfraService</code> that repo is <code>gitops-infra-skyport-broker</code> itself. Create the file and push it to <code>main</code>.</p>
+</div>
+<span class="filepath">gitops-infra-skyport-broker/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+<pre>appType: infra
+envName: dev
+rollout: null            <span class="c"># no workload of our own: the broker is the component below</span>
+
+components:
+  - type: rabbitmq
+    name: skyport-broker <span class="c"># also the broker's Service name: skyport-broker.app-skyport-broker-dev.svc</span>
+    spec:
+      mode: broker
+      size: small
+      instances: 1
+      storageSize: 1Gi
+      vhosts: [flights]
+      <span class="c"># Only these namespaces may attach (get a user) and reach the AMQP port.</span>
+      allowedNamespaces: [app-flight-api-dev, app-boarding-api-dev]</pre>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
+<tr><td class="name"><code>mode: broker</code></td><td>This entry runs the broker. (<code>attach</code> is what the apps use, below.)</td></tr>
+<tr><td class="name"><code>size</code></td><td><code>small</code> is 100m CPU and 512Mi to 1Gi of memory. <code>medium</code> and <code>large</code> scale that up.</td></tr>
+<tr><td class="name"><code>instances</code></td><td><code>1</code> is a single node. <code>3</code> is a replicated cluster (RabbitMQ needs an odd count).</td></tr>
+<tr><td class="name"><code>vhosts</code></td><td>Created for you. One per domain.</td></tr>
+<tr><td class="name"><code>allowedNamespaces</code></td><td><b>The trust boundary.</b> A namespace not listed can neither create a user nor reach the broker's port. Adding an app to the broker is a one-line change here.</td></tr>
+</tbody></table></div>
+<p class="prose" style="max-width:68ch">The dev cluster polls the repo, so the file is picked up within a few minutes, the namespace <code>app-skyport-broker-dev</code> is created and the component starts. The first start pulls the image and takes about two minutes:</p>
+<pre>$ kubectl get rabbitmqs.catalog.idp.io -n app-skyport-broker-dev
+NAME             SYNCED   READY   COMPOSITION               AGE
+skyport-broker   True     True    rabbitmq.catalog.idp.io   2m
+
+$ kubectl get pods,svc,pvc -n app-skyport-broker-dev -l hangar.io/app=skyport-broker</pre>
+<p class="prose" style="max-width:68ch">Use the full name <code>rabbitmqs.catalog.idp.io</code>: plain <code>rabbitmq</code> is ambiguous with the operator's own API group. The broker's admin credentials are in the Secret <code>skyport-broker-default-user</code>; apps never need them.</p>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">04 — WIRE FLIGHT-API</p>
+<h2>The publisher</h2>
+<p>Two changes: the code, and the environment. The code is opt-in. With <code>EVENTS_ENABLED</code> unset it publishes nothing and needs no broker, so part 2's setup is unchanged.</p>
+</div>
+<div class="steps"><div class="step">
+<h3>Copy the code in</h3>
+<pre>git clone https://github.com/jfillman/airframe.git /tmp/airframe   # skip if you still have it
+cd flight-api
+A=/tmp/airframe/examples/skyport/flight-api
+cp $A/pom.xml .
+cp $A/src/main/resources/application.properties src/main/resources/
+cp $A/src/main/java/io/skyport/flight/{FlightMessage,FlightEventPublisher,NoopFlightEventPublisher,RabbitFlightEventPublisher,FlightService}.java src/main/java/io/skyport/flight/
+cp $A/src/test/java/io/skyport/flight/{FlightServiceTest,RabbitFlightEventPublisherTest}.java src/test/java/io/skyport/flight/
+./test.sh                # 21 passing</pre>
+<div class="cards c2">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>After the commit, never during</h3></div><p>A change is written to <code>flight_events</code> in the same transaction as before; the message goes out only once that has <b>committed</b>. A change that rolls back is never announced.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>A broker outage never fails a change</h3></div><p>The publisher logs a warning and carries on. Losing one notification is better than rejecting a change that was already saved.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>The message carries the new state</h3></div><p>Each one has the flight's <code>gate</code> and <code>delayMinutes</code> after the change, so a consumer never has to call back to learn what is true now.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Routing key: flight.&lt;number&gt;.&lt;type&gt;</h3></div><p>For example <code>flight.AC123.gate_changed</code>. Consumers bind <code>flight.#</code> for everything, or <code>flight.AC123.*</code> for one flight. <code>flight-api</code> declares the exchange itself; consumers only bind to it.</p></div>
+</div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">The pom also moves Spring Boot to 3.5.16</p>
+<p>Not because of RabbitMQ. The pipeline's <b>image scan fails the build on HIGH and CRITICAL findings</b>, and Boot 3.3.4 (already end-of-life) now trips it on its own Tomcat, Spring and Jackson: 39 findings. Boot 3.5.16 leaves 8, and the pom pins Tomcat, the Postgres driver, the RabbitMQ client and Netty to patched versions for the rest. <b>Part 2's <code>flight-api</code> would fail the same scan today.</b> The <code>&lt;properties&gt;</code> in the pom say why each override exists; drop them as Boot catches up.</p>
+</div>
+</div>
+<div class="step">
+<h3>Attach it, and hand it the connection details</h3>
+<span class="filepath">flight-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+<pre>components:
+  <span class="c"># ... flight-db stays as it is ...</span>
+  - type: rabbitmq
+    name: flight-mq            <span class="c"># credentials land in Secret flight-mq-user-credentials</span>
+    spec:
+      mode: attach
+      brokerRef: { name: skyport-broker, namespace: app-skyport-broker-dev }
+      vhost: flights
+      publish: [flights.events]   <span class="c"># may declare and publish to this exchange, nothing else</span>
+
+env:
+  <span class="c"># ... the DB_* entries stay as they are ...</span>
+  - { name: EVENTS_ENABLED, value: "true" }
+  - { name: RABBITMQ_HOST,     valueFrom: { configMapKeyRef: { name: flight-mq-connection, key: host } } }
+  - { name: RABBITMQ_VHOST,    valueFrom: { configMapKeyRef: { name: flight-mq-connection, key: vhost } } }
+  - { name: RABBITMQ_USER,     valueFrom: { secretKeyRef:    { name: flight-mq-user-credentials, key: username } } }
+  - { name: RABBITMQ_PASSWORD, valueFrom: { secretKeyRef:    { name: flight-mq-user-credentials, key: password } } }</pre>
+<div class="table-scroll"><table><thead><tr><th>An <code>attach</code> entry creates, in the app's own namespace</th><th>Holds</th></tr></thead><tbody>
+<tr><td class="name">a broker <b>user</b></td><td>a generated name and password, in the Secret <code>&lt;name&gt;-user-credentials</code> (<code>username</code>, <code>password</code>)</td></tr>
+<tr><td class="name">a <b>permission</b></td><td>generated from <code>publish</code>, <code>consume</code> and <code>queuePrefix</code> (section 07)</td></tr>
+<tr><td class="name">a ConfigMap <code>&lt;name&gt;-connection</code></td><td><code>host</code>, <code>port</code>, <code>vhost</code></td></tr>
+</tbody></table></div>
+<p class="prose">Nothing is copied through Infisical: the app reads the Secret and the ConfigMap directly with <code>valueFrom</code>, exactly as it reads the database's credentials in part 2. Commit both, push, and let the pipeline run; <code>git pull</code> before your next push, because the deploy stage commits the image into <code>platform/envs/dev.yaml</code>.</p>
+</div>
+</div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">05 — WIRE BOARDING-API</p>
+<h2>The consumer</h2>
+<p>The consumer is off unless <code>RABBITMQ_HOST</code> is set, so <code>boarding-api</code> still runs anywhere.</p>
+</div>
+<div class="steps"><div class="step">
+<h3>Copy the code in</h3>
+<pre>cd boarding-api
+A=/tmp/airframe/examples/skyport/boarding-api
+cp $A/{app.js,index.js,events.js,store.js,package.json,package-lock.json} .
+cp $A/test/{app.test.js,events.test.js} test/
+npm ci &amp;&amp; npm test        # 18 passing</pre>
+<div class="cards c2">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Its own queue, then eviction</h3></div><p>It creates <code>boarding.flight-events</code>, binds it to <code>flights.events</code> with <code>flight.#</code>, and on each message deletes <code>boarding:&lt;flight&gt;</code> from the Redis cache. The next lookup goes to <code>flight-api</code> and is correct.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Start order doesn't matter</h3></div><p>It may only <i>read</i> the exchange, so it can't declare it. If <code>flight-api</code> hasn't started, the bind is refused (<code>NOT_FOUND - no exchange 'flights.events'</code>) and it <b>retries every five seconds</b> until the exchange exists. Seen live.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Bad messages are ignored</h3></div><p>A malformed message is dropped, not fatal; an eviction that fails is retried.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Visible in whoami</h3></div><p><code>/api/whoami</code> gains <code>events</code> (<code>off</code>, <code>connecting</code>, <code>connected</code>) and <code>eventsReceived</code>, so you can watch it work.</p></div>
+</div>
+</div>
+<div class="step">
+<h3>Attach it</h3>
+<span class="filepath">boarding-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+<pre>components:
+  <span class="c"># ... the redis cache stays as it is ...</span>
+  - type: rabbitmq
+    name: board-mq             <span class="c"># credentials land in Secret board-mq-user-credentials</span>
+    spec:
+      mode: attach
+      brokerRef: { name: skyport-broker, namespace: app-skyport-broker-dev }
+      vhost: flights
+      queuePrefix: boarding    <span class="c"># may create, bind and consume queues named boarding.*</span>
+      consume: [flights.events] <span class="c"># may bind them to this exchange, not publish to it</span>
+
+env:
+  <span class="c"># ... REDIS_URL and FLIGHT_API_URL stay as they are ...</span>
+  - { name: RABBITMQ_HOST,     valueFrom: { configMapKeyRef: { name: board-mq-connection, key: host } } }
+  - { name: RABBITMQ_VHOST,    valueFrom: { configMapKeyRef: { name: board-mq-connection, key: vhost } } }
+  - { name: RABBITMQ_USER,     valueFrom: { secretKeyRef:    { name: board-mq-user-credentials, key: username } } }
+  - { name: RABBITMQ_PASSWORD, valueFrom: { secretKeyRef:    { name: board-mq-user-credentials, key: password } } }</pre>
+<p class="prose">Commit, push, and let the pipeline redeploy.</p>
+</div>
+</div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">06 — SEE IT WORK</p>
+<h2>The board is right at once</h2>
+</div>
+<pre>kubectl port-forward -n app-flight-api-dev svc/flight-api 8081:8080 &amp;
+kubectl port-forward -n app-boarding-api-dev svc/boarding-api 8080:8080 &amp;
+
+curl -s localhost:8080/api/whoami           <span class="c"># "events":"connected"</span>
+curl -s localhost:8080/api/boarding/AC123   <span class="c"># note the gate; a second call says "cached":true</span>
+
+curl -s -X PUT -H 'Content-Type: application/json' -d '{"gate":"B2"}' localhost:8081/api/flights/AC123/gate
+
+curl -s localhost:8080/api/boarding/AC123   <span class="c"># gate is B2 at once, "cached":false</span>
+curl -s localhost:8080/api/whoami           <span class="c"># "eventsReceived" went up</span></pre>
+<p class="prose" style="max-width:68ch">In part 2 that last lookup showed the old gate for up to three minutes. Now the change reaches <code>boarding-api</code> as soon as it is committed. With two replicas the queue is shared, so one pod handles each event; the cache is in Redis, so evicting it once clears it for both. The simulator changes a flight about every 30 seconds too, so <code>eventsReceived</code> keeps climbing on its own.</p>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">07 — WHAT EACH APP CAN AND CAN'T DO</p>
+<h2>Permissions come from names, not regexes</h2>
+<p>Each <code>attach</code> entry is turned into a broker permission for that app's user. You never write the regex.</p>
+</div>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Gives the app</th><th>For</th></tr></thead><tbody>
+<tr><td class="name"><code>queuePrefix: boarding</code></td><td>create, bind and consume queues</td><td>names starting <code>boarding.</code></td></tr>
+<tr><td class="name"><code>publish: [flights.events]</code></td><td>declare and publish</td><td>that exchange</td></tr>
+<tr><td class="name"><code>consume: [flights.events]</code></td><td>bind its queues to it</td><td>that exchange, read-only</td></tr>
+</tbody></table></div>
+<h3>Tested over real AMQP, with the credentials each app really uses</h3>
+<div class="table-scroll"><table><thead><tr><th>Attempt</th><th>Result</th></tr></thead><tbody>
+<tr><td class="name"><code>flight-api</code> declares <code>flights.events</code> and publishes</td><td>allowed</td></tr>
+<tr><td class="name"><code>boarding-api</code> declares <code>boarding.q</code>, binds it, receives the message</td><td>allowed</td></tr>
+<tr><td class="name"><code>boarding-api</code> publishes to <code>flights.events</code></td><td><b>refused</b></td></tr>
+<tr><td class="name"><code>boarding-api</code> declares a queue <code>x.q</code>, outside its prefix</td><td><b>refused</b></td></tr>
+<tr><td class="name"><code>flight-api</code> reads <code>boarding-api</code>'s queue</td><td><b>refused</b></td></tr>
+</tbody></table></div>
+<div class="callout">
+<p class="label">Who may attach is the broker owner's decision</p>
+<p>That's <code>allowedNamespaces</code> (section 03). Anyone who can edit an app's environment file can <i>request</i> any permission on the vhost for that app, so it's the list of namespaces, not the permission text, that protects the broker. Fine for this demo; a shared production broker would also want an admission policy on what an app may ask for.</p>
+</div>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">08 — FLIGHT</p>
+<h2>The same on the prod cluster</h2>
+</div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Not walked</p>
+<p>This section is written from how the pieces work and from the component being verified on <code>prod</code>; it was not run end to end. The prod cluster was short of memory when this was written and the broker adds about 1Gi, so check the cluster's headroom first.</p>
+</div>
+<div class="steps">
+<div class="step"><h3>Create the environment</h3><p class="prose">Tower → Create → <b>ApplicationEnvironment</b>: <code>Name</code> <code>skyport-broker-prod-staging</code>, <code>Namespace</code> <code>app-skyport-broker-cicd</code>, <code>appName</code> <code>skyport-broker</code>, <code>cluster</code> <code>prod</code>, <code>env</code> <code>staging</code>, and <b><code>appType</code> <code>infra</code></b>. Merge the PR, as in part 1, section 07. <b>Needs airframe v0.3.90.</b> <code>appType</code> tells the environment its deploy repo is <code>gitops-infra-skyport-broker</code>, not <code>gitops-skyport-broker</code>; without it the values file is written to a repo that doesn't exist and the environment reports <code>Unready resources: app-usage</code>. Both were found when someone created this environment.</p></div>
+<div class="step"><h3>Configure it in a pull request</h3><p class="prose">In the PR that adds <code>gitops-infra-skyport-broker/prod/staging/values.yaml</code>, use the same <code>components:</code> block as section 03 with <code>allowedNamespaces: [app-flight-api-staging, app-boarding-api-staging]</code>.</p></div>
+<div class="step"><h3>Attach the apps</h3><p class="prose">In each app's staging values, add its <code>attach</code> component and the <code>env</code> entries from sections 04 and 05, with <code>brokerRef</code> pointing at <code>app-skyport-broker-staging</code>.</p></div>
+</div>
+<p class="prose" style="max-width:68ch">What <i>was</i> verified on <code>prod</code> (Calico, which enforces network policy): the RabbitMQ operators, cert-manager and the component are installed; broker and attach both reached Ready with the app baseline policy in place; a pod in an allowed namespace connected on 5672 and a pod in a namespace not on the list was blocked.</p>
+</section>
+
+<section>
+<div class="section-head">
+<p class="section-index">CHEAT SHEET</p>
+<h2>What will actually bite you</h2>
+</div>
+<div class="cards c2">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Broker and attach are one component</h3></div><p>The broker is an <code>InfraService</code> with a <code>rabbitmq</code> component in <code>mode: broker</code>. Apps use the same type in <code>mode: attach</code>. In <code>kubectl</code> use <code>rabbitmqs.catalog.idp.io</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>allowedNamespaces first</h3></div><p>Add an app's namespace there before it attaches; an unlisted namespace's user is refused.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Credentials come from two objects</h3></div><p>Secret <code>&lt;name&gt;-user-credentials</code> (<code>username</code>, <code>password</code>) and ConfigMap <code>&lt;name&gt;-connection</code> (<code>host</code>, <code>port</code>, <code>vhost</code>). Read them with <code>valueFrom</code>; nothing goes through Infisical.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Permissions from names</h3></div><p><code>queuePrefix</code>, <code>publish</code>, <code>consume</code>. The broker's Service is <code>&lt;name&gt;.&lt;namespace&gt;.svc:5672</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Consumers retry; producers own the exchange</h3></div><p>A consumer can't declare the exchange and retries until the producer has, so start order is free. Publish after the commit, and never fail the change on a broker error.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>The image scan gates the build</h3></div><p>If it fails on Tomcat, Spring, Jackson or a driver you didn't touch, the base has aged: bump Spring Boot or override the vulnerable version in the pom.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>RabbitMQ 4.2, not 4.1</h3></div><p>Operator 2.23's startup probe needs an endpoint 4.1 doesn't have (the pod never went ready). The component pins the version, so you don't choose.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>Deleting the environment deletes the data</h3></div><p>The broker isn't backed up. Its PVC isn't labelled <code>hangar.io/app</code>, unlike its pods, Services and Secrets. The <code>provenance</code> gate on release PRs fails for unsigned commits; it did on <code>boarding-api</code>'s own earlier release too.</p></div>
+</div>
+</section>
+<footer><span>Airframe Broker Quickstart · Hangar platform · developer guide · part 3</span><span>Companion to: parts 1 and 2 · written 2026-09-25</span></footer>
+</div>
+
+</body></html>

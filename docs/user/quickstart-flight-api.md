@@ -8,8 +8,8 @@ We build `flight-api`, the system of record for [Skyport](skyport-demo.md): 24 f
 their gates in Postgres, a REST API, and a simulator that keeps moving flights around so there
 is something to watch.
 
-> An illustrated version of this guide is published at
-> [Airframe Database Quickstart](https://claude.ai/artifact/YJDciwsLesxr7p56vbw6Lf).
+> An illustrated version of this guide, with diagrams, is at
+> [Airframe Database Quickstart](html/quickstart-flight-api.html).
 
 Do part 1 first. This guide assumes `boarding-api` is running in its dev environment and
 doesn't repeat the mechanics of creating an app, merging the pipeline PR, or the ground/flight

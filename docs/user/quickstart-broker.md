@@ -9,8 +9,8 @@ attach `flight-api` as a **publisher** and `boarding-api` as a **consumer**: `fl
 every change, `boarding-api` drops the changed flight from its cache, and the board is right
 immediately.
 
-> An illustrated version of this guide is published at
-> [Airframe Broker Quickstart](https://claude.ai/artifact/UbLvT5JsB8Kmcbwk8VJ4eX).
+> An illustrated version of this guide, with diagrams, is at
+> [Airframe Broker Quickstart](html/quickstart-broker.html).
 
 Do parts 1 and 2 first. This guide assumes `boarding-api` and `flight-api` are running in their dev
 environments and doesn't repeat how to create an app or merge a pipeline PR.

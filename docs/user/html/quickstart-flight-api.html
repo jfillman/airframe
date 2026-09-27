@@ -1,0 +1,585 @@
+<!doctype html><html><head><meta charset=utf-8><title>Airframe Database Quickstart</title><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --paper:       #f2efe9;
+    --paper-2:     #e8e3da;
+    --surface:     #fbfaf7;
+    --ink:         #1b1f24;
+    --muted:       #5b6570;
+    --soft:        #838b93;
+    --rule:        rgba(27,31,36,0.12);
+    --rule-solid:  #c7c2b8;
+    --accent:      #b9791f;
+    --accent-tint: rgba(185,121,31,0.08);
+    --link:        #2e7ba6;
+    --link-tint:   rgba(46,123,166,0.08);
+    --font-sans:  'Geist', system-ui, sans-serif;
+    --font-serif: 'Instrument Serif', 'Times New Roman', serif;
+    --font-mono:  'Geist Mono', ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+      --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+      --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+      --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+      --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0b0d10; --paper-2: #171b21; --surface: #1c2127;
+    --ink: #e9ecef; --muted: #96a2ac; --soft: #6e7981;
+    --rule: rgba(233,236,239,0.12); --rule-solid: rgba(150,162,172,0.25);
+    --accent: #e8a33d; --accent-tint: rgba(232,163,61,0.10);
+    --link: #6fb2d9; --link-tint: rgba(111,178,217,0.10);
+  }
+
+  body { font-family: var(--font-sans); background: var(--paper); color: var(--ink); padding-block: 3.5rem; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-inline: 1.5rem; }
+
+  .masthead { margin-bottom: 3rem; max-width: 74ch; }
+  .eyebrow {
+    font-family: var(--font-mono); font-size: 0.68rem; font-weight: 500;
+    letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.9rem;
+  }
+  h1 {
+    font-family: var(--font-serif); font-weight: 400; font-size: clamp(2.25rem, 4vw + 1rem, 3.25rem);
+    letter-spacing: -0.01em; line-height: 1.05; color: var(--ink); text-wrap: balance; margin-bottom: 0.9rem;
+  }
+  .masthead .dek { font-size: 1.05rem; line-height: 1.6; color: var(--muted); max-width: 66ch; }
+  .masthead .dek b { color: var(--ink); font-weight: 600; }
+
+  section { margin-bottom: 3.75rem; }
+  .section-head { max-width: 68ch; margin-bottom: 1.5rem; }
+  .section-index { font-family: var(--font-mono); font-size: 0.68rem; color: var(--accent); letter-spacing: 0.14em; margin-bottom: 0.6rem; }
+  h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.6rem; color: var(--ink); text-wrap: balance; margin-bottom: 0.6rem; }
+  h3 { font-family: var(--font-sans); font-weight: 600; font-size: 0.95rem; color: var(--ink); margin: 1.4rem 0 0.5rem; }
+  .section-head p, .prose p { font-size: 0.95rem; line-height: 1.65; color: var(--muted); }
+  .prose p + p, .prose ul + p, .prose p + ul { margin-top: 0.75rem; }
+  .prose ul { margin: 0.5rem 0 0.75rem 1.1rem; color: var(--muted); font-size: 0.92rem; line-height: 1.6; }
+  .prose li { margin-bottom: 0.3rem; }
+  code, .section-head code { font-family: var(--font-mono); font-size: 0.85em; color: var(--ink); background: var(--paper-2); padding: 0.05em 0.35em; border-radius: 3px; }
+
+  .diagram-container { overflow-x: auto; }
+  svg.diagram { width: 100%; min-width: 780px; display: block; }
+
+  pre {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+    padding: 1rem 1.1rem; overflow-x: auto; margin: 0.9rem 0; font-family: var(--font-mono);
+    font-size: 0.8rem; line-height: 1.6; color: var(--ink);
+  }
+  pre .c { color: var(--soft); font-style: italic; }
+  .filepath {
+    font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted);
+    letter-spacing: 0.02em; margin-bottom: -0.5rem; display: block;
+  }
+
+  .steps { counter-reset: step; margin-top: 1.5rem; }
+  .step { position: relative; padding: 0 0 2rem 2.75rem; border-left: 1px solid var(--rule); margin-left: 0.9rem; }
+  .step:last-child { border-left-color: transparent; padding-bottom: 0; }
+  .step::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: -0.9rem; top: 0; width: 1.8rem; height: 1.8rem; border-radius: 50%;
+    background: var(--surface); border: 1.5px solid var(--accent); color: var(--accent);
+    font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step h3 { margin-top: 0; font-size: 1rem; }
+  .step .tag {
+    display: inline-block; font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--link); border: 1px solid var(--link); border-radius: 3px;
+    padding: 0.1em 0.45em; margin-left: 0.5rem; vertical-align: middle;
+  }
+  .step .tag.ground { color: var(--muted); border-color: var(--rule-solid); }
+  .step .tag.flight { color: var(--accent); border-color: var(--accent); }
+
+  .cards { display: grid; gap: 1rem; margin-top: 1.5rem; }
+  .cards.c2 { grid-template-columns: 1fr 1fr; }
+  .cards.c3 { grid-template-columns: 1.1fr 1fr 0.95fr; }
+  @media (max-width: 760px) { .cards.c2, .cards.c3 { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; padding: 1.15rem 1.25rem; }
+  .card .eyebrow { font-size: 0.6rem; margin-bottom: 0.5rem; }
+  .card-head {
+    display: flex; align-items: center; gap: 0.55rem; margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem; border-bottom: 1px solid var(--rule);
+  }
+  .card-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .card-dot.accent { background: var(--accent); } .card-dot.link { background: var(--link); }
+  .card-dot.ink { background: var(--ink); } .card-dot.muted { background: var(--muted); }
+  .card h3 { margin: 0; font-size: 0.92rem; }
+  .card p { font-size: 0.83rem; line-height: 1.6; color: var(--muted); }
+  .card ul { list-style: none; font-size: 0.83rem; line-height: 1.65; color: var(--muted); margin: 0; }
+  .card li { padding-left: 0.9rem; position: relative; margin-bottom: 0.25rem; }
+  .card li::before { content: '—'; position: absolute; left: 0; color: var(--rule-solid); }
+  .card b { color: var(--ink); font-weight: 600; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.5rem; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  .compare .panel { border-radius: 8px; padding: 1.4rem; }
+  .compare .panel.ground { background: var(--paper-2); border: 1px solid var(--rule-solid); }
+  .compare .panel.flight { background: var(--accent-tint); border: 1px solid var(--accent); }
+  .compare .panel .label { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 0.4rem; }
+  .compare .panel.ground .label { color: var(--muted); }
+  .compare .panel.flight .label { color: var(--accent); }
+  .compare .panel h3 { margin: 0 0 0.6rem; font-size: 1.1rem; font-family: var(--font-serif); font-weight: 400; }
+  .compare .panel dl { font-size: 0.83rem; line-height: 1.7; color: var(--muted); }
+  .compare .panel dt { color: var(--ink); font-weight: 600; margin-top: 0.6rem; }
+  .compare .panel dt:first-child { margin-top: 0; }
+  .compare .panel dd { margin: 0; }
+
+  .callout {
+    border-left: 2px solid var(--link); background: var(--link-tint); border-radius: 0 6px 6px 0;
+    padding: 1rem 1.25rem; margin-top: 1.25rem;
+  }
+  .callout p { font-size: 0.88rem; line-height: 1.6; color: var(--ink); }
+  .callout .label { font-family: var(--font-mono); font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--link); margin-bottom: 0.4rem; }
+
+  .table-scroll { overflow-x: auto; margin-top: 1.5rem; border: 1px solid var(--rule); border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.8rem; min-width: 600px; }
+  thead th {
+    text-align: left; font-family: var(--font-mono); font-size: 0.63rem; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--muted); background: var(--paper-2); padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); white-space: nowrap;
+  }
+  tbody td { padding: 0.65rem 0.9rem; border-bottom: 1px solid var(--rule); color: var(--muted); line-height: 1.55; vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.name { color: var(--ink); font-weight: 600; font-family: var(--font-sans); white-space: nowrap; }
+
+  footer {
+    margin-top: 4rem; padding-top: 1.5rem; border-top: 1px solid var(--rule);
+    font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.04em; color: var(--soft);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0.5rem;
+  }
+
+  .f-paper{fill:var(--paper);} .f-paper2{fill:var(--paper-2);} .f-surface{fill:var(--surface);}
+  .f-ink{fill:var(--ink);} .f-muted{fill:var(--muted);} .f-soft{fill:var(--soft);}
+  .f-accent{fill:var(--accent);} .f-accenttint{fill:var(--accent-tint);}
+  .f-link{fill:var(--link);} .f-linktint{fill:var(--link-tint);} .f-none{fill:none;}
+  .s-ink{stroke:var(--ink);} .s-muted{stroke:var(--muted);} .s-soft{stroke:var(--soft);}
+  .s-accent{stroke:var(--accent);} .s-link{stroke:var(--link);}
+  .s-rule{stroke:var(--rule);} .s-rulesolid{stroke:var(--rule-solid);} .s-none{stroke:none;}
+  p.prose { font-size: 0.92rem; line-height: 1.65; color: var(--muted); margin-top: 0.6rem; }
+  .step p.prose:first-of-type { margin-top: 0.4rem; }
+  section > h3 { margin-top: 1.6rem; }
+  section > p.prose { max-width: 68ch; }
+</style>
+<div class="wrap">
+<div class="masthead">
+<p class="eyebrow">Hangar Platform · Airframe · Developer Guide · Part 2</p>
+<h1>A service with a database</h1>
+<p class="dek"><a href="quickstart.html" style="color:var(--link)">Part 1</a> took a NodeJS service from nothing to a canary. This part does the same for a <b>Spring Boot</b> service that owns a <b>PostgreSQL</b> database, then connects part 1's <code>boarding-api</code> to it so the gate board shows real data. We build <code>flight-api</code>: 24 flights and their gates in Postgres, a REST API, and a simulator that keeps moving flights around.</p>
+<div class="callout">
+<p class="label">What has and hasn't been verified</p>
+<p><b>Verified:</b> the service (17 unit tests in the platform's own Java build image, 4 integration tests and the full app against a real PostgreSQL, and the build: <code>build.sh</code> compiles natively in the exact Java agent image in about 30 seconds, and the thin image built from it starts and answers against a real PostgreSQL), and <code>boarding-api</code> calling it end to end. The scaffold's own Containerfile, which compiles inside the image build, did finish, but took about 17 minutes under amd64 emulation (the amd64 leg alone took 11), which is why this guide replaces it. <b>Verified on both clusters:</b> the database component (Ready, data kept across a restart, clean teardown), and on <code>prod</code>, which enforces network policy, a control run <i>without</i> the component's operator policy never became healthy. <b>Verified by rendering only:</b> the chart passing the database Secret into the container. <b>Verified by walking it (2026-09-25):</b> create → pipeline → ground deploy on the dev cluster; <code>boarding-api</code> on dev serves from <code>flight-api</code> (live status from the simulator); <code>flight-api</code> runs on <code>prod</code> staging with a two-instance database. Walking it found and fixed the slow emulated Java build and a liveness probe pointed at the readiness endpoint. <b>Not yet confirmed:</b> <code>boarding-api</code> on <code>prod</code> staging still uses its built-in lookup (<code>FLIGHT_API_URL</code> not set there), so the staging call path has not been exercised.</p>
+</div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Needs airframe v0.3.88 or later</p>
+<p><code>env:</code> entries with <code>valueFrom</code> arrive in v0.3.88. Do part 1 first: this guide assumes <code>boarding-api</code> is running in its dev environment and links back rather than repeating the mechanics.</p>
+</div>
+</div>
+<section>
+<div class="section-head">
+<p class="section-index">THE PATH</p>
+<h2>Six steps, one new idea</h2>
+<p>The new idea is that a database is a <b>component</b>, a block in the environment's values, not a Tower form. Everything else is part 1's mechanics.</p>
+</div>
+<div class="diagram-container"><svg class="diagram" viewBox="0 0 720 660" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="path-title path-desc">
+<title id="path-title">Path from a new service to flight-api running on both clusters</title>
+<desc id="path-desc">A flowchart of six steps: create the app, merge the pipeline pull request, pull in the code, add a ground environment with a database component, point boarding-api at flight-api, then add the flight environment on the prod cluster.</desc>
+<defs><marker id="p-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-muted" points="0 0, 8 3, 0 6"/></marker></defs>
+<rect width="720" height="660" class="f-paper"/>
+<line x1="360" y1="68" x2="360" y2="104" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<line x1="360" y1="160" x2="360" y2="196" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<line x1="360" y1="252" x2="360" y2="288" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<line x1="360" y1="344" x2="360" y2="380" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<line x1="360" y1="436" x2="360" y2="472" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<line x1="360" y1="528" x2="360" y2="564" class="s-muted" stroke-width="1.2" marker-end="url(#p-arrow)"/>
+<rect x="280" y="20" width="160" height="48" rx="24" class="f-paper"/>
+<rect x="280" y="20" width="160" height="48" rx="24" class="f-muted" fill-opacity="0.10" stroke="var(--soft)" stroke-width="1"/>
+<text x="360" y="48" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">New service</text>
+<rect x="240" y="104" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="104" width="240" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="360" y="128" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Create the app</text>
+<text x="360" y="144" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">SpringBootApplication · Tower</text>
+<rect x="240" y="196" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="196" width="240" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="360" y="220" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Merge the .tekton PR</text>
+<text x="360" y="236" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Pipelines-as-Code</text>
+<rect x="240" y="288" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="288" width="240" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="360" y="312" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pull in the code</text>
+<text x="360" y="328" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">examples/skyport/flight-api</text>
+<rect x="240" y="380" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="380" width="240" height="56" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+<text x="360" y="404" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Ground env + database</text>
+<text x="360" y="420" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">components: [postgresql]</text>
+<rect x="240" y="472" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="472" width="240" height="56" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="360" y="496" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Point boarding-api at it</text>
+<text x="360" y="512" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">FLIGHT_API_URL</text>
+<rect x="240" y="564" width="240" height="56" rx="6" class="f-paper"/>
+<rect x="240" y="564" width="240" height="56" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+<text x="360" y="588" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Flight env on prod cluster</text>
+<text x="360" y="604" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">same, in app-flight-api-staging</text>
+</svg></div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">01 — WHAT YOU'RE BUILDING</p>
+<h2>Two namespaces, one dedicated database</h2>
+<p><code>flight-api</code> and its database live in one namespace. The database is a <i>dedicated</i> PostgreSQL cluster for this app environment, not a shared one: deleting the environment deletes its data, and nothing outside the namespace can reach it.</p>
+</div>
+<div class="diagram-container"><svg class="diagram" viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="arch-title arch-desc">
+<title id="arch-title">flight-api, its database and how boarding-api reaches it</title>
+<desc id="arch-desc">A browser calls boarding-api, which caches in Redis and calls flight-api. flight-api reads and writes its own PostgreSQL database, and gets its credentials from a Secret the database component creates. The CloudNativePG operator, in its own namespace, manages the database through a network policy that allows it in.</desc>
+<defs>
+<marker id="a-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-muted" points="0 0, 8 3, 0 6"/></marker>
+<marker id="a-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon class="f-accent" points="0 0, 8 3, 0 6"/></marker>
+</defs>
+<rect width="1000" height="500" class="f-paper"/>
+<rect x="200" y="60" width="280" height="300" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+<rect x="212" y="64" width="140" height="12" class="f-paper"/>
+<text x="216" y="73" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">APP-BOARDING-API-DEV</text>
+<rect x="540" y="60" width="420" height="300" rx="8" class="f-ink" fill-opacity="0.02" stroke="var(--rule)" stroke-width="0.8"/>
+<rect x="552" y="64" width="128" height="12" class="f-paper"/>
+<text x="556" y="73" class="f-muted" font-size="7" font-family="'Geist Mono', monospace" letter-spacing="0.12em">APP-FLIGHT-API-DEV</text>
+<line x1="160" y1="128" x2="224" y2="128" class="s-muted" stroke-width="1.2" marker-end="url(#a-arrow)"/>
+<line x1="456" y1="128" x2="564" y2="128" class="s-accent" stroke-width="1.4" marker-end="url(#a-arrow-accent)"/>
+<line x1="340" y1="160" x2="340" y2="252" class="s-accent" stroke-width="1.4" marker-end="url(#a-arrow-accent)"/>
+<line x1="654" y1="160" x2="654" y2="252" class="s-accent" stroke-width="1.4" marker-end="url(#a-arrow-accent)"/>
+<path d="M856,176 V136 Q856,128 848,128 H744" fill="none" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+<path d="M744,284 H848 Q856,284 856,276 V232" fill="none" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+<path d="M654,384 V316" fill="none" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+<rect x="176" y="104" width="32" height="13" rx="2" class="f-paper"/>
+<text x="192" y="114" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">HTTP</text>
+<rect x="474" y="104" width="72" height="13" rx="2" class="f-paper"/>
+<text x="510" y="114" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">GET /flights</text>
+<rect x="352" y="198" width="56" height="13" rx="2" class="f-paper"/>
+<text x="380" y="208" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">GET / SET</text>
+<rect x="666" y="198" width="28" height="13" rx="2" class="f-paper"/>
+<text x="680" y="208" class="f-accent" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">SQL</text>
+<rect x="792" y="144" width="56" height="13" rx="2" class="f-paper"/>
+<text x="820" y="154" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">VALUEFROM</text>
+<rect x="760" y="258" width="56" height="13" rx="2" class="f-paper"/>
+<text x="788" y="268" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">CREATES</text>
+<rect x="666" y="336" width="88" height="13" rx="2" class="f-paper"/>
+<text x="710" y="346" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.03em">MANAGES · :8000</text>
+<rect x="40" y="104" width="120" height="48" rx="6" class="f-paper"/>
+<rect x="40" y="104" width="120" height="48" rx="6" class="f-muted" fill-opacity="0.10" stroke="var(--soft)" stroke-width="1"/>
+<text x="100" y="132" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Gate board</text>
+<rect x="224" y="96" width="232" height="64" rx="6" class="f-paper"/>
+<rect x="224" y="96" width="232" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="340" y="120" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">boarding-api</text>
+<text x="340" y="136" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">NodeJS · part 1</text>
+<text x="340" y="150" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">2 replicas</text>
+<rect x="224" y="252" width="232" height="64" rx="6" class="f-paper"/>
+<rect x="224" y="252" width="232" height="64" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="340" y="276" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Redis</text>
+<text x="340" y="292" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cache-master:6379</text>
+<text x="340" y="306" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">component</text>
+<rect x="564" y="96" width="180" height="64" rx="6" class="f-paper"/>
+<rect x="564" y="96" width="180" height="64" rx="6" class="f-surface" stroke="var(--ink)" stroke-width="1"/>
+<text x="654" y="120" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flight-api</text>
+<text x="654" y="136" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Spring Boot · Java 21</text>
+<text x="654" y="150" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">port 8080</text>
+<rect x="564" y="252" width="180" height="64" rx="6" class="f-paper"/>
+<rect x="564" y="252" width="180" height="64" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
+<text x="654" y="276" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flight-db</text>
+<text x="654" y="292" class="f-accent" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">PostgreSQL · CNPG</text>
+<text x="654" y="306" class="f-muted" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">database flight_db</text>
+<rect x="776" y="176" width="160" height="56" rx="6" class="f-paper"/>
+<rect x="776" y="176" width="160" height="56" rx="6" class="f-surface" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4,3"/>
+<text x="856" y="200" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">flight-db-app</text>
+<text x="856" y="216" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">Secret · host, password…</text>
+<rect x="564" y="384" width="180" height="48" rx="6" class="f-paper"/>
+<rect x="564" y="384" width="180" height="48" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
+<text x="654" y="408" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CNPG operator</text>
+<text x="654" y="424" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cnpg-system</text>
+<line x1="40" y1="452" x2="960" y2="452" class="s-rule" stroke-width="0.8"/>
+<line x1="800" y1="468" x2="828" y2="468" class="s-accent" stroke-width="1.4" marker-end="url(#a-arrow-accent)"/>
+<text x="836" y="471" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Runtime traffic</text>
+<line x1="800" y1="484" x2="828" y2="484" class="s-muted" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#a-arrow)"/>
+<text x="836" y="487" class="f-muted" font-size="8.5" font-family="'Geist', sans-serif">Created / managed</text>
+</svg></div>
+<div class="cards c3">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>One database, one role</h3></div><p>The component creates a database and the role that owns it with the <b>same name</b> (<code>flight_db</code>). Its <code>pg_hba</code> lets a role connect only to the database named for it, so the app cannot reach any other database, <code>postgres</code> or <code>template1</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Credentials, not copies</h3></div><p>CNPG writes <code>flight-db-app</code> (host, port, dbname, username, password, uri…). The container reads it directly with <code>valueFrom.secretKeyRef</code>. Nothing is copied into Infisical.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>The operator gets in</h3></div><p>Namespaces deny cross-namespace ingress by default, which would cut the operator off. The component adds a policy that admits <code>cnpg-system</code> and nothing else.</p></div>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">02 — CREATE THE APP</p>
+<h2>SpringBootApplication in Tower</h2>
+
+</div>
+<div class="steps"><div class="step">
+<h3>Tower → Create → SpringBootApplication</h3>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td class="name">Name</td><td><code>flight-api</code></td></tr><tr><td class="name">devCluster</td><td><code>dev</code></td></tr><tr><td class="name">description</td><td>Skyport system of record: flights and gates in Postgres</td></tr><tr><td class="name">javaVersion</td><td><code>21</code></td></tr><tr><td class="name">buildTool</td><td><code>maven</code></td></tr><tr><td class="name">groupId</td><td><code>io.skyport.flight</code></td></tr><tr><td class="name">port</td><td><code>8080</code></td></tr><tr><td class="name">visibility</td><td><code>private</code></td></tr></tbody></table></div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Two values that matter</p>
+<p><b><code>dev</code> exactly</b>, even if your dev cluster goes by another name (see part 1, section 02: the dev ApplicationSets hard-code that name). <b><code>io.skyport.flight</code></b> for <code>groupId</code>: the scaffold uses it as the app's one Java package, and the code you copy in sits in <code>io/skyport/flight/</code>.</p>
+</div>
+<p class="prose">Merge the PR Tower opens, then check the XR:</p>
+<pre>$ kubectl get springbootapplication flight-api -n app-flight-api-cicd
+NAME         SYNCED   READY   COMPOSITION                              AGE
+flight-api   True     True    springbootapplications.catalog.idp.io    3m</pre>
+<p class="prose">The source repo starts with a hello-world <code>Application.java</code>, a <code>pom.xml</code> (web and actuator only), an <code>application.properties</code> and a <code>Containerfile</code>. If a previous <code>flight-api</code> was decommissioned, finish decommissioning first (including its Infisical projects).</p>
+
+</div>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">03 — PIPELINE ONBOARDING</p>
+<h2>Merge the .tekton pull request</h2>
+<p>Same as part 1, section 03: Glidepath opens a PR adding <code>.tekton/</code>. Merge it, or pushes do nothing.</p>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">04 — PULL IN THE CODE</p>
+<h2>Replace the hello-world</h2>
+<p>The real <code>flight-api</code> lives in the <code>airframe</code> repo under <code>examples/skyport/flight-api/</code>.</p>
+</div>
+<pre>git clone https://github.com/jfillman/airframe.git /tmp/airframe   # skip if you still have it
+git clone https://github.com/jfillman/flight-api.git &amp;&amp; cd flight-api
+
+cp -R /tmp/airframe/examples/skyport/flight-api/. .
+git add -A &amp;&amp; git commit -m "flight-api: flights and gates in Postgres"</pre>
+<p class="prose">This overwrites the scaffold's <code>pom.xml</code>, <code>Application.java</code>, <code>application.properties</code> <b>and <code>Containerfile</code></b>, and adds the other classes, the SQL migrations, the tests, <code>test.sh</code>, <code>build.sh</code> and the Maven Wrapper. The wrapper matters: the platform builds Java in a plain JDK image with no Maven, so <code>test.sh</code> runs <code>./mvnw</code>, which downloads Maven on first use.</p>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Why the Containerfile is replaced (unlike part 1)</p>
+<p>The scaffold's Java <code>Containerfile</code> compiles the app inside the image build. That build runs for two architectures, and the <b>amd64 leg runs under QEMU emulation</b> on the arm64 build node, where Maven on a JVM took about 11 minutes, while the native arm64 leg took about five (the legs run one after the other: about 17 minutes in all). Java bytecode is identical on both, so the fix is to compile <b>once, natively</b>: <code>build.sh</code> compiles inside the pipeline's Java agent, and the new <code>Containerfile</code> only copies the jar into a JRE image. Measured: the emulated amd64 packaging leg takes about 30 seconds. <code>FROM --platform=$BUILDPLATFORM</code>, the usual answer, does not work here: this platform's builder (kaniko) ignores it, so the build stage still ran emulated.</p>
+</div>
+<pre>./test.sh                # 17 passing (needs a JDK 21 locally, or run it in a container)</pre>
+<div class="table-scroll"><table><thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead><tbody><tr><td class="name"><code>GET /api/flights/{flight}</code></td><td>Gate, status, scheduled and estimated departure, capacity, boarding group</td></tr><tr><td class="name"><code>GET /api/flights</code></td><td>All 24 flights</td></tr><tr><td class="name"><code>GET /api/flights/{flight}/events</code></td><td>The change log for one flight, newest first</td></tr><tr><td class="name"><code>PUT …/gate</code> · <code>PUT …/delay</code></td><td>Move a flight, or delay it</td></tr><tr><td class="name"><code>GET /api/whoami</code></td><td>Version and pod</td></tr><tr><td class="name"><code>GET /actuator/health/readiness</code></td><td>Ready only when the database answers</td></tr></tbody></table></div>
+<p class="prose">Every gate or delay change is written to a <code>flight_events</code> table <b>in the same transaction</b> as the change, so the log can never disagree with the flights. Phase 2's message broker will publish from that table. A simulator (every 30 s) moves a random flight or grows a delay so there is something to watch.</p>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">05 — GROUND</p>
+<h2>The service and its database</h2>
+<p>Same two-part shape as part 1 (a file that creates the environment, a pipeline stage that deploys to it) with a database added.</p>
+</div>
+<div class="steps"><div class="step">
+<h3>Declare the environment</h3>
+<span class="filepath">flight-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+<pre>envName: dev
+rollout: null            # explicit; the deploy stage fills in the image later
+
+components:
+  - type: postgresql
+    name: flight-db      # the Secret this creates is named flight-db-app
+    spec: { size: small, instances: 1, storageSize: 1Gi }
+
+env:
+  # Read straight from the Secret the database component creates - no copying into Infisical.
+  - { name: DB_HOST,     valueFrom: { secretKeyRef: { name: flight-db-app, key: host } } }
+  - { name: DB_PORT,     valueFrom: { secretKeyRef: { name: flight-db-app, key: port } } }
+  - { name: DB_NAME,     valueFrom: { secretKeyRef: { name: flight-db-app, key: dbname } } }
+  - { name: DB_USER,     valueFrom: { secretKeyRef: { name: flight-db-app, key: username } } }
+  - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: flight-db-app, key: password } } }
+  - { name: SIMULATOR_INTERVAL_MS, value: "30000" }
+
+networkPolicy:
+  allowIngressFrom:      # let boarding-api's namespace reach us (section 06)
+    - { namespace: app-boarding-api-dev, ports: [8080] }</pre>
+<p class="prose"><b>The database is created before the app runs.</b> With <code>rollout: null</code> there is no workload yet, so the first thing this file produces is the <code>PostgreSQL</code> XR and its cluster, within about a minute:</p>
+<pre>kubectl get postgresql -n app-flight-api-dev              # READY True
+kubectl get cluster.postgresql.cnpg.io -n app-flight-api-dev</pre>
+
+</div>
+<div class="step">
+<h3>Let the pipeline deploy to it</h3>
+<span class="filepath">flight-api/cicd.yaml <span class="tag ground">ground</span></span>
+<pre>apiVersion: platform/v1
+kind: PipelineConfig
+
+build:
+  agent: openjdk-21
+  script: ./build.sh            # compiles natively in the Java agent (section 04)
+  containerfile: ./Containerfile  # thin: just copies the jar in
+  unitTest:
+    enabled: true         # runs ./test.sh
+
+deploy:
+  lowerEnvironments: [dev]
+
+pipelines:
+  ci:
+    trigger: { source: git, event: push, branch: main }
+    steps:
+      - stage: build
+      - stage: test
+        env: dev
+      - stage: deploy
+        env: dev</pre>
+
+</div>
+<div class="step">
+<h3>Commit both, merge the .tekton PR, push</h3>
+<p class="prose">As in part 1 the <code>deploy</code> stage commits the image straight into <code>platform/envs/dev.yaml</code> on <code>main</code>, so <code>git pull</code> before your next push. The first start is slower than a NodeJS app: the JVM starts, then Flyway waits for the database if it isn't up yet (it retries for about two and a half minutes) and runs the two migrations.</p>
+
+</div>
+<div class="step">
+<h3>Add health probes</h3>
+<p class="prose">Once the deploy stage has written the image, add probes to the same file. (Adding them earlier would make <code>rollout</code> non-null with no image.)</p>
+<pre>rollout:
+  image: { … }          # keep what the deploy stage wrote
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }   # a JVM starts CPU-bound
+    limits: { memory: 1Gi }                  # memory only: no CPU limit
+  readinessProbe:
+    httpGet: { path: /actuator/health/readiness, port: 8080 }
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+  livenessProbe:
+    httpGet: { path: /actuator/health/liveness, port: 8080 }   # NOT /readiness
+    initialDelaySeconds: 60
+    periodSeconds: 20
+    timeoutSeconds: 5
+    failureThreshold: 6</pre>
+<p class="prose">Readiness is what makes the pod wait for the database: it isn't sent traffic until Postgres answers.</p>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Two mistakes that make a healthy app restart</p>
+<p><b>Liveness must use <code>/actuator/health/liveness</code>, not <code>/readiness</code>.</b> Readiness includes the database, so a brief database or CPU stall makes a healthy pod look dead and Kubernetes kills it. This was hit for real: both dev pods restarted 5–6 times (exit 137, <code>Liveness probe failed</code>) until the path was corrected, after which the same pods started in 24–33 seconds and stayed up. <b>Give it a CPU request.</b> Startup is CPU-bound, and pods without a request are <code>BestEffort</code>, the lowest CPU priority. While a pipeline build shared the node, the same pods had not finished starting after about 100 seconds. (That link is inferred from the timings, not isolated with a controlled test.) <code>timeoutSeconds: 5</code> matters too: the 1-second default fails whenever the JVM is briefly busy.</p>
+</div>
+
+</div>
+<div class="step">
+<h3>See it</h3>
+<pre>kubectl port-forward -n app-flight-api-dev svc/flight-api 8081:8080
+curl -s localhost:8081/api/flights/AC123
+curl -s localhost:8081/api/flights/AC123/events</pre>
+<p class="prose">The simulator writes an event about every 30 seconds; watch <code>events</code> grow. And because the component labels everything it creates, one selector finds the app, its database, its Secret and its volume together:</p>
+<pre>kubectl get all,pvc,secret,networkpolicy -n app-flight-api-dev -l hangar.io/app=flight-api</pre>
+
+</div>
+</div>
+<h3>Why the component adds a NetworkPolicy</h3>
+<p class="prose" style="max-width:68ch">This was tested on <code>prod</code>, which enforces network policy, with the same database cluster in two namespaces that both carry the app baseline (ingress only from the same namespace).</p>
+<div class="compare">
+<div class="panel flight"><p class="label">With the operator policy</p><h3>Ready in about a minute</h3><dl><dt>What's in the namespace</dt><dd>Baseline policy plus <code>flight-db-cnpg-operator</code>, which admits <code>cnpg-system</code> on 8000 and 5432.</dd><dt>Result</dt><dd>Cluster in healthy state. The XR goes <code>Ready=True</code>. A pod in another namespace is <b>blocked</b>.</dd></dl></div>
+<div class="panel ground"><p class="label">Without it (control)</p><h3>Never becomes healthy</h3><dl><dt>What's in the namespace</dt><dd>Baseline policy only.</dd><dt>Result</dt><dd>Stuck at <code>Instance Status Extraction Error: HTTP communication issue</code>: the operator can't reach the instance's manager, so the cluster never reports ready.</dd></dl></div>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">06 — POINT BOARDING-API AT IT</p>
+<h2>The gate board shows real data</h2>
+
+</div>
+<div class="steps"><div class="step">
+<h3>Copy the updated gate board over part 1's</h3>
+<pre>cd boarding-api
+cp /tmp/airframe/examples/skyport/boarding-api/{app.js,index.js,reservations.js} .
+cp /tmp/airframe/examples/skyport/boarding-api/public/index.html public/
+cp /tmp/airframe/examples/skyport/boarding-api/test/app.test.js test/
+npm test                                     # 11 passing</pre>
+<p class="prose">Then add one line to its <code>platform/envs/dev.yaml</code>, commit and push:</p>
+<pre>env:
+  - { name: REDIS_URL, value: "redis://cache-master:6379" }
+  - { name: FLIGHT_API_URL, value: "http://flight-api.app-flight-api-dev.svc.cluster.local:8080" }</pre>
+<p class="prose">With <code>FLIGHT_API_URL</code> unset the app falls back to its built-in stand-in, so it still runs anywhere. Set, it never invents an answer: an unknown flight is a <b>404</b>, and flight-api being down is a <b>502 that is not cached</b>.</p>
+
+</div>
+<div class="step">
+<h3>Look up AC123</h3>
+<p class="prose">The <b>source</b> row now says <i>flight-api (Postgres)</i> and there is a <b>status</b> row (<code>ON_TIME</code>, or <code>DELAYED (+15 min)</code> once the simulator has touched it). The first lookup takes tens of milliseconds because it really hit a database; the second is a cache hit.</p>
+
+</div>
+<div class="step">
+<h3>Now see the problem Phase 2 fixes</h3>
+<pre>curl -s -X PUT -H 'Content-Type: application/json' -d '{"gate":"B2"}' localhost:8081/api/flights/AC123/gate</pre>
+<p class="prose">Look up <code>AC123</code> on the gate board again: it still shows the <b>old gate</b>, from the cache, and is right only after the three-minute TTL. Waiting for a TTL is the wrong way to keep a gate board accurate. The fix is for flight-api to publish <code>flight.gate-changed</code> and for boarding-api to evict the entry, which is Phase 2 of Skyport. The <code>flight_events</code> table is already there for it.</p>
+
+</div>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">07 — FLIGHT</p>
+<h2>The same service on the prod cluster</h2>
+<p>Works exactly as part 1, section 07. Only what differs is here. <code>prod</code> has the CloudNativePG operator and the <code>PostgreSQL</code> XRD installed. It runs Kubernetes 1.37, which CloudNativePG 1.30 lists as <i>tested but not supported</i> upstream, so the component was verified there rather than assumed.</p>
+</div>
+<div class="steps"><div class="step">
+<h3>Declare it and create the environment</h3>
+<p class="prose">Add <code>upperEnvironments: [{ name: staging, cluster: prod }]</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts as <code>rollout: null</code>, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
+
+</div>
+<div class="step">
+<h3>Configure it in a pull request</h3>
+<span class="filepath">gitops-flight-api/prod/staging/values.yaml <span class="tag flight">flight</span></span>
+<pre>rollout:
+  replicas: 2
+  ports: [{ name: http, containerPort: 8080 }]
+  resources:
+    requests: { cpu: 500m, memory: 512Mi }
+    limits: { memory: 1Gi }
+  readinessProbe:
+    httpGet: { path: /actuator/health/readiness, port: 8080 }
+    initialDelaySeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  livenessProbe:
+    httpGet: { path: /actuator/health/liveness, port: 8080 }   # NOT /readiness
+    initialDelaySeconds: 60
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+components:
+  - type: postgresql
+    name: flight-db
+    spec: { size: small, instances: 2, storageSize: 5Gi }    # a primary and a replica
+
+env:
+  - { name: DB_HOST,     valueFrom: { secretKeyRef: { name: flight-db-app, key: host } } }
+  - { name: DB_PORT,     valueFrom: { secretKeyRef: { name: flight-db-app, key: port } } }
+  - { name: DB_NAME,     valueFrom: { secretKeyRef: { name: flight-db-app, key: dbname } } }
+  - { name: DB_USER,     valueFrom: { secretKeyRef: { name: flight-db-app, key: username } } }
+  - { name: DB_PASSWORD, valueFrom: { secretKeyRef: { name: flight-db-app, key: password } } }
+  - { name: SIMULATOR_INTERVAL_MS, value: "60000" }
+
+networkPolicy:
+  allowIngressFrom:
+    - { namespace: app-boarding-api-staging, ports: [8080] }</pre>
+<p class="prose"><code>instances: 2</code> gives a real failover pair; on a small single-node cluster <code>1</code> is fine. The image is not set here: the release pipeline sets it.</p>
+
+</div>
+<div class="step">
+<h3>Release, then point boarding-api at it</h3>
+<p class="prose">Release as a <b>signed</b> merge, as in part 1. In <code>boarding-api</code>'s staging values, set <code>FLIGHT_API_URL</code> to <code>http://flight-api.app-flight-api-staging.svc.cluster.local:8080</code>. Deleting this environment deletes its database and both volumes.</p>
+
+</div>
+</div>
+<div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
+<p class="label" style="color:var(--accent)">Tower and valueFrom</p>
+<p>Tower's <i>Environment variables</i> section is a name/value form. Older builds saved the whole <code>env</code> list back as name/value pairs, which <b>replaced a <code>valueFrom</code> entry with an empty value</b> (the app then started with a blank <code>DB_HOST</code>). Builds from Backstage commit <code>366ea8c</code> on show <code>valueFrom</code> rows read-only (<code>← Secret flight-db-app / host</code>) and keep them on save. If your Tower predates that, edit this section in the PR directly. Either way, read the PR diff before merging.</p>
+</div>
+</section>
+<section>
+<div class="section-head">
+<p class="section-index">CHEAT SHEET</p>
+<h2>What will actually bite you</h2>
+
+</div>
+<div class="cards c2">
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>dev, and io.skyport.flight</h3></div><p><code>devCluster: dev</code> exactly, and <code>groupId: io.skyport.flight</code>: the code you copy in assumes that package.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>A database is a component</h3></div><p>A block in the environment's <code>components:</code>, not a Tower Create form. Read its credentials with <code>valueFrom.secretKeyRef</code> to <code>&lt;name&gt;-app</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Build Java with build.script</h3></div><p>Not in the Containerfile. The amd64 image leg runs under emulation: a Maven build there took about 11 minutes (17 for the whole image), the packaging-only leg about 30 seconds.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Liveness is /liveness, never /readiness</h3></div><p>Give the pod a CPU request too. Symptom of getting it wrong: repeated restarts (exit 137, <code>Liveness probe failed</code>) though the database is fine.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Add probes after the first deploy</h3></div><p><code>rollout</code> must stay <code>null</code> until the deploy stage has written an image.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot link"></span><h3>Cross-namespace traffic needs a rule</h3></div><p>Namespaces deny ingress from others by default; <code>networkPolicy.allowIngressFrom</code> opens exactly one.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>Deleting the environment deletes the database</h3></div><p>It is dedicated, and its volume goes with it. Database name equals role name; the component enforces it.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot ink"></span><h3>One selector, and older Tower</h3></div><p><code>-l hangar.io/app=&lt;app&gt;</code> finds everything. Older Tower builds drop <code>valueFrom</code> when you edit env variables; read the PR diff. <code>test.sh</code> uses <code>./mvnw</code> because the Java agent has no Maven.</p></div>
+</div>
+</section>
+<footer><span>Airframe Database Quickstart · Hangar platform · developer guide · part 2</span><span>Companion to: Airframe Quickstart (part 1) · revised 2026-09-24</span></footer>
+</div>
+
+</body></html>

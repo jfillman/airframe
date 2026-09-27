@@ -10,8 +10,8 @@ NodeJS service that looks up a flight's gate and caches the answer in Redis so a
 busy gate screen doesn't hammer the reservations system. It also has a page built
 to make canary and blue/green deployments *visible*.
 
-> An illustrated version of this guide is published at
-> [Airframe Quickstart](https://claude.ai/artifact/WDPmWSD9BMBGurFzqATDWG).
+> An illustrated version of this guide, with diagrams, is at
+> [Airframe Quickstart](html/quickstart.html).
 
 **What has and hasn't been verified.**
 - **Verified:** the app itself. Its 11 tests pass, and it was run against a real Redis

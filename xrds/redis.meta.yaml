@@ -28,9 +28,27 @@ outputs:
       The Crossplane-composed connection Secret (writeConnectionSecretToRef), not the raw Bitnami chart
       Secret (which also exists, named `{name}`, key `redis-password` - the connection Secret copies the
       same value here so every component type has one canonical `<name>-connection` output surface).
+conditions:
+  # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
+  # see compositions/redis/templates/status.yaml. Closed set; each reason has a stable meaning an
+  # agent can act on without reading the Composition.
+  - type: ComponentReady
+    reasons:
+      - reason: RedisReady
+        status: "True"
+        meaning: The wrapped Bitnami chart reports deployed.
+      - reason: RedisDeploying
+        status: "False"
+        meaning: The Release is mid-rollout (a real Helm state, e.g. pending-install/pending-upgrade). Retry later.
+      - reason: RedisReleaseFailed
+        status: "False"
+        meaning: The Helm release failed. Check the Release's own events; this will not resolve on its own.
+      - reason: RedisProvisioning
+        status: "False"
+        meaning: The Release has not been observed yet (just created).
 verify:
   - id: xr-ready
-    check: The Redis XR's Ready condition is True.
+    check: The Redis XR's ComponentReady condition has reason RedisReady.
   - id: secret-exists
     check: Secret {name}-connection exists in the app namespace and has a non-empty password key.
   - id: reachable

@@ -34,9 +34,23 @@ outputs:
     kind: secretKeyRef
     secret: "{name}-app"
     key: jdbc-uri
+conditions:
+  # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
+  # see compositions/postgresql/templates/status.yaml. Closed set.
+  - type: ComponentReady
+    reasons:
+      - reason: PostgreSQLReady
+        status: "True"
+        meaning: The CNPG Cluster's own Ready condition is True.
+      - reason: PostgreSQLDegraded
+        status: "False"
+        meaning: The CNPG Cluster has been observed but its own Ready condition is False - a real problem, not just startup. Check the Cluster's own status/events.
+      - reason: PostgreSQLProvisioning
+        status: "False"
+        meaning: The Cluster has not been observed yet (just created).
 verify:
   - id: xr-ready
-    check: The PostgreSQL XR's Ready condition is True.
+    check: The PostgreSQL XR's ComponentReady condition has reason PostgreSQLReady.
   - id: secret-exists
     check: Secret {name}-app exists in the app namespace and has a non-empty password key.
   - id: reachable

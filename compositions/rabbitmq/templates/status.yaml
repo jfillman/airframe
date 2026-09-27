@@ -1,0 +1,55 @@
+# AF-6a: a custom ComponentReady condition with a closed reason code + hint, one arm per mode - same
+# mechanism and not-named-"Ready" reasoning as compositions/redis/templates/status.yaml (see that
+# file's own header). broker mode checks the composed RabbitmqCluster's own ClusterAvailable
+# condition (it has no single "Ready" type); attach mode checks both the User and Permission's Ready
+# conditions. Reason codes (closed set): RabbitMQBrokerReady, RabbitMQBrokerProvisioning,
+# RabbitMQAttachReady, RabbitMQAttachProvisioning.
+<<- $spec := .observed.composite.resource.spec >>
+<<- $reason := "" >>
+<<- $status := "False" >>
+<<- $message := "" >>
+<<- if eq $spec.mode "broker" >>
+  <<- $cluster := index (.observed.resources | default dict) "cluster" | default dict >>
+  <<- $conditions := index (index (index $cluster "resource" | default dict) "status" | default dict) "conditions" | default list >>
+  <<- $available := dict >>
+  <<- range $conditions >>
+    <<- if eq .type "ClusterAvailable" >>
+      <<- $available = . >>
+    <<- end >>
+  <<- end >>
+  <<- $reason = "RabbitMQBrokerProvisioning" >>
+  <<- $message = "Waiting for the RabbitmqCluster to be observed for the first time." >>
+  <<- if and $available (eq $available.status "True") >>
+    <<- $reason = "RabbitMQBrokerReady" >>
+    <<- $status = "True" >>
+    <<- $message = "The RabbitmqCluster reports at least one endpoint available." >>
+  <<- else if $available >>
+    <<- $message = printf "The RabbitmqCluster is not yet available: %s" ($available.reason | default "unknown") >>
+  <<- end >>
+<<- else >>
+  <<- $user := index (.observed.resources | default dict) "user" | default dict >>
+  <<- $userConditions := index (index (index $user "resource" | default dict) "status" | default dict) "conditions" | default list >>
+  <<- $userReady := dict >>
+  <<- range $userConditions >>
+    <<- if eq .type "Ready" >>
+      <<- $userReady = . >>
+    <<- end >>
+  <<- end >>
+  <<- $reason = "RabbitMQAttachProvisioning" >>
+  <<- $message = "Waiting for the User to be observed for the first time." >>
+  <<- if and $userReady (eq $userReady.status "True") >>
+    <<- $reason = "RabbitMQAttachReady" >>
+    <<- $status = "True" >>
+    <<- $message = "The User and Permission are provisioned on the shared broker." >>
+  <<- else if $userReady >>
+    <<- $message = printf "The User is not yet ready: %s" ($userReady.reason | default "unknown") >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: ComponentReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim

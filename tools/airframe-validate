@@ -1,25 +1,23 @@
 #!/usr/bin/env python3
-"""airframe validate (v0, AF-4a).
+"""airframe validate (AF-4a + AF-2).
 
-Checks an environment values file against a STRICT form of the chart's values.schema.json
-and then renders it with `helm template`. Strict means: every object schema that lists
-`properties` and does not say otherwise rejects unknown keys, so a typo such as `rolout:`
-fails here instead of being silently ignored by the chart. Objects with no `properties`
-(passthroughs such as podSpec or extraManifests items) stay open.
+Checks an environment values file against the ONE compiled schema - values.schema.json (strict:
+additionalProperties:false baked in on every object except its documented passthroughs) plus a
+discriminated union spliced into components[].items, one arm per component type with a real XRD
+(redis, postgresql, rabbitmq today, generated fresh from xrds/*.yaml every run - see
+tools/airframe_schema.py) - in a single validation pass, then renders it with `helm template`.
 
     tools/airframe-validate FILE [FILE...] [--app NAME] [--cluster NAME] [--no-render]
 
 Exit 0 = all files valid, 1 = a problem (each printed as: path | rule | message | hint).
 Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed,
-AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key (`release`,
-`releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else in a release file.
-A release file is named `*.release.yaml` or `release.yaml`.
+AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key
+(`release`, `releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else
+in a release file. A release file is named `*.release.yaml` or `release.yaml`.
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
-import copy
 import difflib
-import json
 import subprocess
 import sys
 import tempfile
@@ -28,40 +26,16 @@ from pathlib import Path
 import yaml
 from jsonschema import Draft202012Validator
 
-ROOT = Path(__file__).resolve().parent.parent
-CHART = ROOT / "charts" / "airframe-application"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from airframe_schema import CHART, compiled_schema
 
-
-def component_schemas():
-    """component `type` (lowercase kind) -> strict spec schema from xrds/*.yaml."""
-    out = {}
-    for f in (ROOT / "xrds").glob("*.yaml"):
-        d = yaml.safe_load(f.read_text())
-        spec = d["spec"]["versions"][0]["schema"]["openAPIV3Schema"]["properties"]["spec"]
-        out[d["spec"]["names"]["kind"].lower()] = (spec, strictify(spec))
-    return out
-
-
-def strictify(node):
-    """Return a copy of the schema with additionalProperties:false on closed objects."""
-    node = copy.deepcopy(node)
-
-    def go(n):
-        if isinstance(n, dict):
-            if isinstance(n.get("properties"), dict) and "additionalProperties" not in n \
-                    and "patternProperties" not in n:
-                n["additionalProperties"] = False
-            for v in n.values():
-                go(v)
-        elif isinstance(n, list):
-            for v in n:
-                go(v)
-    go(node)
-    return node
+RELEASE_KEYS = {"release", "releaseTracking"}
 
 
 def known_keys(schema, instance_path):
-    """Keys the schema allows at the object the error points into (for typo hints)."""
+    """Keys the schema allows at the object the error points into (for typo hints). Best-effort:
+    doesn't resolve which allOf/if/then arm applies, so a components[i]/spec/<key> miss falls
+    back to a generic hint rather than a per-component-type one."""
     node = schema
     for p in instance_path:
         if isinstance(node, dict) and "properties" in node and p in node["properties"]:
@@ -71,9 +45,6 @@ def known_keys(schema, instance_path):
         else:
             return []
     return list(node.get("properties", {})) if isinstance(node, dict) else []
-
-
-RELEASE_KEYS = {"release", "releaseTracking"}
 
 
 def is_release_file(path):
@@ -102,7 +73,7 @@ def ownership_warnings(path, data):
     return out
 
 
-def check_file(path, schema, strict, args):
+def check_file(path, schema, args):
     problems = []
     try:
         data = yaml.safe_load(Path(path).read_text())
@@ -110,7 +81,7 @@ def check_file(path, schema, strict, args):
         return [(str(path), "AF-SCHEMA-002", f"not valid YAML: {e}", "fix the YAML syntax")]
     if data is None:
         data = {}
-    v = Draft202012Validator(strict)
+    v = Draft202012Validator(schema)
     for err in sorted(v.iter_errors(data), key=lambda e: list(map(str, e.absolute_path))):
         loc = "/" + "/".join(map(str, err.absolute_path))
         loc = loc.rstrip("/") if loc != "/" else ""
@@ -120,31 +91,10 @@ def check_file(path, schema, strict, args):
                 near = difflib.get_close_matches(bad, allowed, n=1)
                 hint = f"did you mean '{near[0]}'?" if near else "no such field; see values.schema.json"
                 problems.append((f"{loc}/{bad}", "AF-SCHEMA-001", f"unknown key '{bad}'", hint))
+        elif err.validator in ("if", "then", "allOf"):
+            continue  # scaffolding around the real per-branch errors, which jsonschema also yields
         else:
             problems.append((loc, "AF-SCHEMA-002", err.message[:160], "see the field's schema in values.schema.json"))
-    # components[].spec is a passthrough in values.schema.json: check it against the XRD.
-    comps = component_schemas()
-    for i, c in enumerate(data.get("components") or []):
-        if not isinstance(c, dict):
-            continue
-        kind = str(c.get("type", "")).lower()
-        if kind not in comps:
-            problems.append((f"/components/{i}/type", "AF-SCHEMA-002", f"unknown component type '{c.get('type')}'",
-                             "one of: " + ", ".join(sorted(k for k in comps if k in ("redis", "postgresql", "rabbitmq")))))
-            continue
-        raw, strict_spec = comps[kind]
-        spec = dict(c.get("spec") or {})
-        spec.setdefault("environmentRef", {"name": "stamped-by-the-chart"})
-        for err in Draft202012Validator(strict_spec).iter_errors(spec):
-            loc = f"/components/{i}/spec" + "".join("/" + str(x) for x in err.absolute_path)
-            if err.validator == "additionalProperties":
-                allowed = known_keys(raw, list(err.absolute_path))
-                for bad in [k for k in err.instance if k not in allowed]:
-                    near = difflib.get_close_matches(bad, allowed, n=1)
-                    problems.append((f"{loc}/{bad}", "AF-SCHEMA-001", f"unknown key '{bad}'",
-                                     f"did you mean '{near[0]}'?" if near else f"see xrds/{kind}.yaml"))
-            else:
-                problems.append((loc, "AF-SCHEMA-002", err.message[:160], f"see xrds/{kind}.yaml"))
     if not problems and not args.no_render:
         parents = Path(path).resolve().parents
         app = args.app or (parents[2].name if len(parents) > 2 else None)
@@ -167,11 +117,10 @@ def main():
     ap.add_argument("--cluster", default="kind-dev")
     ap.add_argument("--no-render", action="store_true")
     a = ap.parse_args()
-    schema = json.loads((CHART / "values.schema.json").read_text())
-    strict = strictify(schema)
+    schema = compiled_schema()
     bad = 0
     for f in a.files:
-        probs = check_file(f, schema, strict, a)
+        probs = check_file(f, schema, a)
         try:
             warns = ownership_warnings(f, yaml.safe_load(Path(f).read_text()))
         except Exception:

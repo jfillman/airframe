@@ -5,10 +5,10 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 (see hangar/docs/autopilot/airframe-ai-friendly.md, workstreams AF-1 to AF-10).
 
 ## Start here
-1. `charts/airframe-application/values.schema.json` and `values.yaml`: every chart field, its type and default.
+1. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
 2. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas.
 3. `docs/user/`: the Skyport quickstarts, worked end to end.
-4. `tools/airframe-validate` (built). *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.explain`.
+4. `tools/airframe-validate` (built, now validating against `tools/airframe_schema.py`'s compiled schema - the base schema plus a discriminated `components[]` union generated fresh from the XRDs). *(planned)* `contract/airframe-contract.json`, `airframe.plan`, `airframe.explain`.
 
 ## The model in five lines
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
@@ -18,7 +18,8 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - One GitOps write path. Nothing is applied with `kubectl`.
 
 ## Do
-- Validate before you open a PR: `helm template` the chart with your values file, and run `charts/airframe-application/tests/run.sh` if you changed the chart. Unknown keys are **not** rejected by the schema itself, and `airframe-validate` is the enforced check on gitops PRs (Glidepath's values-validation gate), so run `tools/airframe-validate FILE` on your file: the chart itself silently ignores typos such as `rolout` and `replcas`.
+- Validate before you open a PR: `helm template` the chart with your values file, and run `charts/airframe-application/tests/run.sh` if you changed the chart. The chart itself still silently ignores an unknown key (e.g. `rolout` or `replcas`) - `values.schema.json` is what rejects it, and `airframe-validate` is the enforced check on gitops PRs (Glidepath's values-validation gate), so run `tools/airframe-validate FILE` on your file.
+- Changed `values.schema.json`? Run `python3 tools/gen_airframe_schema.py --write-values` and commit the regenerated `values.yaml` in the same change - CI's `--check` fails otherwise.
 - Reference a component's connection details through the component's documented output. Never hand-write derived names such as `cache-master` or `<name>-connection`.
 - Set `devCluster` from the cluster registry: it is `kind-dev` even though the cluster is called `kiac-dev`.
 - Leave `release` (the image) and `releaseTracking` to the pipeline (Glidepath writes them). Change only what a human owns: config, env vars, scaling, components.

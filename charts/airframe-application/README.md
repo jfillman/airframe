@@ -22,12 +22,16 @@ covered and the two real bugs it found.
 
 ## No workload until an image exists
 
-The chart renders no `Rollout`, `RolloutWatch`, `Service` or `ServiceMonitor` until **both**
-`rollout.image.repository` and `rollout.image.tag` are set (`airframe-application.hasRollout`).
-The shipped defaults leave both empty, so a newly created app that is configured but not yet built
-renders nothing that runs, instead of a Rollout whose image is `":"`. `rollout: null` still means
-"no workload at all" (the `appType: infra` case). Namespace, ServiceAccount, NetworkPolicy and the
-Attached-tier XRs render either way.
+The chart renders no `Rollout`, `RolloutWatch`, `Service` or `ServiceMonitor` until an image is set: **both**
+`release.image.repository` and `release.image.tag` (`airframe-application.image` resolves it). The deprecated
+`rollout.image` is still read when `release.image` is not fully set, and `release.image` wins when both are.
+The shipped defaults leave both empty, so a newly created app that is configured but not yet built renders
+nothing that runs, instead of a Rollout whose image is `":"`. `rollout: null` still means "no workload at all"
+(the `appType: infra` case). Namespace, ServiceAccount, NetworkPolicy and the Attached-tier XRs render either way.
+`jobs:` and `cronJobs:` entries with no `image:` of their own run the same release image.
+
+`release` is machine-owned: the release pipeline writes it (and `releaseTracking`), people and agents do not. See
+`hangar/docs/autopilot/release-file-split.md` for why it is its own top-level key.
 
 ## Tests
 

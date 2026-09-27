@@ -27,6 +27,14 @@ expect_absent  no-image     Rollout RolloutWatch Service ServiceMonitor
 expect_absent  rollout-null Rollout RolloutWatch Service ServiceMonitor
 expect_present with-image   Rollout RolloutWatch Service
 
+# release.image (the new key) renders the workload; it wins over the deprecated rollout.image.
+expect_present release-image       Rollout RolloutWatch Service
+expect_present release-image-wins  Rollout
+helm template t . -f tests/fixtures/release-image.yaml | grep -q "image: registry.example/guard-test:v2" || { echo "FAIL: release.image not used by the Rollout"; fail=1; }
+helm template t . -f tests/fixtures/release-image-wins.yaml | grep -q "image: registry.example/new:v2" || { echo "FAIL: release.image did not win over rollout.image"; fail=1; }
+helm template t . -f tests/fixtures/release-image-wins.yaml | grep -q "registry.example/old" && { echo "FAIL: deprecated rollout.image leaked into the render"; fail=1; }
+helm template t . -f tests/fixtures/release-image-jobs.yaml | grep -A60 "kind: CronJob" | grep -q "image: registry.example/guard-test:v3" || { echo "FAIL: cronJob did not fall back to release.image"; fail=1; }
+
 # the empty-image render must never contain the ':' image
 if helm template t . -f tests/fixtures/no-image.yaml | grep -qE "image: '?\"?:'?\"?$"; then
   echo "FAIL: image ':' rendered"; fail=1
@@ -34,9 +42,10 @@ fi
 
 # AF-4a: airframe validate rejects the typo cases and accepts a real file.
 V=../../tools/airframe-validate
-for f in typo-top-level-key typo-nested-key bad-component-size; do
+for f in typo-top-level-key typo-nested-key bad-component-size typo-release-key.release; do
   $V --no-render "tests/validate/$f.yaml" >/dev/null 2>&1 && { echo "FAIL: validate accepted $f"; fail=1; }
 done
+$V --no-render tests/validate/good.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good release file"; fail=1; }
 $V --no-render tests/validate/good-boarding-api-dev.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file"; fail=1; }
 
 [ $fail -eq 0 ] && echo "ok" || exit 1

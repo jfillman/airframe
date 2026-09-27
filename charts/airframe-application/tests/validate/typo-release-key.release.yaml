@@ -1,0 +1,2 @@
+release:
+  image: {repository: ghcr.io/x/y, tga: "1.0.0"}

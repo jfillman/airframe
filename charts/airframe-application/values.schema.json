@@ -18,6 +18,24 @@
       }
     },
 
+    "release": {
+      "description": "Machine-owned: written by the release pipeline (Glidepath), not by hand. Lives in the release file, never in the human-owned env file. Takes precedence over the deprecated rollout.image.",
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "x-hangar-owner": "release",
+      "properties": {
+        "image": {
+          "description": "The image this release runs. Both fields are required for a workload to render.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "repository": { "type": "string", "description": "Image repository without a tag, e.g. ghcr.io/jfillman/boarding-api." },
+            "tag": { "type": "string", "description": "Image tag." }
+          }
+        }
+      }
+    },
+
     "releaseTracking": {
       "description": "Written by platform-cicd's open-release-pr.yaml, not hand-authored. Opaque/loose by design.",
       "type": ["object", "null"]
@@ -53,6 +71,7 @@
       "description": "Set to null for an infra-type release with no custom workload.",
       "properties": {
         "image": {
+          "description": "DEPRECATED: use release.image. Still read when release.image is not set.",
           "type": "object",
           "properties": {
             "repository": { "type": "string" },

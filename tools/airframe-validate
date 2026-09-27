@@ -10,7 +10,10 @@ fails here instead of being silently ignored by the chart. Objects with no `prop
     tools/airframe-validate FILE [FILE...] [--app NAME] [--cluster NAME] [--no-render]
 
 Exit 0 = all files valid, 1 = a problem (each printed as: path | rule | message | hint).
-Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed.
+Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed,
+AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key (`release`,
+`releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else in a release file.
+A release file is named `*.release.yaml` or `release.yaml`.
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
@@ -68,6 +71,35 @@ def known_keys(schema, instance_path):
         else:
             return []
     return list(node.get("properties", {})) if isinstance(node, dict) else []
+
+
+RELEASE_KEYS = {"release", "releaseTracking"}
+
+
+def is_release_file(path):
+    n = Path(path).name
+    return n.endswith(".release.yaml") or n == "release.yaml"
+
+
+def ownership_warnings(path, data):
+    """AF-OWNER-001. Returns (loc, rule, message, hint) tuples; reported as warnings."""
+    out = []
+    if not isinstance(data, dict):
+        return out
+    if is_release_file(path):
+        for k in data:
+            ok = k in RELEASE_KEYS or (k == "rollout" and isinstance(data[k], dict) and set(data[k]) <= {"image"})
+            if not ok:
+                out.append((f"/{k}", "AF-OWNER-001", f"'{k}' does not belong in a release file",
+                            "a release file holds only release, releaseTracking (and the deprecated rollout.image)"))
+    else:
+        for k in RELEASE_KEYS & set(data):
+            out.append((f"/{k}", "AF-OWNER-001", f"'{k}' is release-owned but is in a human-owned file",
+                        "it belongs in the release file, written by the release pipeline"))
+        if isinstance(data.get("rollout"), dict) and "image" in data["rollout"]:
+            out.append(("/rollout/image", "AF-OWNER-001", "rollout.image is deprecated and release-owned",
+                        "use release.image, in the release file"))
+    return out
 
 
 def check_file(path, schema, strict, args):
@@ -140,6 +172,10 @@ def main():
     bad = 0
     for f in a.files:
         probs = check_file(f, schema, strict, a)
+        try:
+            warns = ownership_warnings(f, yaml.safe_load(Path(f).read_text()))
+        except Exception:
+            warns = []
         if probs:
             bad += 1
             print(f"FAIL {f}")
@@ -147,6 +183,8 @@ def main():
                 print(f"  {loc} | {rule} | {msg} | {hint}")
         else:
             print(f"ok   {f}")
+        for loc, rule, msg, hint in warns:
+            print(f"  warn {loc} | {rule} | {msg} | {hint}")
     return 1 if bad else 0
 
 

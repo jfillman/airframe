@@ -28,7 +28,7 @@ naming-conventions.md yet) - real, chart-scoped values unique to airframe-applic
 app.kubernetes.io/name: {{ .Values.appName }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if eq (include "airframe-application.hasRollout" .) "true" }}
-app.kubernetes.io/version: {{ .Values.rollout.image.tag | quote }}
+app.kubernetes.io/version: {{ (include "airframe-application.image" . | fromYaml).tag | quote }}
 {{- else }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -63,7 +63,24 @@ configured-but-not-yet-built app (the default values ship both empty) renders no
 workload rather than a Rollout whose image is ":" (AF-10a).
 */}}
 {{- define "airframe-application.hasRollout" -}}
-{{- if and .Values.rollout .Values.rollout.image .Values.rollout.image.repository .Values.rollout.image.tag -}}true{{- end -}}
+{{- if and .Values.rollout (include "airframe-application.image" .) -}}true{{- end -}}
+{{- end -}}
+
+{{/*
+airframe-application.image - the image this release runs, as YAML {repository, tag}, or empty when none is set.
+The release-owned key `release.image` wins; `rollout.image` is the deprecated location and is used only when
+`release.image` is not fully set. Both need repository AND tag. (release-file split, hangar/docs/autopilot.)
+Usage: {{ $img := include "airframe-application.image" . | fromYaml }}
+*/}}
+{{- define "airframe-application.image" -}}
+{{- $rel := .Values.release | default dict -}}
+{{- $ri := $rel.image | default dict -}}
+{{- if and $ri.repository $ri.tag -}}
+{{- dict "repository" $ri.repository "tag" $ri.tag | toYaml -}}
+{{- else if .Values.rollout -}}
+{{- $ro := .Values.rollout.image | default dict -}}
+{{- if and $ro.repository $ro.tag -}}{{- dict "repository" $ro.repository "tag" $ro.tag | toYaml -}}{{- end -}}
+{{- end -}}
 {{- end -}}
 
 {{/*
@@ -298,7 +315,7 @@ Usage: {{ $volumeMounts := fromYamlArray (include "airframe-application.workload
 
 {{/*
 airframe-application.batchContainer - builds the single container spec shared by every
-jobs:/cronJobs: entry (job.yaml/cronjob.yaml). Falls back to rollout.image when the
+jobs:/cronJobs: entry (job.yaml/cronjob.yaml). Falls back to the release image (release.image, else rollout.image) when the
 entry doesn't set its own `image:` - fails fast (not a silent empty image string)
 when neither is available, i.e. rollout: isn't set at all and the entry didn't
 supply one either.
@@ -310,10 +327,10 @@ Usage: {{ $container := fromYaml (include "airframe-application.batchContainer" 
 {{- $entry := .entry -}}
 {{- $image := $entry.image -}}
 {{- if not $image -}}
-{{- if $ctx.Values.rollout -}}{{- $image = $ctx.Values.rollout.image -}}{{- end -}}
+{{- $image = include "airframe-application.image" $ctx | fromYaml -}}
 {{- end -}}
 {{- if or (not $image) (not $image.repository) -}}
-{{- fail (printf "'%s' needs an image - rollout: is not set (or has no image), so there's no default to fall back to. Set this entry's own image: {repository, tag}." $entry.name) -}}
+{{- fail (printf "'%s' needs an image - neither release.image nor rollout.image is set, so there's no default to fall back to. Set this entry's own image: {repository, tag}." $entry.name) -}}
 {{- end -}}
 {{- $container := dict "name" $entry.name "image" (printf "%s:%s" $image.repository $image.tag) -}}
 {{- if $entry.command -}}{{- $_ := set $container "command" $entry.command -}}{{- end -}}

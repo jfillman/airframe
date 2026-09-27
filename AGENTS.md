@@ -25,7 +25,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - Read the failure message, change the file, retry at most three times, then stop and report.
 
 ## Do not
-- Hand-edit `rollout.image` or `releaseTracking` in a live env file.
+- Hand-edit `release` (the image), `releaseTracking` or the deprecated `rollout.image` in a live env file. `airframe-validate` warns (AF-OWNER-001) when they appear in a human-owned file.
 - Use `extraManifests`, `networkPolicy` or `httpRoute` without a human's approval.
 - Put a secret value in `env` or `configMaps`. Secrets are references to Infisical keys.
 - Name an environment after a pipeline stage (`build`, `test`, `deploy`, `release`).
@@ -33,8 +33,8 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - Commit, tag or push to a shared checkout without checking the branch and using a worktree. Humans cut tags.
 
 ## Rollout before an image exists
-The chart renders no Rollout, RolloutWatch, Service or ServiceMonitor until both `rollout.image.repository`
-and `rollout.image.tag` are set. A new app is safe to configure before its first build. Tests:
+The chart renders no Rollout, RolloutWatch, Service or ServiceMonitor until both `release.image.repository`
+and `release.image.tag` are set (the deprecated `rollout.image` still counts). A new app is safe to configure before its first build. Tests:
 `charts/airframe-application/tests/run.sh`.
 
 ## Verify

@@ -1,0 +1,9 @@
+# A CronJob with no image of its own runs the release image.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v3}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+cronJobs:
+  - {name: nightly, schedule: "0 3 * * *"}

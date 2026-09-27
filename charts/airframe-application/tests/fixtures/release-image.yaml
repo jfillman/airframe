@@ -1,0 +1,7 @@
+# The new home of the image: release.image. rollout carries only strategy settings.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}

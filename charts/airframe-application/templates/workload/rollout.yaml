@@ -17,11 +17,12 @@ _helpers.tpl for why that's shared rather than copied three times, and for how
 configMaps:/secrets: `as: env|volume|both` map onto env vs envFrom vs volume mounts.
 */}}
 {{- if eq (include "airframe-application.hasRollout" .) "true" }}
+{{- $image := include "airframe-application.image" . | fromYaml }}
 {{- $firstPort := index .Values.rollout.ports 0 }}
 {{- $defaultProbe := dict "httpGet" (dict "path" "/" "port" $firstPort.name) }}
 {{- $mainContainer := dict
       "name" .Values.appName
-      "image" (printf "%s:%s" .Values.rollout.image.repository .Values.rollout.image.tag)
+      "image" (printf "%s:%s" $image.repository $image.tag)
       "ports" (list)
 }}
 {{- range .Values.rollout.ports }}

@@ -1,0 +1,8 @@
+# Both set: release.image takes precedence over the deprecated rollout.image.
+appName: guard-test
+release:
+  image: {repository: registry.example/new, tag: v2}
+rollout:
+  image: {repository: registry.example/old, tag: v1}
+  ports:
+    - {name: http, containerPort: 8080}

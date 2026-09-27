@@ -153,8 +153,15 @@ platformSecretStore:
 # workload - e.g. a standalone component-only env (§3 "Open design question",
 # resolved in this implementation as "optional in the same chart", per the doc's
 # own stated leaning and Item 7's "if yes (recommended, for mechanism reuse)").
-rollout:
+# The image this release runs. Machine-owned (written by the release pipeline into the release file, not
+# by hand): precedence over the deprecated rollout.image. No workload renders until both fields are set.
+release:
   image:
+    repository: ""
+    tag: ""
+
+rollout:
+  image: # DEPRECATED: use release.image above. Still read when release.image is not set.
     repository: ""
     tag: ""
   replicas: 2

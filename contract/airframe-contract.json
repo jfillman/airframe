@@ -1,0 +1,490 @@
+{
+  "$schema": "airframe-contract/v1",
+  "chart": {
+    "fields": {
+      "analysisTemplates": {
+        "default": [],
+        "description": "App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.",
+        "type": "array"
+      },
+      "appName": {
+        "default": "",
+        "description": "This application's name. Used as the Helm release name's basis, the default ServiceAccount name, and the default databaseName for a PostgreSQL component. A DNS-1123 label: lowercase alphanumeric and hyphens, must start and end with an alphanumeric.",
+        "type": "string"
+      },
+      "appType": {
+        "default": "app",
+        "description": "app runs a workload (Rollout); infra provisions components/environments only (naming-conventions.md's existing distinction).",
+        "enum": [
+          "app",
+          "infra"
+        ],
+        "type": "string"
+      },
+      "attachedResourceApiVersion": {
+        "default": "catalog.idp.io/v1alpha1",
+        "description": "The apiVersion group used to look up component/SLO XRs by componentKinds. Update here, not per-template, if the group ever changes.",
+        "type": "string"
+      },
+      "autoscaling": {
+        "default": {
+          "enabled": false,
+          "max": 10,
+          "min": 2,
+          "targetCPUPercent": 70
+        },
+        "description": "HorizontalPodAutoscaler settings for the main workload.",
+        "type": "object"
+      },
+      "cluster": {
+        "default": "",
+        "description": "Which cluster this release runs on. Not in the original service-catalog design's schema block - the chart needs it to know its own identity (e.g. to compare against devClusterName below), and the ApplicationEnvironment composition that commits this file already knows it.",
+        "type": "string"
+      },
+      "componentKinds": {
+        "default": {
+          "database": "Database",
+          "oauth-server": "OAuthServer",
+          "postgresql": "PostgreSQL",
+          "queue": "Queue",
+          "rabbitmq": "RabbitMQ",
+          "redis": "Redis"
+        },
+        "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet (oauth-server, database, queue are placeholders).",
+        "type": "object"
+      },
+      "components": {
+        "default": [],
+        "description": "Attached-tier component instances (Redis, PostgreSQL, RabbitMQ, ...). Each entry's spec is validated against that component's own XRD schema by the compiled schema (airframe_schema.compiled_schema()), not by this file directly - see tools/airframe-validate.",
+        "type": "array"
+      },
+      "configMaps": {
+        "default": [],
+        "description": "ConfigMaps mounted or projected as env vars into the main workload.",
+        "type": "array"
+      },
+      "cronJobs": {
+        "default": [],
+        "description": "Scheduled batch tasks (nightly cleanup, report generation, ...). Share env/secrets/configMaps/volumes with the main container automatically.",
+        "type": "array"
+      },
+      "devClusterName": {
+        "default": "kind-dev",
+        "description": "The name of this fleet's dev cluster, compared against `cluster` to decide dev-vs-upper behavior (e.g. secretsScope). Not the literal cluster context name in every case - see docs/admin - override only if a fleet's dev cluster is ever named something other than kind-dev.",
+        "type": "string"
+      },
+      "env": {
+        "default": [],
+        "description": "Container environment variables for the main workload.",
+        "type": "array"
+      },
+      "envName": {
+        "default": "",
+        "description": "The environment name (dev, staging, prod, or a PR number). Named envName, not env, because env is already this schema's top-level container env-var list - a same-named field would collide in one flat values map.",
+        "type": "string"
+      },
+      "extraManifests": {
+        "default": [],
+        "description": "Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is, no labels stamped.",
+        "type": "array"
+      },
+      "httpRoute": {
+        "default": {
+          "annotations": {},
+          "enabled": false,
+          "hostnames": [],
+          "parentRefs": [],
+          "path": "/",
+          "pathType": "PathPrefix"
+        },
+        "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.kiac.local.",
+        "type": "object"
+      },
+      "ingress": {
+        "default": {
+          "annotations": {},
+          "enabled": false,
+          "host": "",
+          "path": "/",
+          "pathType": "Prefix",
+          "tls": false,
+          "tlsSecretName": ""
+        },
+        "description": "Classic Ingress. Gateway API (httpRoute below) is the mechanism most new callers actually want on this fleet's real clusters.",
+        "type": "object"
+      },
+      "jobs": {
+        "default": [],
+        "description": "One-off batch tasks - the common 'run a DB migration before the new Rollout comes up' pattern. Same image/env/secrets/configMaps/volumes defaulting as cronJobs.",
+        "type": "array"
+      },
+      "namespace": {
+        "description": "Extra labels/annotations stamped on this release's own Namespace object.",
+        "type": "object"
+      },
+      "networkPolicy": {
+        "default": {
+          "allowEgressTo": [],
+          "allowIngressFrom": [],
+          "allowIngressFromIngressController": true,
+          "enabled": true,
+          "extraEgressRules": [],
+          "extraIngressRules": [],
+          "ingressControllerNamespaceSelector": {
+            "matchLabels": {
+              "kubernetes.io/metadata.name": "kiac-gateway"
+            }
+          }
+        },
+        "description": "Traffic policy for the main workload's namespace.",
+        "type": "object"
+      },
+      "notifications": {
+        "description": "AI-triage diagnosis notifications, threaded into the RolloutWatch XR this chart renders unconditionally.",
+        "type": "object"
+      },
+      "platformSecretStore": {
+        "default": {
+          "kind": "ClusterSecretStore",
+          "name": "platform-secret-store"
+        },
+        "description": "This cluster's Infisical-backed ClusterSecretStore, used by the release-tracking relay token ExternalSecret.",
+        "type": "object"
+      },
+      "podDisruptionBudget": {
+        "default": {
+          "enabled": false,
+          "maxUnavailable": null,
+          "minAvailable": 1
+        },
+        "description": "Set at most one of minAvailable/maxUnavailable.",
+        "type": "object"
+      },
+      "release": {
+        "description": "Machine-owned: written by the release pipeline (Glidepath) into the release file, never by hand in a human-owned env file. Takes precedence over the deprecated rollout.image. No workload renders (Rollout/Service/ServiceMonitor) until both release.image fields are set.",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "releaseTracking": {
+        "default": null,
+        "description": "Opaque escape hatch, deliberately excluded from the strictness rule: written whole-block by platform-cicd's open-release-pr.yaml (relayUrl, chainId, flowStartTime, appNamespace, etc. - see docs/user for the full field list), never hand-authored. Null when this env hasn't gone through a release pipeline yet.",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "rollout": {
+        "description": "The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a standalone component-only env).",
+        "type": [
+          "object",
+          "null"
+        ]
+      },
+      "secrets": {
+        "default": [],
+        "description": "Secrets, aggregated into one app-secrets Secret via ExternalSecret/ClusterSecretStore, consumed by the main container.",
+        "type": "array"
+      },
+      "serviceAccount": {
+        "default": {
+          "annotations": {},
+          "create": true,
+          "imagePullSecrets": [],
+          "name": ""
+        },
+        "description": "Kubernetes ServiceAccount for every workload this chart renders.",
+        "type": "object"
+      },
+      "serviceMonitor": {
+        "default": {
+          "additionalLabels": {},
+          "enabled": true,
+          "interval": "30s",
+          "path": "/metrics",
+          "port": ""
+        },
+        "description": "Prometheus scraping of the main workload's first rollout.ports entry, via kube-prometheus-stack.",
+        "type": "object"
+      },
+      "slos": {
+        "default": [],
+        "description": "Rendered into the SLO XRD (xrds/slo.yaml), which wraps Sloth. No window/burn-rate fields here - Sloth computes those from just objective.",
+        "type": "array"
+      },
+      "volumes": {
+        "default": [],
+        "description": "PVC-backed volumes for the main workload.",
+        "type": "array"
+      }
+    },
+    "name": "airframe-application"
+  },
+  "components": {
+    "postgresql": {
+      "kind": "PostgreSQL",
+      "outputs": {
+        "database": {
+          "key": "dbname",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "host": {
+          "key": "host",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "jdbcUri": {
+          "key": "jdbc-uri",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "password": {
+          "key": "password",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "port": {
+          "key": "port",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "uri": {
+          "description": "A full postgres:// connection string, credentials included.",
+          "key": "uri",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "username": {
+          "key": "username",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        }
+      },
+      "owner": "human",
+      "summary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
+      "verify": [
+        {
+          "check": "The PostgreSQL XR's Ready condition is True.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "Secret {name}-app exists in the app namespace and has a non-empty password key.",
+          "id": "secret-exists"
+        },
+        {
+          "check": "A TCP connect to {name}-rw:5432 succeeds from the app namespace (CNPG's read-write Service).",
+          "id": "reachable"
+        }
+      ]
+    },
+    "rabbitmq": {
+      "kind": "RabbitMQ",
+      "outputs": {
+        "host": {
+          "configMap": "{name}-connection",
+          "key": "host",
+          "kind": "configMapKeyRef"
+        },
+        "password": {
+          "key": "password",
+          "kind": "secretKeyRef",
+          "secret": "{name}-user-credentials"
+        },
+        "port": {
+          "configMap": "{name}-connection",
+          "key": "port",
+          "kind": "configMapKeyRef"
+        },
+        "username": {
+          "key": "username",
+          "kind": "secretKeyRef",
+          "secret": "{name}-user-credentials"
+        },
+        "vhost": {
+          "configMap": "{name}-connection",
+          "key": "vhost",
+          "kind": "configMapKeyRef"
+        }
+      },
+      "owner": "human",
+      "summary": "attach mode: a user + permissions on an existing shared broker, scoped to this app's own queue prefix and exchanges. broker mode (no outputs below apply): the shared broker itself.",
+      "verify": [
+        {
+          "check": "The RabbitMQ XR's Ready condition is True (attach mode).",
+          "id": "xr-ready"
+        },
+        {
+          "check": "Secret {name}-user-credentials exists in the app namespace and has a non-empty password key.",
+          "id": "secret-exists"
+        },
+        {
+          "check": "ConfigMap {name}-connection exists in the app namespace with host/port/vhost keys.",
+          "id": "configmap-exists"
+        }
+      ]
+    },
+    "redis": {
+      "kind": "Redis",
+      "outputs": {
+        "host": {
+          "description": "The master Service's in-cluster DNS name.",
+          "kind": "literal",
+          "value": "{name}-master.{namespace}.svc.cluster.local"
+        },
+        "password": {
+          "description": "The Crossplane-composed connection Secret (writeConnectionSecretToRef), not the raw Bitnami chart Secret (which also exists, named `{name}`, key `redis-password` - the connection Secret copies the same value here so every component type has one canonical `<name>-connection` output surface).",
+          "key": "password",
+          "kind": "secretKeyRef",
+          "secret": "{name}-connection"
+        },
+        "port": {
+          "kind": "literal",
+          "value": 6379
+        },
+        "url": {
+          "description": "host:port only, no credentials embedded (auth.enabled is true on this component, so a connection still needs the password output supplied separately - e.g. as its own env var).",
+          "kind": "literal",
+          "value": "redis://{name}-master.{namespace}.svc.cluster.local:6379"
+        }
+      },
+      "owner": "human",
+      "summary": "A Redis cache or shared-counter store, dedicated to one application environment.",
+      "verify": [
+        {
+          "check": "The Redis XR's Ready condition is True.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "Secret {name}-connection exists in the app namespace and has a non-empty password key.",
+          "id": "secret-exists"
+        },
+        {
+          "check": "A TCP connect to {name}-master:6379 succeeds from the app namespace.",
+          "id": "reachable"
+        }
+      ]
+    }
+  },
+  "generated_by": "tools/gen_contract.py",
+  "xrds": {
+    "ApplicationEnvironment": {
+      "agentSummary": "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 5,
+      "fieldsTotal": 6,
+      "file": "applicationenvironment.yaml",
+      "group": "catalog.idp.io",
+      "plural": "applicationenvironments"
+    },
+    "GoApplication": {
+      "agentSummary": "Onboard a new Go service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 5,
+      "fieldsTotal": 6,
+      "file": "goapplication.yaml",
+      "group": "catalog.idp.io",
+      "plural": "goapplications"
+    },
+    "InfraService": {
+      "agentSummary": "Provisions standalone shared infrastructure (e.g. a cache or datastore another app depends on) - just an empty GitOps deploy repo, no application source code.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 3,
+      "fieldsTotal": 4,
+      "file": "infraservice.yaml",
+      "group": "catalog.idp.io",
+      "plural": "infraservices"
+    },
+    "NodeJSApplication": {
+      "agentSummary": "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 7,
+      "fieldsTotal": 9,
+      "file": "nodejsapplication.yaml",
+      "group": "catalog.idp.io",
+      "plural": "nodejsapplications"
+    },
+    "PostgreSQL": {
+      "agentSummary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 5,
+      "fieldsTotal": 7,
+      "file": "postgresql.yaml",
+      "group": "catalog.idp.io",
+      "plural": "postgresqls"
+    },
+    "PythonApplication": {
+      "agentSummary": "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 6,
+      "fieldsTotal": 7,
+      "file": "pythonapplication.yaml",
+      "group": "catalog.idp.io",
+      "plural": "pythonapplications"
+    },
+    "RabbitMQ": {
+      "agentSummary": "A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach).",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 12,
+      "fieldsTotal": 20,
+      "file": "rabbitmq.yaml",
+      "group": "catalog.idp.io",
+      "plural": "rabbitmqs"
+    },
+    "Redis": {
+      "agentSummary": "A Redis cache or shared-counter store, dedicated to one application environment.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 3,
+      "fieldsTotal": 5,
+      "file": "redis.yaml",
+      "group": "catalog.idp.io",
+      "plural": "redis"
+    },
+    "RolloutWatch": {
+      "agentSummary": "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 6,
+      "fieldsTotal": 10,
+      "file": "rolloutwatch.yaml",
+      "group": "catalog.idp.io",
+      "plural": "rolloutwatches"
+    },
+    "SLO": {
+      "agentSummary": "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 8,
+      "fieldsTotal": 11,
+      "file": "slo.yaml",
+      "group": "catalog.idp.io",
+      "plural": "slos"
+    },
+    "SecretStore": {
+      "agentSummary": "Creates or extends this app's Infisical-backed secret store (project, identity, ClusterSecretStore) for one cluster.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 3,
+      "fieldsTotal": 5,
+      "file": "secretstore.yaml",
+      "group": "catalog.idp.io",
+      "plural": "secretstores"
+    },
+    "SpringBootApplication": {
+      "agentSummary": "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 7,
+      "fieldsTotal": 8,
+      "file": "springbootapplication.yaml",
+      "group": "catalog.idp.io",
+      "plural": "springbootapplications"
+    },
+    "TektonCICD": {
+      "agentSummary": "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 7,
+      "fieldsTotal": 9,
+      "file": "tektoncicd.yaml",
+      "group": "catalog.idp.io",
+      "plural": "tektoncicds"
+    }
+  }
+}

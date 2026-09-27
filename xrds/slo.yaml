@@ -24,6 +24,8 @@ apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: slos.catalog.idp.io
+  annotations:
+    hangar.io/agent-summary: "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting."
 spec:
   group: catalog.idp.io
   names:

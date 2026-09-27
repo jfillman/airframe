@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""airframe.capabilities (AF-1b): answer questions about what Airframe can do, from
+contract/airframe-contract.json alone - no other file is read. This is the point of the contract
+bundle: an agent (or this tool) never has to grep values.schema.json or xrds/*.yaml to find out what
+exists.
+
+    tools/airframe-capabilities components                 list every component type and its summary
+    tools/airframe-capabilities component <TYPE>            one component's outputs, verify checks, owner
+    tools/airframe-capabilities xrds                        list every XRD, kind, apiVersion, summary
+    tools/airframe-capabilities xrd <KIND>                  one XRD's summary and description coverage
+    tools/airframe-capabilities field <NAME>                one chart field's type/description/default
+    tools/airframe-capabilities output <TYPE> <OUTPUT>      how to resolve one component output
+
+Exit 0 and JSON on stdout for a found answer; exit 1 and an error message for "no such X" (with a
+did-you-mean hint), so a caller can tell "the contract doesn't cover this" from "the tool is broken".
+"""
+import difflib
+import json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+CONTRACT_PATH = ROOT / "contract" / "airframe-contract.json"
+
+
+def load():
+    if not CONTRACT_PATH.exists():
+        print(f"error: {CONTRACT_PATH} does not exist - run tools/gen_contract.py first", file=sys.stderr)
+        sys.exit(1)
+    return json.loads(CONTRACT_PATH.read_text())
+
+
+def _hint(name, options):
+    near = difflib.get_close_matches(name, options, n=1)
+    return f"did you mean '{near[0]}'?" if near else f"known: {', '.join(sorted(options))}"
+
+
+def main():
+    c = load()
+    args = sys.argv[1:]
+    if not args:
+        print(__doc__)
+        return 1
+    cmd, rest = args[0], args[1:]
+
+    if cmd == "components":
+        print(json.dumps({k: v["summary"] for k, v in c["components"].items()}, indent=2))
+        return 0
+
+    if cmd == "component":
+        if not rest or rest[0] not in c["components"]:
+            print(f"error: no such component type {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', c['components'])}", file=sys.stderr)
+            return 1
+        print(json.dumps(c["components"][rest[0]], indent=2))
+        return 0
+
+    if cmd == "xrds":
+        print(json.dumps({k: v["agentSummary"] for k, v in c["xrds"].items()}, indent=2))
+        return 0
+
+    if cmd == "xrd":
+        if not rest or rest[0] not in c["xrds"]:
+            print(f"error: no such XRD kind {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', c['xrds'])}", file=sys.stderr)
+            return 1
+        print(json.dumps(c["xrds"][rest[0]], indent=2))
+        return 0
+
+    if cmd == "field":
+        fields = c["chart"]["fields"]
+        if not rest or rest[0] not in fields:
+            print(f"error: no such chart field {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', fields)}", file=sys.stderr)
+            return 1
+        print(json.dumps(fields[rest[0]], indent=2))
+        return 0
+
+    if cmd == "output":
+        if len(rest) < 2:
+            print("error: usage: output <TYPE> <OUTPUT>", file=sys.stderr)
+            return 1
+        kind, output = rest[0], rest[1]
+        comp = c["components"].get(kind)
+        if comp is None:
+            print(f"error: no such component type {kind!r}. {_hint(kind, c['components'])}", file=sys.stderr)
+            return 1
+        outputs = comp.get("outputs", {})
+        if output not in outputs:
+            print(f"error: component '{kind}' has no output {output!r}. {_hint(output, outputs)}", file=sys.stderr)
+            return 1
+        print(json.dumps(outputs[output], indent=2))
+        return 0
+
+    print(f"error: unknown command {cmd!r}", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

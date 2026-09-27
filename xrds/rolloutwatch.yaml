@@ -28,6 +28,8 @@ apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
   name: rolloutwatches.catalog.idp.io
+  annotations:
+    hangar.io/agent-summary: "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary."
 spec:
   group: catalog.idp.io
   names:

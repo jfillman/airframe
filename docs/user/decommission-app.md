@@ -5,7 +5,7 @@ app's onboarding files from git and letting ArgoCD prune, then a few manual clea
 for the things the platform deliberately (or accidentally) leaves behind.
 
 > **Status: proven once, live, on `boarding-api` (2026-09-24), a Go app with one upper
-> env (`kind-prod` staging) and one dev env.** The steps below are what actually
+> env (prod staging) and one dev env.** The steps below are what actually
 > happened, in order. Other stacks (Node, Spring Boot, Python) use the same
 > mechanism but are untested for decommissioning.
 
@@ -28,7 +28,7 @@ you need first. Before starting, `git pull` your local checkout so it isn't behi
 Verify the policies live before you start, they are the source of truth, not this table:
 
 ```sh
-kubectl --context kiac-dev get managed -A \
+kubectl --context dev get managed -A \
   -o custom-columns=K:.kind,N:.metadata.name,POL:.spec.managementPolicies | grep <app>
 ```
 
@@ -68,7 +68,7 @@ Applications go, again subject to the ordering bug.
 - **`app-<app>-cicd` namespace** on the dev cluster survives, holding the per-app
   `registry-credentials`, `<app>-pr-generator-token` and `glidepath-backstage-notify`
   Secrets. Delete the namespace.
-- **Infisical project(s)** `<app>-kind-dev`, `<app>-<upper>`: delete in the Infisical UI.
+- **Infisical project(s)** `<app>-dev`, `<app>-<upper>`: delete in the Infisical UI.
   The provider identity is not always a member, so its API view can't confirm deletion
   (a 404 is ambiguous: gone vs. not visible).
 - **`secretstore-provisioner` ConfigMap** (`gitops-cluster-<upper>/10-crds-operators/
@@ -81,7 +81,7 @@ Applications go, again subject to the ordering bug.
 
 ## Known problem: AppProject is pruned before its Applications
 
-Seen twice in the trial (kind-prod `boarding-api-staging`, kiac-dev `boarding-api-dev`,
+Seen twice in the trial (`boarding-api-staging` on prod, `boarding-api-dev` on dev,
 plus a knock-on stall of `boarding-api-onboarding`). ArgoCD deletes the per-app
 `AppProject` before an Application that references it. The Application is then stuck
 with its `resources-finalizer` and:

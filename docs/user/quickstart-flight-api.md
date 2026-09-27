@@ -22,7 +22,7 @@ split; it links back to the section that explains each.
   database; and `boarding-api` was run against it end to end.
 - **Verified:** the database component, on **both clusters**. A `PostgreSQL` component was
   created, went Ready, kept its data across a restart, scaled to two instances on the dev
-  cluster, and tore down cleanly. On `kind-prod` (which enforces NetworkPolicy) it went Ready with
+  cluster, and tore down cleanly. On the prod cluster (which enforces NetworkPolicy) it went Ready with
   the app's baseline policy in place, and a control run **without** the component's operator
   policy never became healthy, so that policy is necessary, not decoration. A pod in another
   namespace could not reach the database.
@@ -37,10 +37,10 @@ split; it links back to the section that explains each.
 - **Verified live by walking it (2026-09-25):** create → pipeline → ground deploy on the dev
   cluster with the database component; `boarding-api` on dev serves from `flight-api`
   (`source: flight-api`, live status from the simulator) and the database accumulated hundreds of
-  events; `flight-api` runs on `kind-prod` staging with a two-instance database. Walking it found and
+  events; `flight-api` runs on prod staging with a two-instance database. Walking it found and
   fixed the slow emulated Java build (section 04) and a liveness probe pointed at the readiness
   endpoint (section 05).
-- **Not yet confirmed:** `boarding-api` on `kind-prod` staging still reports its built-in lookup
+- **Not yet confirmed:** `boarding-api` on prod staging still reports its built-in lookup
   (`FLIGHT_API_URL` not set there), so the staging call path in section 07 has not been exercised.
 
 **Needs airframe v0.3.88 or later** on the dev cluster's ApplicationSets (`env:` `valueFrom`).
@@ -69,7 +69,7 @@ environment deletes its data, and no other app can reach it.
 | Field | Value |
 |---|---|
 | Name | `flight-api` |
-| `devCluster` | `kind-dev` |
+| `devCluster` | `dev` |
 | `description` | Skyport system of record: flights and gates in Postgres |
 | `javaVersion` | `21` |
 | `buildTool` | `maven` |
@@ -77,7 +77,7 @@ environment deletes its data, and no other app can reach it.
 | `port` | `8080` |
 | `visibility` | `private` |
 
-**Use `kind-dev` exactly for `devCluster`**, even though the dev cluster is `kiac-dev` — see
+**Use `dev` exactly for `devCluster`**, even if your dev cluster goes by another name — see
 [part 1, section 02](quickstart.md#02--create-the-app) for why.
 
 **Set `groupId` to `io.skyport.flight`.** The scaffold uses it as the app's one Java package, and
@@ -333,13 +333,13 @@ board accurate — the fix is for flight-api to publish `flight.gate_changed` an
 evict the entry, which is Phase 2 of [Skyport](skyport-demo.md) and [part 3](quickstart-broker.md). The `flight_events` table is
 already there for that: every gate change is written to it in the same transaction as the change.
 
-## 07 — Flight: the same service on `kind-prod`
+## 07 — Flight: the same service on `prod`
 
 The flight environment works exactly as in [part 1, section 07](quickstart.md#07--flight-a-governed-environment-on-an-upper-cluster):
 declare it in `cicd.yaml`, create the `ApplicationEnvironment`, configure it, release an image.
 Only the parts that differ are here.
 
-`kind-prod` has the CloudNativePG operator and the `PostgreSQL` XRD installed. Note that it runs
+The prod cluster has the CloudNativePG operator and the `PostgreSQL` XRD installed. Note that it runs
 Kubernetes 1.37, which CloudNativePG 1.30 lists as *tested but not supported* upstream; the
 component was verified there (above), not assumed.
 
@@ -349,7 +349,7 @@ component was verified there (above), not assumed.
 deploy:
   lowerEnvironments: [dev]
   upperEnvironments:
-    - { name: staging, cluster: kind-prod }
+    - { name: staging, cluster: prod }
 
 governance:
   allowedCommitSigners:
@@ -370,17 +370,17 @@ pipelines:
 
 Merge the `.tekton/` PR it opens.
 
-**Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-kind-prod-staging`,
-`Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `kind-prod`, `env` `staging`.
+**Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-prod-staging`,
+`Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `prod`, `env` `staging`.
 Merge the PR. The flight environment starts as `rollout: null`, so **the database is created
 first**, in `app-flight-api-staging`, before any application runs:
 
 ```bash
-kubectl --context kind-prod get postgresql -n app-flight-api-staging
+kubectl --context prod get postgresql -n app-flight-api-staging
 ```
 
 **Step 3 — configure it.** The flight values live in
-`gitops-flight-api/kind-prod/staging/values.yaml` and change only through a pull request. Add the
+`gitops-flight-api/prod/staging/values.yaml` and change only through a pull request. Add the
 database, its credentials, the probes and the network rule — **edit the file in that PR directly**
 rather than through Tower's App Configuration *Environment variables* section (see the note
 below):
@@ -434,11 +434,11 @@ The image is not set here: the release pipeline sets it, as in part 1.
 **Step 4 — release**, as a signed merge, as in part 1. Then in `boarding-api`'s staging values point
 it at `http://flight-api.app-flight-api-staging.svc.cluster.local:8080`.
 
-Check it from a machine that can reach `kind-prod`:
+Check it from a machine that can reach the prod cluster:
 
 ```bash
-kubectl --context kind-prod get all,pvc,secret,networkpolicy -n app-flight-api-staging -l hangar.io/app=flight-api
-kubectl --context kind-prod -n app-flight-api-staging port-forward svc/flight-api 8082:8080
+kubectl --context prod get all,pvc,secret,networkpolicy -n app-flight-api-staging -l hangar.io/app=flight-api
+kubectl --context prod -n app-flight-api-staging port-forward svc/flight-api 8082:8080
 curl -s localhost:8082/api/flights/AC123
 ```
 
@@ -446,7 +446,7 @@ Deleting this environment deletes its database and both volumes.
 
 ## Cheat sheet
 
-- **`devCluster: kind-dev`**, and **`groupId: io.skyport.flight`** — the code you copy in assumes
+- **`devCluster: dev`**, and **`groupId: io.skyport.flight`** — the code you copy in assumes
   that package.
 - **A database is a component**, in the environment's `components:` — not a Tower Create form.
 - **Read its credentials with `valueFrom.secretKeyRef`** to `<name>-app`; there's nothing to copy

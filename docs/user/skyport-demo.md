@@ -131,7 +131,7 @@ Each phase ends with something you can run. Nothing later than Phase 1 is built.
 |---|---|---|---|
 | 0 | `boarding-api` (NodeJS) + Redis + canary UI — [quickstart](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Deployed on the dev cluster with Redis.** The canary and flight environment are the parts not yet walked. |
 | 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [quickstart part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Code written and tested against a real Postgres, and boarding-api verified against it. Not yet deployed through Airframe.** |
-| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` (Python consumer of `flights.events`, re-routes bags between carousels on a gate change) built and verified on dev on 2026-09-26: a gate change in flight-api moved AC123's bags from carousel 2 to 3 within seconds. Its staging environment is not created yet, and nothing is on kind-prod for it. State is in memory, so it runs one replica until phase 3.** |
+| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` (Python consumer of `flights.events`, re-routes bags between carousels on a gate change) built and verified on dev on 2026-09-26: a gate change in flight-api moved AC123's bags from carousel 2 to 3 within seconds. Its staging environment is not created yet, and nothing is on the prod cluster for it. State is in memory, so it runs one replica until phase 3.** |
 | 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
 | 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |
@@ -152,7 +152,7 @@ covers — are in `hangar/docs/service-catalog-design.md`. This plan doesn't set
 
 ## Two architectures
 
-`kiac-dev` (ground) is **arm64** and `kind-prod` (flight) is **amd64**. Everything
+The dev cluster (ground) is **arm64** and the prod cluster (flight) is **amd64**. Everything
 in Skyport has to run on both:
 
 - **Application images.** The build stage builds `linux/arm64` and `linux/amd64` by
@@ -187,4 +187,4 @@ in Skyport has to run on both:
   catalog publishes must be multi-arch, because Crossplane runs on both clusters.
   `function-rollout-watcher` already is. The platform toolbox image
   (`platform-cicd-toolbox`) is **arm64-only**, which is fine only because pipelines
-  run on `kiac-dev`; a pipeline on `kind-prod` would fail with `exec format error`.
+  run on the dev cluster; a pipeline on the prod cluster would fail with `exec format error`.

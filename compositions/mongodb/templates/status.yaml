@@ -1,0 +1,32 @@
+# AF-6a: a custom ComponentReady condition with a closed reason code + hint, computed from the
+# composed MongoDBCommunity's own status.phase (verified against the real operator source -
+# mongodb-community-operator/api/v1/mongodbcommunity_types.go - the only three values it ever sets:
+# Running, Pending, Failed). Same mechanism and not-named-"Ready" reasoning as
+# compositions/redis/templates/status.yaml (see that file's own header).
+<<- $rs := index (.observed.resources | default dict) "replicaset" | default dict >>
+<<- $rsResource := index $rs "resource" | default dict >>
+<<- $rsStatus := index $rsResource "status" | default dict >>
+<<- $phase := index $rsStatus "phase" | default "" >>
+<<- $message := index $rsStatus "message" | default "" >>
+<<- $reason := "MongoDBProvisioning" >>
+<<- $status := "False" >>
+<<- $out := "Waiting for the MongoDBCommunity replica set to be observed for the first time." >>
+<<- if eq $phase "Running" >>
+  <<- $reason = "MongoDBReady" >>
+  <<- $status = "True" >>
+  <<- $out = "The MongoDBCommunity replica set reports Running." >>
+<<- else if eq $phase "Failed" >>
+  <<- $reason = "MongoDBFailed" >>
+  <<- $out = printf "The MongoDBCommunity replica set reports Failed: %s" (default "no message" $message) >>
+<<- else if eq $phase "Pending" >>
+  <<- $reason = "MongoDBPending" >>
+  <<- $out = printf "The MongoDBCommunity replica set is Pending: %s" (default "no message" $message) >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: ComponentReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$out | quote>>
+    target: CompositeAndClaim

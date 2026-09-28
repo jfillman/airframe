@@ -177,7 +177,7 @@ attachedResourceApiVersion: catalog.idp.io/v1alpha1
 
 # Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real
 # XRD yet (oauth-server, database, queue are placeholders).
-componentKinds: {database: Database, oauth-server: OAuthServer, postgresql: PostgreSQL, queue: Queue, rabbitmq: RabbitMQ, redis: Redis}
+componentKinds: {database: Database, mongodb: MongoDB, oauth-server: OAuthServer, postgresql: PostgreSQL, queue: Queue, rabbitmq: RabbitMQ, redis: Redis}
 
 # Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is, no labels
 # stamped.

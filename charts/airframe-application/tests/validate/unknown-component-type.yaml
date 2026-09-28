@@ -1,5 +1,5 @@
 appName: dead-end-test
 components:
-  - type: mongodb
+  - type: elasticsearch
     name: docs
     spec: {}

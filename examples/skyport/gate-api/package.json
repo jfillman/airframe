@@ -1,0 +1,8 @@
+{
+  "name": "gate-api",
+  "version": "1.1.1",
+  "description": "Skyport gate display: which flight is at which gate, and which version answered",
+  "main": "index.js",
+  "scripts": { "start": "node index.js", "test": "node --test" },
+  "license": "MIT"
+}

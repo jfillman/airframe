@@ -1,0 +1,8 @@
+# alpine, not -slim: the Debian base carries unfixed HIGH CVEs that fail the image-scan gate.
+# Standard library only, so pip and setuptools are removed after install; nothing needs them at runtime.
+FROM python:3.12-alpine
+WORKDIR /app
+RUN apk upgrade --no-cache && pip uninstall -y setuptools pip
+COPY . .
+EXPOSE 8080
+CMD ["python", "main.py"]

@@ -63,6 +63,7 @@ spec:
                     name:
                       type: string
                       minLength: 1
+                      description: The ApplicationEnvironment XR's own name.
                 size:
                   type: string
                   description: >-

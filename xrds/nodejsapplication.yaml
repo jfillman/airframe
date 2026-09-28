@@ -131,6 +131,7 @@ spec:
                     a shared gitops-cluster-* repo) - most apps never set this.
                   items:
                     type: string
+                    description: A full gitops repo URL, e.g. https://github.com/jfillman/gitops-cluster-dev.
                   default: []
               required: ["devCluster"]
           required: ["spec"]

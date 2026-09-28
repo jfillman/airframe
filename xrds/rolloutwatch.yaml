@@ -66,6 +66,7 @@ spec:
                     name:
                       type: string
                       minLength: 1
+                      description: The ApplicationEnvironment XR's own name.
 
                 appName:
                   type: string
@@ -115,11 +116,19 @@ spec:
                   properties:
                     slack:
                       type: object
+                      description: >-
+                        Slack-specific notification settings - the only channel this XRD
+                        supports today, mirroring platform-cicd's own cicd.yaml
+                        notifications.slack shape rather than a new convention.
                       required:
                         - enabled
                       properties:
                         enabled:
                           type: boolean
+                          description: >-
+                            Whether a completed diagnosis posts to Slack. The webhook URL
+                            itself is never a spec field (it's a credential) - see
+                            notify-external-secret.yaml for where it actually comes from.
                         channel:
                           type: string
                           description: >-
@@ -135,10 +144,18 @@ spec:
               properties:
                 rolloutPhase:
                   type: string
+                  description: The watched Rollout's last-observed status.phase (Healthy/Progressing/Degraded/Error/...), copied straight through, not reinterpreted.
                 lastDiagnosisRevision:
                   type: string
+                  description: >-
+                    The Rollout's currentPodHash at the last dispatched diagnosis - the
+                    de-dupe key that stops the same Degraded revision from dispatching a
+                    second diagnosis Job. Cleared once the rollout recovers, so a future
+                    degradation (even a flap back to this same revision) dispatches fresh.
                 lastDiagnosisJob:
                   type: string
+                  description: Name of the Job dispatched to HolmesGPT for lastDiagnosisRevision (diagnosis-<app>-<revision>, truncated to 63 chars). Cleared alongside lastDiagnosisRevision on recovery.
                 lastDiagnosisTime:
                   type: string
+                  description: When lastDiagnosisJob was dispatched, UTC ISO-8601. Cleared alongside lastDiagnosisRevision on recovery.
           required: ["spec"]

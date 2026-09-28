@@ -1,0 +1,61 @@
+# Wraps MongoDB Controllers for Kubernetes' `mongodbcommunity.mongodb.com/v1 MongoDBCommunity` CRD -
+# see xrds/mongodb.yaml's own header for why this CRD and not a from-scratch controller.
+#
+# `connectionStringSecretName` is set explicitly to `<xr>-app`, matching CNPG's own `<name>-app`
+# naming convention for its equivalent output Secret - one canonical "the app's own credentials"
+# name per component type family, not a name the operator would otherwise pick on its own. The
+# operator creates and owns this Secret itself once it reads the input password Secret
+# (templates/password.yaml); nothing here renders it directly.
+#
+# mongod image pinned to quay.io/mongodb/mongodb-community-server:8.0.32-ubi8 - verified against the
+# real Quay registry at build time (multi-arch: amd64 + arm64), not the chart's own example version.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $members := $spec.members | default 1 >>
+<<- $storage := $spec.storageSize | default "5Gi" >>
+<<- $db := $spec.databaseName | default (replace "-" "_" $xrName) >>
+<<- $hangarLabels := dict >>
+<<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
+  <<- if hasPrefix "hangar.io/" $k >>
+    <<- $_ := set $hangarLabels $k $v >>
+  <<- end >>
+<<- end >>
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: <<$xrName>>
+  namespace: <<$xrNamespace>>
+  annotations:
+    <<setResourceNameAnnotation "replicaset">>
+  labels:
+    <<- range $k, $v := $hangarLabels >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+spec:
+  members: <<$members | int>>
+  type: ReplicaSet
+  version: "8.0.32"
+  security:
+    authentication:
+      modes: ["SCRAM"]
+  users:
+    - name: <<$db>>
+      db: <<$db>>
+      passwordSecretRef:
+        name: <<printf "%s-mongo-password" $xrName>>
+        key: password
+      roles:
+        - name: dbOwner
+          db: <<$db>>
+      scramCredentialsSecretName: <<printf "%s-scram" $xrName>>
+      connectionStringSecretName: <<printf "%s-app" $xrName>>
+  statefulSet:
+    spec:
+      volumeClaimTemplates:
+        - metadata:
+            name: data-volume
+          spec:
+            resources:
+              requests:
+                storage: <<$storage>>

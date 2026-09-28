@@ -48,7 +48,7 @@ def main():
 
     # Q1: What component types exist, and what does each do?
     components = ask("components")
-    checks.append(("Q1 component list", set(components) == {"redis", "postgresql", "rabbitmq"}))
+    checks.append(("Q1 component list", set(components) == {"redis", "postgresql", "rabbitmq", "mongodb"}))
 
     # Q2: How do I read a Redis component's password without guessing a Secret name?
     redis_password = ask("output", "redis", "password")
@@ -80,12 +80,12 @@ def main():
     checks.append(("Q8 rollout default has replicas", schema["properties"]["rollout"]["properties"]["replicas"]["default"] == 2))
 
     # Q9: Asking for a component type that doesn't exist should fail clearly, not silently.
-    r = subprocess.run([sys.executable, CLI, "component", "mongodb"], capture_output=True, text=True, cwd=ROOT)
+    r = subprocess.run([sys.executable, CLI, "component", "elasticsearch"], capture_output=True, text=True, cwd=ROOT)
     checks.append(("Q9 unknown component type fails with a hint", r.returncode != 0 and "known:" in r.stderr))
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 13 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 14 and all(xrds.values())))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

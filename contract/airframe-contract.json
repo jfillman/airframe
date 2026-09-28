@@ -44,6 +44,7 @@
       "componentKinds": {
         "default": {
           "database": "Database",
+          "mongodb": "MongoDB",
           "oauth-server": "OAuthServer",
           "postgresql": "PostgreSQL",
           "queue": "Queue",
@@ -222,6 +223,76 @@
     "name": "airframe-application"
   },
   "components": {
+    "mongodb": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The MongoDBCommunity replica set reports phase Running.",
+              "reason": "MongoDBReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The MongoDBCommunity replica set reports phase Failed - a real problem, not just startup. Check its own status.message.",
+              "reason": "MongoDBFailed",
+              "status": "False"
+            },
+            {
+              "meaning": "The MongoDBCommunity replica set reports phase Pending (agents still converging the replica set).",
+              "reason": "MongoDBPending",
+              "status": "False"
+            },
+            {
+              "meaning": "The replica set has not been observed yet (just created).",
+              "reason": "MongoDBProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "ComponentReady"
+        }
+      ],
+      "kind": "MongoDB",
+      "outputs": {
+        "password": {
+          "key": "password",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "uri": {
+          "description": "A full mongodb:// connection string, credentials and all replica set members included. The key itself contains a literal dot - it is one flat Secret key, \"connectionString.standard\", not a nested field.",
+          "key": "connectionString.standard",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "uriSrv": {
+          "description": "The same connection string, using mongodb+srv:// DNS seedlist discovery instead of listing every member.",
+          "key": "connectionString.standardSrv",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        },
+        "username": {
+          "key": "username",
+          "kind": "secretKeyRef",
+          "secret": "{name}-app"
+        }
+      },
+      "owner": "human",
+      "summary": "A dedicated MongoDB replica set, one per application environment.",
+      "verify": [
+        {
+          "check": "The MongoDB XR's ComponentReady condition has reason MongoDBReady.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "Secret {name}-app exists in the app namespace and has non-empty username/password keys.",
+          "id": "secret-exists"
+        },
+        {
+          "check": "A TCP connect to {name}-0.{name}-svc:27017 succeeds from the app namespace.",
+          "id": "reachable"
+        }
+      ]
+    },
     "postgresql": {
       "conditions": [
         {
@@ -471,6 +542,15 @@
       "file": "infraservice.yaml",
       "group": "catalog.idp.io",
       "plural": "infraservices"
+    },
+    "MongoDB": {
+      "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 4,
+      "fieldsTotal": 6,
+      "file": "mongodb.yaml",
+      "group": "catalog.idp.io",
+      "plural": "mongodbs"
     },
     "NodeJSApplication": {
       "agentSummary": "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",

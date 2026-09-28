@@ -1,5 +1,27 @@
 # GENERATED FILE - do not hand-edit. Source: xrds/*.meta.yaml (AF-3).
 # Regenerate with: python3 tools/gen_component_outputs.py
+mongodb:
+  password:
+    key: password
+    kind: secretKeyRef
+    secret: '{name}-app'
+  uri:
+    description: A full mongodb:// connection string, credentials and all replica
+      set members included. The key itself contains a literal dot - it is one flat
+      Secret key, "connectionString.standard", not a nested field.
+    key: connectionString.standard
+    kind: secretKeyRef
+    secret: '{name}-app'
+  uriSrv:
+    description: The same connection string, using mongodb+srv:// DNS seedlist discovery
+      instead of listing every member.
+    key: connectionString.standardSrv
+    kind: secretKeyRef
+    secret: '{name}-app'
+  username:
+    key: username
+    kind: secretKeyRef
+    secret: '{name}-app'
 postgresql:
   database:
     key: dbname

@@ -205,6 +205,40 @@ spec:
                 name: default
             ---
             ---
+            # AF-6a: a custom ComponentReady condition with a closed reason code + hint, computed from the
+            # composed Release's own atProvider.state (not just proxying Crossplane's generic Ready/Available) -
+            # same ClaimConditions mechanism compositions/infraservice and compositions/tektoncicd already use for
+            # DevClusterReady/CicdOnboarded. Deliberately NOT named "Ready": that type is Crossplane's own,
+            # core-managed condition (function-auto-ready's job, in the step after this one) - reusing the name
+            # here would race it. Reason codes (closed set, each documented so an agent's fix-hint is stable):
+            # RedisReady, RedisDeploying, RedisReleaseFailed, RedisProvisioning.
+            <<- $release := index (.observed.resources | default dict) "release" | default dict >>
+            <<- $releaseResource := index $release "resource" | default dict >>
+            <<- $atProvider := index (index $releaseResource "status" | default dict) "atProvider" | default dict >>
+            <<- $state := index $atProvider "state" | default "" >>
+            <<- $reason := "RedisProvisioning" >>
+            <<- $status := "False" >>
+            <<- $message := "Waiting for the Release to be observed for the first time." >>
+            <<- if eq $state "deployed" >>
+              <<- $reason = "RedisReady" >>
+              <<- $status = "True" >>
+              <<- $message = "The wrapped Bitnami chart reports deployed." >>
+            <<- else if eq $state "failed" >>
+              <<- $reason = "RedisReleaseFailed" >>
+              <<- $message = "The wrapped Bitnami chart's Helm release failed - check the Release's own events." >>
+            <<- else if ne $state "" >>
+              <<- $reason = "RedisDeploying" >>
+              <<- $message = printf "The wrapped Bitnami chart is mid-rollout (Helm state: %s)." $state >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: ComponentReady
+                status: <<$status | quote>>
+                reason: <<$reason>>
+                message: <<$message | quote>>
+                target: CompositeAndClaim
+            ---
         delims:
           left: "<<"
           right: ">>"

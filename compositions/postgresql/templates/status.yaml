@@ -1,0 +1,34 @@
+# AF-6a: a custom ComponentReady condition with a closed reason code + hint, computed from the
+# composed CNPG Cluster's own status.conditions[type=Ready] - same mechanism and same
+# not-named-"Ready" reasoning as compositions/redis/templates/status.yaml (see that file's own
+# header). Reason codes (closed set): PostgreSQLReady, PostgreSQLDegraded, PostgreSQLProvisioning.
+<<- $cluster := index (.observed.resources | default dict) "cluster" | default dict >>
+<<- $clusterResource := index $cluster "resource" | default dict >>
+<<- $conditions := index (index $clusterResource "status" | default dict) "conditions" | default list >>
+<<- $cnpgReady := dict >>
+<<- range $conditions >>
+  <<- if eq .type "Ready" >>
+    <<- $cnpgReady = . >>
+  <<- end >>
+<<- end >>
+<<- $reason := "PostgreSQLProvisioning" >>
+<<- $status := "False" >>
+<<- $message := "Waiting for the CNPG Cluster to be observed for the first time." >>
+<<- if $cnpgReady >>
+  <<- if eq $cnpgReady.status "True" >>
+    <<- $reason = "PostgreSQLReady" >>
+    <<- $status = "True" >>
+    <<- $message = "The CNPG Cluster reports Ready." >>
+  <<- else >>
+    <<- $reason = "PostgreSQLDegraded" >>
+    <<- $message = printf "The CNPG Cluster's own Ready condition is False: %s" ($cnpgReady.message | default "no message") >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: ComponentReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim

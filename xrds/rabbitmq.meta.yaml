@@ -26,9 +26,27 @@ outputs:
     kind: configMapKeyRef
     configMap: "{name}-connection"
     key: vhost
+conditions:
+  # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
+  # see compositions/rabbitmq/templates/status.yaml. One reason set per mode; both live under the same
+  # condition type since a real XR is always exactly one mode.
+  - type: ComponentReady
+    reasons:
+      - reason: RabbitMQAttachReady
+        status: "True"
+        meaning: (attach mode) The User and Permission are provisioned on the shared broker.
+      - reason: RabbitMQAttachProvisioning
+        status: "False"
+        meaning: (attach mode) The User has not reported Ready yet (just created, or the broker is unavailable).
+      - reason: RabbitMQBrokerReady
+        status: "True"
+        meaning: (broker mode) The RabbitmqCluster reports at least one endpoint available.
+      - reason: RabbitMQBrokerProvisioning
+        status: "False"
+        meaning: (broker mode) The RabbitmqCluster has not reported ClusterAvailable=True yet.
 verify:
   - id: xr-ready
-    check: The RabbitMQ XR's Ready condition is True (attach mode).
+    check: The RabbitMQ XR's ComponentReady condition has reason RabbitMQAttachReady (attach) or RabbitMQBrokerReady (broker).
   - id: secret-exists
     check: Secret {name}-user-credentials exists in the app namespace and has a non-empty password key.
   - id: configmap-exists

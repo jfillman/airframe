@@ -223,6 +223,28 @@
   },
   "components": {
     "postgresql": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The CNPG Cluster's own Ready condition is True.",
+              "reason": "PostgreSQLReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The CNPG Cluster has been observed but its own Ready condition is False - a real problem, not just startup. Check the Cluster's own status/events.",
+              "reason": "PostgreSQLDegraded",
+              "status": "False"
+            },
+            {
+              "meaning": "The Cluster has not been observed yet (just created).",
+              "reason": "PostgreSQLProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "ComponentReady"
+        }
+      ],
       "kind": "PostgreSQL",
       "outputs": {
         "database": {
@@ -266,7 +288,7 @@
       "summary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
       "verify": [
         {
-          "check": "The PostgreSQL XR's Ready condition is True.",
+          "check": "The PostgreSQL XR's ComponentReady condition has reason PostgreSQLReady.",
           "id": "xr-ready"
         },
         {
@@ -280,6 +302,33 @@
       ]
     },
     "rabbitmq": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "(attach mode) The User and Permission are provisioned on the shared broker.",
+              "reason": "RabbitMQAttachReady",
+              "status": "True"
+            },
+            {
+              "meaning": "(attach mode) The User has not reported Ready yet (just created, or the broker is unavailable).",
+              "reason": "RabbitMQAttachProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "(broker mode) The RabbitmqCluster reports at least one endpoint available.",
+              "reason": "RabbitMQBrokerReady",
+              "status": "True"
+            },
+            {
+              "meaning": "(broker mode) The RabbitmqCluster has not reported ClusterAvailable=True yet.",
+              "reason": "RabbitMQBrokerProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "ComponentReady"
+        }
+      ],
       "kind": "RabbitMQ",
       "outputs": {
         "host": {
@@ -312,7 +361,7 @@
       "summary": "attach mode: a user + permissions on an existing shared broker, scoped to this app's own queue prefix and exchanges. broker mode (no outputs below apply): the shared broker itself.",
       "verify": [
         {
-          "check": "The RabbitMQ XR's Ready condition is True (attach mode).",
+          "check": "The RabbitMQ XR's ComponentReady condition has reason RabbitMQAttachReady (attach) or RabbitMQBrokerReady (broker).",
           "id": "xr-ready"
         },
         {
@@ -326,6 +375,33 @@
       ]
     },
     "redis": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The wrapped Bitnami chart reports deployed.",
+              "reason": "RedisReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The Release is mid-rollout (a real Helm state, e.g. pending-install/pending-upgrade). Retry later.",
+              "reason": "RedisDeploying",
+              "status": "False"
+            },
+            {
+              "meaning": "The Helm release failed. Check the Release's own events; this will not resolve on its own.",
+              "reason": "RedisReleaseFailed",
+              "status": "False"
+            },
+            {
+              "meaning": "The Release has not been observed yet (just created).",
+              "reason": "RedisProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "ComponentReady"
+        }
+      ],
       "kind": "Redis",
       "outputs": {
         "host": {
@@ -353,7 +429,7 @@
       "summary": "A Redis cache or shared-counter store, dedicated to one application environment.",
       "verify": [
         {
-          "check": "The Redis XR's Ready condition is True.",
+          "check": "The Redis XR's ComponentReady condition has reason RedisReady.",
           "id": "xr-ready"
         },
         {

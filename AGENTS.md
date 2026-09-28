@@ -44,6 +44,11 @@ and `release.image.tag` are set (the deprecated `rollout.image` still counts). A
 ## Verify
 A green pipeline is not verification; the service is. Check that pods are Ready and the endpoint answers,
 and quote what you saw. *(planned: `airframe.verify` runs each component's verify contract.)*
+- Redis, PostgreSQL and RabbitMQ each carry a custom `ComponentReady` condition (AF-6a), separate from
+  Crossplane's own generic `Ready`/`Synced` - `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`
+  gives a closed-set `reason` (e.g. `RedisReady`, `PostgreSQLDegraded`, `RabbitMQAttachProvisioning`) with a
+  stable meaning, listed in that component's `xrds/<type>.meta.yaml` under `conditions`. Prefer this over
+  the generic `Ready` condition when diagnosing why a component isn't up.
 
 ## Errors
 If a chart guard or a check blocks you and you believe it is wrong, say so in the PR. Do not work around it.

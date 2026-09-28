@@ -54,6 +54,7 @@ spec:
                     name:
                       type: string
                       minLength: 1
+                      description: The ApplicationEnvironment XR's own name.
                 size:
                   type: string
                   description: CPU/memory requests and limits for each instance.

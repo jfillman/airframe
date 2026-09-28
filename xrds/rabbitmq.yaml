@@ -65,6 +65,7 @@ spec:
                     name:
                       type: string
                       minLength: 1
+                      description: The ApplicationEnvironment XR's own name.
                 mode:
                   type: string
                   description: >-
@@ -97,6 +98,7 @@ spec:
                   items:
                     type: string
                     pattern: '^[a-z][a-z0-9-]{0,62}$'
+                    description: One vhost name, e.g. flights.
                 allowedNamespaces:
                   type: array
                   description: >-
@@ -104,6 +106,7 @@ spec:
                     the AMQP port. Everything else is refused/blocked.
                   items:
                     type: string
+                    description: A namespace name, e.g. app-baggage-api-dev.
                 # ---- attach mode ----
                 brokerRef:
                   type: object
@@ -112,8 +115,10 @@ spec:
                   properties:
                     name:
                       type: string
+                      description: The broker RabbitMQ XR's own name (mode broker).
                     namespace:
                       type: string
+                      description: The namespace the broker XR was created in - not necessarily this app's own namespace, since the broker is shared.
                 vhost:
                   type: string
                   description: (attach) The vhost this app works in.
@@ -130,6 +135,7 @@ spec:
                   items:
                     type: string
                     pattern: '^[a-zA-Z0-9._-]+$'
+                    description: An exchange name, e.g. flights.events.
                 consume:
                   type: array
                   description: >-
@@ -138,4 +144,18 @@ spec:
                   items:
                     type: string
                     pattern: '^[a-zA-Z0-9._-]+$'
+                    description: An exchange name, e.g. flights.events.
+              x-kubernetes-validations:
+                # Verified against the real Composition (compositions/rabbitmq/composition.yaml):
+                # mode: attach's User/Permission/ConfigMap all read spec.brokerRef.name/.namespace
+                # and spec.vhost directly, with no template-side guard the way queuePrefix/publish/
+                # consume already have (`if $spec.queuePrefix`) - an attach XR missing either field
+                # today renders a User pointing at an empty rabbitmqClusterReference and a
+                # Permission/ConfigMap with an empty vhost, not a loud failure. Same discriminated-
+                # union pattern this catalog's only prior CEL rule (xrds/slo.yaml) already
+                # established for its own type field.
+                - rule: "self.mode != 'attach' || has(self.brokerRef)"
+                  message: "brokerRef is required when mode == attach"
+                - rule: "self.mode != 'attach' || has(self.vhost)"
+                  message: "vhost is required when mode == attach"
           required: ["spec"]

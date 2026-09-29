@@ -472,7 +472,7 @@ spec:
                 file: <<printf "tenants/%s/xr-requests/secretstore-shared.yaml" $appName>>
                 overwriteOnCreate: true
                 content: |
-                  apiVersion: catalog.idp.io/v1alpha1
+                  apiVersion: catalog.hangar.io/v1alpha1
                   kind: SecretStore
                   metadata:
                     name: <<printf "%s-%s" $appName $cluster>>
@@ -499,7 +499,7 @@ spec:
                 file: <<printf "tenants/%s/xr-requests/secretstore-%s.yaml" $appName $env>>
                 overwriteOnCreate: true
                 content: |
-                  apiVersion: catalog.idp.io/v1alpha1
+                  apiVersion: catalog.hangar.io/v1alpha1
                   kind: SecretStore
                   metadata:
                     name: <<printf "%s-%s-%s" $appName $cluster $env>>

@@ -57,6 +57,12 @@ for f in typo-top-level-key typo-nested-key bad-component-size typo-release-key.
 done
 $V --no-render tests/validate/good.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good release file"; fail=1; }
 $V --no-render tests/validate/good-boarding-api-dev.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file"; fail=1; }
+$V --no-render tests/validate/good-boarding-api-dev.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file's release companion"; fail=1; }
+
+# AF-5b: AF-OWNER-001 is an error (promoted from warning once the release-file split landed for
+# real) - a release key in a human file, or anything else in a release file, both fail.
+$V --no-render tests/validate/bad-owner-release-key-in-human-file.yaml >/dev/null 2>&1 && { echo "FAIL: AF-OWNER-001 did not reject a release key in a human file"; fail=1; }
+$V --no-render tests/validate/bad-owner-non-release-key-in-release-file.release.yaml >/dev/null 2>&1 && { echo "FAIL: AF-OWNER-001 did not reject a non-release key in a release file"; fail=1; }
 
 # AF-4b: dead-end rules, each with its own seeded failing fixture.
 for f in bad-cluster-name bad-env-name unknown-component-type secret-literal; do

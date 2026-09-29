@@ -20,9 +20,9 @@ doesn't exist. AF-4b dead-end rules (tools/deadend_rules.py): AF-CLUSTER-001 (de
 the registry's canonical dev value), AF-ENV-001 (envName named like a pipeline stage), AF-COMP-001
 (unknown component type), AF-SECRET-001 (a secret-shaped literal in env/configMaps), AF-COMP-003
 (warning: a hand-written valueFrom matches a real component's own output - use fromComponent).
-AF-OWNER-001 (warning until the release-file split lands, then an error): a release-owned key
-(`release`, `releaseTracking`, the deprecated `rollout.image`) in a human file, or anything else
-in a release file. A release file is named `*.release.yaml` or `release.yaml`.
+AF-OWNER-001 (error, AF-5b): a release-owned key (`release`, `releaseTracking`, the deprecated
+`rollout.image`) in a human file, or anything else in a release file. A release file is named
+`*.release.yaml` or `release.yaml`.
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
@@ -95,8 +95,13 @@ def is_release_file(path):
     return n.endswith(".release.yaml") or n == "release.yaml"
 
 
-def ownership_warnings(path, data):
-    """AF-OWNER-001. Returns (loc, rule, message, hint) tuples; reported as warnings."""
+def ownership_problems(path, data):
+    """AF-OWNER-001. Returns (loc, rule, message, hint) tuples; reported as errors.
+
+    Promoted from warning to error 2026-09-28 (AF-5b): the release-file split it anticipated has
+    landed for real (D9/AF-5, hangar/docs/autopilot/release-file-split.md) - the whole live fleet's
+    human files are clean of release/releaseTracking/rollout.image, so this can now actually block a
+    violation instead of just flagging one."""
     out = []
     if not isinstance(data, dict):
         return out
@@ -142,7 +147,7 @@ def check_file(path, schema, args):
     errors.extend(component_output_problems(data))
     for loc, rule, msg, hint, severity in all_deadend_problems(data, schema):
         (errors if severity == "error" else warnings).append((loc, rule, msg, hint))
-    warnings.extend(ownership_warnings(path, data))
+    errors.extend(ownership_problems(path, data))
     if not errors and not args.no_render:
         parents = Path(path).resolve().parents
         app = args.app or (parents[2].name if len(parents) > 2 else None)

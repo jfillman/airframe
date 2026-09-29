@@ -81,6 +81,17 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(conditions), 1)
         self.assertEqual(conditions[0].reason, "DexServerProvisioning")  # no observed Deployment yet
 
+    async def test_server_mode_marks_non_deployment_resources_explicitly_ready(self):
+        # config/pvc/service/networkpolicy have no status.conditions for
+        # function-auto-ready's generic detection - without this the XR's generic Ready
+        # condition sticks at False forever (caught live: real pod Running, ComponentReady
+        # True, but Ready stayed "Creating").
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server"))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        for name in ("config", "pvc", "service", "networkpolicy"):
+            self.assertEqual(rsp.desired.resources[name].ready, fnv1.READY_TRUE, name)
+        self.assertNotEqual(rsp.desired.resources["deployment"].ready, fnv1.READY_TRUE)
+
     async def test_server_mode_config_has_at_least_one_connector(self):
         # Real Dex requirement, not style: server.go refuses to start with zero connectors,
         # even for a client_credentials-only deployment - caught live (a real pod crashed on

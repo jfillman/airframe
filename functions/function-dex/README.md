@@ -47,28 +47,49 @@ succeeding.
 
 ## Build and push
 
-Base recipe is the same as [`../function-rollout-watcher`](../function-rollout-watcher) (see
-that README's own build section for the full docker/podman and crossplane-CLI gotchas) - but
-that function only ever shipped a single amd64 build (it only needs to run on kind-prod).
-**This one needs both**: kiac-dev is arm64, kind-prod is amd64
-(`feedback_multiarch_amd64_arm64.md`), and function-dex has to be installed on whichever
-cluster hosts a `Dex` XR (server or attach). Each cluster's `Function` object names its own
-image tag independently (same per-cluster-pin pattern this project already uses elsewhere,
-e.g. `platform-cicd-toolbox`), so the simplest correct path is two single-arch builds under
-two tags - not a combined multi-arch manifest list, which `crossplane xpkg`'s tooling doesn't
-cleanly support yet as of this writing (verify against the current CLI before assuming
-otherwise; this was not tested against a real push in this pass):
+kiac-dev is arm64, kind-prod is amd64 (`feedback_multiarch_amd64_arm64.md`), and function-dex
+has to be installed on whichever cluster hosts a `Dex` XR (server or attach) - so it needs a
+real build for both. Uses `container` (Apple's CLI, `reference_container_cli_over_podman.md`)
+plus `skopeo` to bridge two real gaps found live, both worth knowing about before touching this:
+
+1. `container build`'s own tarball/OCI export flags (`-o type=tar`, `-o type=oci,dest=...`)
+   either produce a bare rootfs (not an image archive at all) or hit a real file-move bug
+   writing to a custom `dest`. The reliable path: build with no `dest` (loads into `container`'s
+   own local image store), then `container image save` (produces a real OCI-layout tarball).
+2. `crossplane xpkg build --embed-runtime-image-tarball` wants classic **docker-archive**
+   format (`manifest.json`), not OCI-layout (`oci-layout`/`index.json`/`blobs/`) - `skopeo copy
+   --override-arch <arch> --override-os linux oci-archive:IN.tar docker-archive:OUT.tar:TAG`
+   converts between them. `--override-arch`/`--override-os` are required, or skopeo picks the
+   *host's* platform (`darwin/arm64`) out of the multi-platform index `container image save`
+   always produces, not the one you actually built.
 
 ```shell
-docker build . --platform=linux/amd64 --tag runtime-amd64
-crossplane xpkg build --package-root=package --embed-runtime-image=runtime-amd64 \
-  --package-file=function-dex-amd64.xpkg
-crossplane xpkg push --package-files=function-dex-amd64.xpkg ghcr.io/jfillman/function-dex:<tag>-amd64
+for arch in arm64 amd64; do
+  container build --arch $arch -o type=oci -t function-dex-$arch .
+  container image save function-dex-$arch:latest -o /tmp/function-dex-$arch.tar
+  skopeo copy --override-arch $arch --override-os linux \
+    oci-archive:/tmp/function-dex-$arch.tar \
+    docker-archive:/tmp/function-dex-$arch-docker.tar:ghcr.io/jfillman/function-dex:<tag>
+  crossplane xpkg build --package-root=package \
+    --embed-runtime-image-tarball=/tmp/function-dex-$arch-docker.tar \
+    --package-file=/tmp/function-dex-$arch.xpkg
+done
 
-docker build . --platform=linux/arm64 --tag runtime-arm64
-crossplane xpkg build --package-root=package --embed-runtime-image=runtime-arm64 \
-  --package-file=function-dex-arm64.xpkg
-crossplane xpkg push --package-files=function-dex-arm64.xpkg ghcr.io/jfillman/function-dex:<tag>-arm64
+# crossplane xpkg push -f accepts multiple .xpkg files under ONE tag and genuinely combines
+# them into a real multi-platform OCI manifest list (verified: `skopeo inspect --raw` on the
+# pushed tag shows both linux/amd64 and linux/arm64 platform entries) - one Function object,
+# one tag, works on both clusters. No docker daemon needed for push either: crossplane xpkg
+# push reads ~/.docker/config.json directly as a pure HTTP client. If it's stale/expired
+# (`DENIED`) and there's no real docker on the machine to `docker login` with, `gh auth token`
+# + a manual base64(user:token) write into ~/.docker/config.json's `auths` map works just as
+# well - `gh auth refresh -s write:packages` first if the token lacks that scope.
+crossplane xpkg push --package-files=/tmp/function-dex-amd64.xpkg,/tmp/function-dex-arm64.xpkg \
+  ghcr.io/jfillman/function-dex:<tag>
 ```
 
-kind-prod's `Function` object names the `-amd64` tag, kiac-dev's names the `-arm64` tag.
+New packages default to **private** on ghcr.io - Crossplane's package pull then fails with
+`UNAUTHORIZED`, and there's no `packagePullSecrets` configured for this package (unlike
+`function-rollout-watcher`, which is public). Flip visibility to public once, via the web UI
+(`https://github.com/users/<owner>/packages/container/package/function-dex` → Package
+settings) - the REST API's own visibility-update endpoint 404s for this package type, at least
+as of this writing.

@@ -26,8 +26,15 @@ ENV PYTHONDONTWRITEBYTECODE=true
 # own environment-management code entirely; hatchling still does the actual
 # building either way, since pyproject.toml's build-system.requires names it.
 WORKDIR /build
-RUN --mount=target=. \
-    --mount=type=cache,target=/root/.cache/pip \
+COPY . .
+# Deliberately COPY, not the upstream function-template-python's `RUN --mount=target=.` -
+# Apple's `container` CLI build engine (this project's own build tool,
+# reference_container_cli_over_podman.md) doesn't pass the real build context through that
+# BuildKit mount syntax (confirmed live: "transferring context: 2B done", then "Directory '.'
+# is not installable" - reproduced identically against function-rollout-watcher's own
+# Dockerfile, so this is a generic container-CLI/BuildKit-mount incompatibility, not something
+# specific to this function). COPY is slightly less cache-efficient but portable.
+RUN --mount=type=cache,target=/root/.cache/pip \
     python3 -m venv /venv/build \
     && /venv/build/bin/pip wheel . --no-deps --wheel-dir /whl
 

@@ -91,9 +91,17 @@ def build_server_config(issuer):
     """Dex's own config.yaml - sqlite storage (no external DB for this scope), the
     client_credentials grant enabled cluster-wide (real, documented Dex feature -
     server/grants/clientcredentials.go - not per-client), gRPC Admin API enabled on
-    GRPC_PORT for function-dex's own CreateClient calls. No connectors: this server issues
-    only client_credentials tokens (machine-to-machine), never an interactive user login, so
-    it needs none."""
+    GRPC_PORT for function-dex's own CreateClient calls.
+
+    The `connectors` entry is a real Dex requirement, not a design choice: Dex's own
+    server.go refuses to start with zero connectors ("server: no connectors specified"),
+    even though this server only ever issues client_credentials tokens and no interactive
+    login ever reaches it - confirmed live (a real Dex pod crashed on exactly this before
+    the connector was added). `mockCallback` is Dex's own placeholder connector for this
+    situation (its real examples/grpc-client/config.yaml, a Dex-authored example of gRPC
+    client management, uses the same connector for the same reason) - it's a real Dex
+    connector type, but nothing ever drives it, since nothing here initiates a browser login
+    flow."""
     return f"""\
 issuer: {issuer}
 storage:
@@ -108,7 +116,10 @@ oauth2:
   grantTypes:
     - client_credentials
 staticClients: []
-connectors: []
+connectors:
+  - type: mockCallback
+    id: unused-placeholder
+    name: Unused placeholder (this server only issues client_credentials tokens)
 """
 
 

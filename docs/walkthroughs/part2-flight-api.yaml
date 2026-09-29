@@ -1,0 +1,61 @@
+title: "Airframe quickstart part 2: flight-api"
+app: flight-api
+sourceDoc: ../user/quickstart-flight-api.md
+steps:
+  - id: "create-app"
+    title: "The app exists as a synced, ready SpringBootApplication XR"
+    command: |
+      kubectl --context kiac-dev get springbootapplication flight-api -n app-flight-api-cicd
+    expected: "DevClusterReady/CicdOnboarded/Synced/Ready all True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context kiac-dev get springbootapplication flight-api -n app-flight-api-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      grep -q "DevClusterReady=True" <<<"$c"
+      grep -q "CicdOnboarded=True" <<<"$c"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+
+  - id: "postgresql-component"
+    title: "The PostgreSQL component is attached and flight-api reads through it"
+    command: |
+      kubectl --context kiac-dev get secret flight-db-app -n app-flight-api-dev
+      curl -s http://localhost:18090/api/whoami
+    expected: "the flight-db-app Secret exists (basic-auth type); /api/whoami reports \"database\":\"postgresql\""
+    verify: |
+      set -euo pipefail
+      kubectl --context kiac-dev get secret flight-db-app -n app-flight-api-dev -o jsonpath='{.type}' | grep -q "basic-auth"
+      kubectl --context kiac-dev port-forward -n app-flight-api-dev svc/flight-api 18090:8080 >/tmp/wt-flight-dev-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      curl -s http://localhost:18090/api/whoami | grep -q '"database":"postgresql"'
+
+  - id: "ground-running"
+    title: "Ground: flight-api is Running on the dev cluster and its liveness probe passes"
+    command: |
+      kubectl --context kiac-dev get pods -n app-flight-api-dev
+      curl -s -o /dev/null -w '%{http_code}' http://localhost:18090/actuator/health/liveness
+    expected: "at least one flight-api pod Running; the liveness endpoint returns 200"
+    verify: |
+      set -euo pipefail
+      running="$(kubectl --context kiac-dev get pods -n app-flight-api-dev -l app.kubernetes.io/name=flight-api \
+        --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+      [ "$running" -ge 1 ]
+      kubectl --context kiac-dev port-forward -n app-flight-api-dev svc/flight-api 18091:8080 >/tmp/wt-flight-live-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18091/actuator/health/liveness)"
+      [ "$code" = "200" ]
+
+  - id: "flight-running"
+    title: "Flight: flight-api's staging environment has real Running pods on kind-prod"
+    command: |
+      kubectl --context kind-prod get pods -n app-flight-api-staging
+    expected: "at least one flight-api pod Running on the prod cluster"
+    verify: |
+      set -euo pipefail
+      running="$(kubectl --context kind-prod get pods -n app-flight-api-staging -l app.kubernetes.io/name=flight-api \
+        --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+      [ "$running" -ge 1 ]

@@ -12,6 +12,10 @@ immediately.
 > An illustrated version of this guide, with diagrams, is at
 > [Airframe Broker Quickstart](html/quickstart-broker.html).
 
+> The checkable version - real commands, replayed against the live clusters - is
+> [`../walkthroughs/part3-broker.yaml`](../walkthroughs/part3-broker.yaml) (run it with
+> `tools/walkthrough-runner`).
+
 Do parts 1 and 2 first. This guide assumes `boarding-api` and `flight-api` are running in their dev
 environments and doesn't repeat how to create an app or merge a pipeline PR.
 

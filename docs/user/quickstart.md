@@ -13,6 +13,10 @@ to make canary and blue/green deployments *visible*.
 > An illustrated version of this guide, with diagrams, is at
 > [Airframe Quickstart](html/quickstart.html).
 
+> The checkable version of this guide - real commands you can replay against the live clusters,
+> not prose - is [`../walkthroughs/part1-boarding-api.yaml`](../walkthroughs/part1-boarding-api.yaml)
+> (run it with `tools/walkthrough-runner`).
+
 **What has and hasn't been verified.**
 - **Verified:** the app itself. Its 11 tests pass, and it was run against a real Redis
   container, including two instances sharing one counter.

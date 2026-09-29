@@ -309,8 +309,16 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         labels = hangar_labels(xr)
 
         if mode == "server":
+            # config/pvc/service/networkpolicy have no status.conditions for
+            # function-auto-ready's generic detection to find - same gotcha
+            # function-rollout-watcher's own ServiceAccount hit (see that file's
+            # build_diagnosis_service_account docstring). Only the Deployment has a real
+            # Available condition auto-ready can read, so it's the one resource left for
+            # auto-ready to judge.
             for name, manifest in build_server_resources(xr_name, xr_namespace, spec, labels).items():
                 rsp.desired.resources[name].resource.update(manifest)
+                if name != "deployment":
+                    rsp.desired.resources[name].ready = fnv1.READY_TRUE
             response.set_conditions(rsp, server_component_ready(req))
             response.normal(rsp, f"Dex server {xr_name} rendered")
             log.info("rendered dex server", xr=xr_name)

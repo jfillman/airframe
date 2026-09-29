@@ -1,8 +1,4 @@
 envName: dev
-rollout:
-  image:
-    repository: ghcr.io/jfillman/boarding-api
-    tag: 1.1.0-8f9acd8
 components:
   - type: redis
     name: cache

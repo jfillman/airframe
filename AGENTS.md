@@ -29,7 +29,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - Notice a `warn ... AF-COMP-003` on a file you're already touching? Migrate that reference to `fromComponent` while you're there - it's the exact gap AF-3 exists to close, just not yet enforced fleet-wide.
 
 ## Do not
-- Hand-edit `release` (the image), `releaseTracking` or the deprecated `rollout.image` in a live env file. `airframe-validate` warns (AF-OWNER-001) when they appear in a human-owned file.
+- Hand-edit `release` (the image), `releaseTracking` or the deprecated `rollout.image` in a live env file. `airframe-validate` rejects it (AF-OWNER-001, error since AF-5b) when they appear in a human-owned file, or anything else in a release file.
 - Use `extraManifests`, `networkPolicy` or `httpRoute` without a human's approval.
 - Put a secret value in `env` or `configMaps`. Secrets are references to Infisical keys.
 - Name an environment after a pipeline stage (`build`, `test`, `deploy`, `release`).

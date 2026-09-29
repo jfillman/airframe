@@ -81,6 +81,18 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(conditions), 1)
         self.assertEqual(conditions[0].reason, "DexServerProvisioning")  # no observed Deployment yet
 
+    async def test_server_mode_config_has_at_least_one_connector(self):
+        # Real Dex requirement, not style: server.go refuses to start with zero connectors,
+        # even for a client_credentials-only deployment - caught live (a real pod crashed on
+        # this before the fix). Regression guard so it can't silently come back.
+        import yaml as _yaml
+
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server"))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        cm = resource.struct_to_dict(rsp.desired.resources["config"].resource)
+        config = _yaml.safe_load(cm["data"]["config.yaml"])
+        self.assertTrue(config.get("connectors"), "Dex config must declare at least one connector")
+
     async def test_server_mode_ready_once_deployment_has_available_replicas(self):
         req = fnv1.RunFunctionRequest(
             observed=fnv1.State(

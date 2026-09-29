@@ -1,0 +1,30 @@
+# Not a generated file, unlike this catalog's function-go-templating-based Compositions
+# (rabbitmq/, mongodb/, redis/, postgresql/) - this one has a single pipeline step running a
+# custom Python function (function-dex) that handles BOTH modes end to end: `server` renders
+# the shared Dex Deployment/Service/ConfigMap/PVC/NetworkPolicy directly (pure templating, done
+# in Python rather than go-templating - kept in one implementation rather than splitting mode:
+# server's rendering and mode: attach's live gRPC call across two different systems), `attach`
+# registers a client on Dex's real gRPC Admin API. See function-dex/README.md and
+# function-dex/function/fn.py's own header for why this needs a custom function at all (Dex has
+# no CRD a Composition could render for "register a client" - see xrds/dex.yaml's own header).
+#
+# function-auto-ready IS included (unlike rolloutwatch/composition.yaml): both server mode's
+# Deployment and attach mode's Secret are meant to be observed as part of this XR's own
+# Ready condition (fn.py sets the Secret's `ready` field explicitly, since a plain Secret has
+# no status.conditions for auto-ready to find on its own - see fn.py's own comment there).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: dexes.catalog.idp.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.idp.io/v1alpha1
+    kind: Dex
+  mode: Pipeline
+  pipeline:
+    - step: render-dex-resources
+      functionRef:
+        name: function-dex
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready

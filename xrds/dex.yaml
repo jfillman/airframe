@@ -1,0 +1,121 @@
+# Attached-tier Component XRD: Dex (SP-4, M2). A `components:` entry (`type: dex`) in an
+# environment's values.yaml, rendered by airframe-application's generic
+# templates/attached/components.yaml, same convention as redis/postgresql/rabbitmq/mongodb.
+#
+# Two modes, because the OIDC issuer is SHARED (like RabbitMQ's broker, unlike PostgreSQL/Redis/
+# MongoDB, which are dedicated per app-env) - flight-api and baggage-api validate tokens issued
+# by the same server, so they must trust the same issuer:
+#
+#   server  one Dex deployment (ghcr.io/dexidp/dex), sqlite storage on a small PVC, the
+#           client_credentials grant enabled server-wide (server/config.yaml's own
+#           oauth2.grantTypes). Lives in an InfraService's gitops repo (skyport-auth), the
+#           same shape RabbitMQ's broker mode uses.
+#   attach  a confidential OAuth2 client registered on an existing shared Dex server, for
+#           machine-to-machine auth (RFC 6749 client_credentials - no browser, no redirect,
+#           no interactive login). Real registration happens through Dex's own gRPC Admin
+#           API (api/v2, CreateClient) - not by hand-writing Dex's internal storage CRDs
+#           (verified against dexidp/dex's real source: the object name is an internal
+#           FNV-64 hash of the client ID with a nonstated encoding, not a stable interface -
+#           see hangar's project_sp4_oauth_dex_investigation.md memory) and not by patching a
+#           shared staticClients ConfigMap (an aggregation problem: independent attach XRs
+#           would fight over one object). function-dex-client (compositions/dex's pipeline)
+#           makes the live CreateClient call and writes the result to
+#           `<xr-name>-oauth-credentials`.
+#
+# Needs ghcr.io/jfillman/function-dex-client installed as a Crossplane Function on the cluster.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: dexes.catalog.idp.io
+  annotations:
+    hangar.io/agent-summary: "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach)."
+spec:
+  group: catalog.idp.io
+  names:
+    kind: Dex
+    plural: dexes
+    singular: dex
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - environmentRef
+                - mode
+              properties:
+                environmentRef:
+                  type: object
+                  description: >-
+                    Names the owning ApplicationEnvironment (app + cluster + env identity).
+                    Labeling/audit only, not a live lookup. Auto-stamped by
+                    airframe-application's components.yaml renderer.
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      minLength: 1
+                      description: The ApplicationEnvironment XR's own name.
+                mode:
+                  type: string
+                  description: >-
+                    `server` runs the shared Dex OIDC provider; `attach` registers an app as a
+                    machine-to-machine OAuth2 client on an existing one. See the header.
+                  enum: [server, attach]
+                # ---- server mode ----
+                size:
+                  type: string
+                  description: (server) CPU/memory for the Dex pod.
+                  enum: [small, medium, large]
+                  default: small
+                storageSize:
+                  type: string
+                  description: (server) Size of the sqlite storage volume (a Kubernetes quantity).
+                  pattern: '^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$'
+                  default: 1Gi
+                allowedNamespaces:
+                  type: array
+                  description: >-
+                    (server) Namespaces whose apps may reach the token/JWKS HTTP endpoint
+                    (5556). The gRPC Admin port (5557) is separately restricted to
+                    crossplane-system only (only function-dex calls it) regardless of this
+                    list.
+                  items:
+                    type: string
+                    description: A namespace name, e.g. app-flight-api-dev.
+                # ---- attach mode ----
+                serverRef:
+                  type: object
+                  description: (attach) The Dex server XR's Deployment/Service - its name and namespace.
+                  required: [name, namespace]
+                  properties:
+                    name:
+                      type: string
+                      description: The server Dex XR's own name (mode server).
+                    namespace:
+                      type: string
+                      description: The namespace the server XR was created in - not necessarily this app's own namespace, since the server is shared.
+                clientId:
+                  type: string
+                  description: >-
+                    (attach) The OAuth2 client_id to register. Defaults to this XR's own name
+                    if unset (set explicitly only if two attach XRs would otherwise collide).
+                  pattern: '^[a-z][a-z0-9-]{0,62}$'
+                scopes:
+                  type: array
+                  description: >-
+                    (attach) Informational only today - Dex's client_credentials grant does not
+                    scope-gate per client; recorded here so a future policy layer has it.
+                  items:
+                    type: string
+              x-kubernetes-validations:
+                - rule: "self.mode != 'attach' || has(self.serverRef)"
+                  message: "serverRef is required when mode == attach"
+          required: ["spec"]

@@ -48,7 +48,7 @@ def main():
 
     # Q1: What component types exist, and what does each do?
     components = ask("components")
-    checks.append(("Q1 component list", set(components) == {"redis", "postgresql", "rabbitmq", "mongodb"}))
+    checks.append(("Q1 component list", set(components) == {"redis", "postgresql", "rabbitmq", "mongodb", "dex"}))
 
     # Q2: How do I read a Redis component's password without guessing a Secret name?
     redis_password = ask("output", "redis", "password")
@@ -85,7 +85,7 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 14 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 15 and all(xrds.values())))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

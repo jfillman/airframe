@@ -163,7 +163,16 @@ def build_server_resources(xr_name, xr_namespace, spec, labels):
                 "spec": {
                     "containers": [{
                         "name": "dex",
-                        "image": "ghcr.io/dexidp/dex:v2.43.1",
+                        # v2.43.1 (and every stable release through v2.45.1, the latest as of
+                        # this writing) predates the client_credentials grant entirely -
+                        # confirmed live (a real token request 400'd with
+                        # "unsupported_grant_type") and by checking v2.45.1's own tagged
+                        # server.go source, which has none of this. The feature exists only on
+                        # Dex's unreleased master branch. Real, known tradeoff, not an
+                        # oversight: :master is a floating tag with no version stability - it
+                        # can change or break without notice. Accepted for kiac-dev (a dev
+                        # cluster); revisit once a stable Dex release ships this grant.
+                        "image": "ghcr.io/dexidp/dex:master",
                         "args": ["dex", "serve", "/etc/dex/config.yaml"],
                         "ports": [
                             {"name": "http", "containerPort": HTTP_PORT},

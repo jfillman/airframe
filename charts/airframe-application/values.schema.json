@@ -1436,15 +1436,13 @@
       "additionalProperties": {
         "type": "string"
       },
-      "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet (oauth-server, database, queue are placeholders).",
+      "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet.",
       "default": {
         "redis": "Redis",
         "postgresql": "PostgreSQL",
         "rabbitmq": "RabbitMQ",
-        "oauth-server": "OAuthServer",
-        "database": "Database",
-        "queue": "Queue",
-        "mongodb": "MongoDB"
+        "mongodb": "MongoDB",
+        "dex": "Dex"
       }
     },
     "extraManifests": {

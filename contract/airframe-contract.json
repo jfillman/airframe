@@ -43,15 +43,13 @@
       },
       "componentKinds": {
         "default": {
-          "database": "Database",
+          "dex": "Dex",
           "mongodb": "MongoDB",
-          "oauth-server": "OAuthServer",
           "postgresql": "PostgreSQL",
-          "queue": "Queue",
           "rabbitmq": "RabbitMQ",
           "redis": "Redis"
         },
-        "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet (oauth-server, database, queue are placeholders).",
+        "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet.",
         "type": "object"
       },
       "components": {
@@ -223,6 +221,79 @@
     "name": "airframe-application"
   },
   "components": {
+    "dex": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "(attach mode) function-dex-client confirmed the client is registered on the server (CreateClient succeeded or already_exists).",
+              "reason": "DexAttachReady",
+              "status": "True"
+            },
+            {
+              "meaning": "(attach mode) the live CreateClient call to the Dex server's gRPC Admin API failed (server unreachable, or a real error).",
+              "reason": "DexAttachFailed",
+              "status": "False"
+            },
+            {
+              "meaning": "(server mode) the Dex Deployment has at least one available replica.",
+              "reason": "DexServerReady",
+              "status": "True"
+            },
+            {
+              "meaning": "(server mode) the Dex Deployment has not reported an available replica yet.",
+              "reason": "DexServerProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "ComponentReady"
+        }
+      ],
+      "kind": "Dex",
+      "outputs": {
+        "clientId": {
+          "key": "client-id",
+          "kind": "secretKeyRef",
+          "secret": "{name}-oauth-credentials"
+        },
+        "clientSecret": {
+          "key": "client-secret",
+          "kind": "secretKeyRef",
+          "secret": "{name}-oauth-credentials"
+        },
+        "issuer": {
+          "key": "issuer",
+          "kind": "secretKeyRef",
+          "secret": "{name}-oauth-credentials"
+        },
+        "jwksUrl": {
+          "key": "jwks-url",
+          "kind": "secretKeyRef",
+          "secret": "{name}-oauth-credentials"
+        },
+        "tokenUrl": {
+          "key": "token-url",
+          "kind": "secretKeyRef",
+          "secret": "{name}-oauth-credentials"
+        }
+      },
+      "owner": "human",
+      "summary": "attach mode: a confidential OAuth2 client on an existing shared Dex server, for machine-to-machine client_credentials auth. server mode (no outputs below apply): the shared OIDC server itself.",
+      "verify": [
+        {
+          "check": "The Dex XR's ComponentReady condition has reason DexAttachReady (attach) or DexServerReady (server).",
+          "id": "xr-ready"
+        },
+        {
+          "check": "Secret {name}-oauth-credentials exists in the app namespace with non-empty client-id and client-secret keys.",
+          "id": "secret-exists"
+        },
+        {
+          "check": "POST {tokenUrl} with grant_type=client_credentials and the client-id/client-secret from the Secret returns a real access_token whose signature validates against {jwksUrl}.",
+          "id": "token-issuance"
+        }
+      ]
+    },
     "mongodb": {
       "conditions": [
         {
@@ -524,6 +595,15 @@
       "file": "applicationenvironment.yaml",
       "group": "catalog.idp.io",
       "plural": "applicationenvironments"
+    },
+    "Dex": {
+      "agentSummary": "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach).",
+      "apiVersion": "catalog.idp.io/v1alpha1",
+      "fieldsDescribed": 12,
+      "fieldsTotal": 14,
+      "file": "dex.yaml",
+      "group": "catalog.idp.io",
+      "plural": "dexes"
     },
     "GoApplication": {
       "agentSummary": "Onboard a new Go service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",

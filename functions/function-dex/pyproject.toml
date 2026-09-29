@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "function"
+description = 'Crossplane composition function for the Dex OIDC component (SP-4)'
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = "Apache-2.0"
+keywords = []
+authors = [{ name = "Hangar", email = "noreply@example.com" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+  "crossplane-function-sdk-python==0.15.1",
+  "click==8.4.2",
+  "grpcio>=1.73.1",
+  "protobuf>=5",
+]
+
+dynamic = ["version"]
+
+[project.scripts]
+function = "function.main:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["function"]
+
+[tool.hatch.version]
+path = "function/__version__.py"
+validate-bump = false
+
+[tool.hatch.envs.default]
+type = "virtual"
+path = ".venv-default"
+
+[tool.hatch.envs.default.scripts]
+development = "python function/main.py --insecure --debug"
+
+[tool.ruff]
+target-version = "py311"
+exclude = ["function/dex_api*"]

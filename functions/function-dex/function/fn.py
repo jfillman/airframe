@@ -177,12 +177,18 @@ def build_server_resources(xr_name, xr_namespace, spec, labels):
                             "requests": {"cpu": sizing["cpu_req"], "memory": sizing["mem_req"]},
                             "limits": {"cpu": sizing["cpu_lim"], "memory": sizing["mem_lim"]},
                         },
+                        # /dex/healthz (issuer-path-prefixed, verified live against a real
+                        # pod - server.go registers /healthz on the same router as every
+                        # issuer-prefixed route, not at bare root; there's no separate
+                        # /ready or /live variant on this port, only cmd/dex/serve.go's
+                        # own "telemetry" listener has those, on a different port this
+                        # Deployment doesn't expose).
                         "readinessProbe": {
-                            "httpGet": {"path": "/dex/healthz/ready", "port": HTTP_PORT},
+                            "httpGet": {"path": "/dex/healthz", "port": HTTP_PORT},
                             "initialDelaySeconds": 5,
                         },
                         "livenessProbe": {
-                            "httpGet": {"path": "/dex/healthz/live", "port": HTTP_PORT},
+                            "httpGet": {"path": "/dex/healthz", "port": HTTP_PORT},
                             "initialDelaySeconds": 10,
                         },
                     }],

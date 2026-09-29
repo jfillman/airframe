@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+"""AF-7a: replay an executable walkthrough (docs/walkthroughs/*.yaml) against the real clusters.
+
+Each step's `verify` is a real, idempotent shell command - exit 0 means that step's claim (an XR
+is Synced/Ready, a pod is Running, an endpoint answers as documented) still holds right now. This
+does not re-run one-time creation actions (create the app, merge a PR); it checks their lasting
+effect, which is what makes it safe to run repeatedly against a live app that already exists.
+
+    tools/walkthrough-runner FILE [--format text|json]
+    tools/walkthrough-runner FILE --render OUT.md
+
+Exit 0 = every step passed ("replays green"), 1 = at least one step failed.
+"""
+import argparse
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import yaml
+
+
+def load(path):
+    doc = yaml.safe_load(Path(path).read_text())
+    if not isinstance(doc, dict) or not isinstance(doc.get("steps"), list):
+        raise ValueError(f"{path}: expected a mapping with a 'steps' list")
+    return doc
+
+
+def run_step(step):
+    verify = step.get("verify")
+    if not isinstance(verify, str) or not verify.strip():
+        return False, "", "no 'verify' command"
+    r = subprocess.run(["bash", "-c", verify], capture_output=True, text=True, timeout=120)
+    return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
+
+
+def render_markdown(doc):
+    lines = [f"# {doc.get('title', 'Walkthrough')}", ""]
+    if doc.get("sourceDoc"):
+        lines += [f"Converted from [`{doc['sourceDoc']}`]({doc['sourceDoc']}).", ""]
+    for step in doc["steps"]:
+        lines.append(f"## {step.get('title', step.get('id', '?'))}")
+        lines.append("")
+        if step.get("command"):
+            lines += ["```bash", step["command"].strip(), "```", ""]
+        if step.get("expected"):
+            lines += [f"**Expected:** {step['expected']}", ""]
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("file")
+    ap.add_argument("--format", choices=["text", "json"], default="text")
+    ap.add_argument("--render")
+    a = ap.parse_args()
+
+    doc = load(a.file)
+
+    if a.render:
+        Path(a.render).write_text(render_markdown(doc))
+        print(f"rendered {len(doc['steps'])} step(s) to {a.render}")
+        return 0
+
+    results = []
+    for step in doc["steps"]:
+        ok, out, err = run_step(step)
+        results.append({"id": step.get("id"), "title": step.get("title"), "ok": ok,
+                        "stdout": out, "stderr": err})
+
+    if a.format == "json":
+        print(json.dumps({"file": a.file, "title": doc.get("title"), "steps": results}, indent=2))
+    else:
+        for r in results:
+            status = "PASS" if r["ok"] else "FAIL"
+            print(f"{status} {r['id']}: {r['title']}")
+            if not r["ok"]:
+                if r["stdout"]:
+                    print(f"  stdout: {r['stdout'][:300]}")
+                if r["stderr"]:
+                    print(f"  stderr: {r['stderr'][:300]}")
+        passed = sum(1 for r in results if r["ok"])
+        print(f"\n{passed}/{len(results)} steps passed" + (" - replays green" if passed == len(results) else ""))
+
+    return 0 if all(r["ok"] for r in results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

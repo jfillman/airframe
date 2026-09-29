@@ -1,0 +1,109 @@
+title: "Airframe quickstart part 1: boarding-api"
+app: boarding-api
+sourceDoc: ../user/quickstart.md
+steps:
+  - id: "02-create-app"
+    title: "The app exists as a synced, ready NodeJSApplication XR"
+    command: |
+      kubectl --context kiac-dev get nodejsapplication boarding-api -n app-boarding-api-cicd
+    expected: "SYNCED=True READY=True, and the DevClusterReady/CicdOnboarded custom conditions are both True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context kiac-dev get nodejsapplication boarding-api -n app-boarding-api-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      echo "$c"
+      grep -q "DevClusterReady=True" <<<"$c"
+      grep -q "CicdOnboarded=True" <<<"$c"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+
+  - id: "03-onboarding-pr-merged"
+    title: "The pipeline onboarding PR was merged (.tekton/ exists in the source repo)"
+    command: |
+      gh api repos/jfillman/boarding-api/contents/.tekton --jq '.[].name'
+    expected: "flow-ci.yaml, flow-pr-build.yaml and onboarding-resync.yaml are all present"
+    verify: |
+      set -euo pipefail
+      files="$(gh api repos/jfillman/boarding-api/contents/.tekton --jq '.[].name')"
+      grep -q "flow-ci.yaml" <<<"$files"
+      grep -q "onboarding-resync.yaml" <<<"$files"
+
+  - id: "04-real-code-not-scaffold"
+    title: "The real app code replaced the hello-world scaffold"
+    command: |
+      gh api repos/jfillman/boarding-api/contents --jq '.[].name'
+    expected: "app.js, store.js, reservations.js and public/ are present (the scaffold's index.js alone would mean this step never happened)"
+    verify: |
+      set -euo pipefail
+      files="$(gh api repos/jfillman/boarding-api/contents --jq '.[].name')"
+      grep -q "^app.js$" <<<"$files"
+      grep -q "^store.js$" <<<"$files"
+      grep -q "^reservations.js$" <<<"$files"
+
+  - id: "06-ground-running"
+    title: "Ground: boarding-api is Running on the dev cluster and answers"
+    command: |
+      kubectl --context kiac-dev get pods -n app-boarding-api-dev
+      kubectl --context kiac-dev port-forward -n app-boarding-api-dev svc/boarding-api 18080:8080 &
+      curl -s http://localhost:18080/healthz
+    expected: "at least one boarding-api pod Running; /healthz returns 200"
+    verify: |
+      set -euo pipefail
+      running="$(kubectl --context kiac-dev get pods -n app-boarding-api-dev -l app.kubernetes.io/name=boarding-api \
+        --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+      [ "$running" -ge 1 ]
+      kubectl --context kiac-dev port-forward -n app-boarding-api-dev svc/boarding-api 18080:8080 >/tmp/wt-boarding-dev-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18080/healthz)"
+      [ "$code" = "200" ]
+
+  - id: "07-flight-running"
+    title: "Flight: boarding-api's staging environment is Synced/Ready with a real deployed Rollout"
+    command: |
+      kubectl --context kiac-dev get applicationenvironment boarding-api-kind-prod-staging -n app-boarding-api-cicd
+      kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging
+    expected: "the ApplicationEnvironment XR is Synced/Ready; the Rollout has availableReplicas == replicas (all pods up)"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context kiac-dev get applicationenvironment boarding-api-kind-prod-staging -n app-boarding-api-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+      # WorkloadDeployed is a bootstrap-time-only condition (see compositions/applicationenvironment/
+      # templates/status/status.yaml) - it never auto-clears, so it is deliberately NOT checked here.
+      # The real, live signal is the Rollout's own status.
+      desired="$(kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.spec.replicas}')"
+      available="$(kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.status.availableReplicas}')"
+      [ "$available" = "$desired" ]
+
+  - id: "08-redis-component"
+    title: "The Redis component is attached and boarding-api reads through it"
+    command: |
+      kubectl --context kiac-dev get secret cache -n app-boarding-api-dev
+      curl -s http://localhost:18080/api/whoami
+    expected: "the `cache` Secret exists with a redis-password key; /api/whoami reports \"cache\":\"redis\""
+    verify: |
+      set -euo pipefail
+      len="$(kubectl --context kiac-dev get secret cache -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d | wc -c)"
+      [ "$len" -gt 0 ]
+      kubectl --context kiac-dev port-forward -n app-boarding-api-dev svc/boarding-api 18081:8080 >/tmp/wt-boarding-redis-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      curl -s http://localhost:18081/api/whoami | grep -q '"cache":"redis"'
+
+  - id: "09-canary-mechanism-present"
+    title: "The canary mechanism (Argo Rollouts, canary strategy) is in place"
+    command: |
+      kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.spec.strategy}'
+    expected: >-
+      the Rollout's strategy is `canary` with real steps (setWeight/pause/setWeight). This only
+      checks the mechanism exists - the doc itself says no canary has actually been walked yet
+      with this app, and this step does not claim otherwise.
+    verify: |
+      set -euo pipefail
+      strategy="$(kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.spec.strategy}')"
+      grep -q '"canary"' <<<"$strategy"
+      grep -q "setWeight" <<<"$strategy"

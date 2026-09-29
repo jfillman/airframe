@@ -1,0 +1,47 @@
+title: "Airframe quickstart part 3: skyport-broker (shared RabbitMQ)"
+app: skyport-broker
+sourceDoc: ../user/quickstart-broker.md
+steps:
+  - id: "broker-provisioned"
+    title: "skyport-broker is a synced, ready InfraService with a real RabbitMQ cluster behind it"
+    command: |
+      kubectl --context kiac-dev get infraservice skyport-broker -n app-skyport-broker-cicd
+      kubectl --context kiac-dev get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
+    expected: "the InfraService XR is Synced/Ready; the RabbitmqCluster reports AllReplicasReady=True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context kiac-dev get infraservice skyport-broker -n app-skyport-broker-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+      ready="$(kubectl --context kiac-dev get rabbitmqcluster skyport-broker -n app-skyport-broker-dev \
+        -o jsonpath='{.status.conditions[?(@.type=="AllReplicasReady")].status}')"
+      [ "$ready" = "True" ]
+
+  - id: "publisher-attached"
+    title: "flight-api is attached to the broker as a publisher (its own mq credentials exist)"
+    command: |
+      kubectl --context kiac-dev get secret flight-mq-user-credentials -n app-flight-api-dev
+    expected: "a flight-mq-user-credentials Secret exists with username/password keys"
+    verify: |
+      set -euo pipefail
+      keys="$(kubectl --context kiac-dev get secret flight-mq-user-credentials -n app-flight-api-dev -o jsonpath='{.data}' | python3 -c 'import json,sys; print(" ".join(json.load(sys.stdin)))')"
+      grep -q "username" <<<"$keys"
+      grep -q "password" <<<"$keys"
+
+  - id: "consumer-connected-and-consuming"
+    title: "boarding-api is attached as a consumer and is genuinely receiving events over the broker"
+    command: |
+      curl -s http://localhost:18080/api/whoami
+    expected: "\"events\":\"connected\" and eventsReceived > 0 - proof events actually flow flight-api -> broker -> boarding-api, not just that both sides have credentials"
+    verify: |
+      set -euo pipefail
+      kubectl --context kiac-dev port-forward -n app-boarding-api-dev svc/boarding-api 18082:8080 >/tmp/wt-broker-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      body="$(curl -s http://localhost:18082/api/whoami)"
+      echo "$body"
+      grep -q '"events":"connected"' <<<"$body"
+      received="$(python3 -c "import json,sys; print(json.loads('''$body''').get('eventsReceived', 0))")"
+      [ "$received" -gt 0 ]

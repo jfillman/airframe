@@ -11,6 +11,10 @@ is something to watch.
 > An illustrated version of this guide, with diagrams, is at
 > [Airframe Database Quickstart](html/quickstart-flight-api.html).
 
+> The checkable version - real commands, replayed against the live clusters - is
+> [`../walkthroughs/part2-flight-api.yaml`](../walkthroughs/part2-flight-api.yaml) (run it with
+> `tools/walkthrough-runner`).
+
 Do part 1 first. This guide assumes `boarding-api` is running in its dev environment and
 doesn't repeat the mechanics of creating an app, merging the pipeline PR, or the ground/flight
 split; it links back to the section that explains each.

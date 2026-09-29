@@ -1,0 +1,87 @@
+# TIER 2 MIGRATION TWIN of xrds/mongodb.yaml - identical schema, group only differs
+# (catalog.hangar.io vs catalog.idp.io). See memory project_tier2_domain_rename_plan.md.
+# Coexists with the old-group XRD during migration; delete the old one once every
+# live mongodb XR has adopted onto this group and the chart's per-app-env
+# attachedResourceApiVersion override has been removed (default reverts here).
+# Fourth real Component XRD - Item 7 Sequencing step 5 (service-catalog-design.md), Round
+# 2026-09-17's own correction: `crossplane-contrib/provider-mongodbatlas` only covers MongoDB Atlas
+# (the managed cloud service), nothing native covers a self-hosted mongod. Real exception, same shape
+# as Infisical was: compose the upstream operator's own CRD instead of a from-scratch controller.
+#
+# That upstream project (`mongodb/mongodb-kubernetes-operator`, "MongoDB Community Kubernetes
+# Operator") is itself DEPRECATED as of this build (verified against the real GitHub repo, not
+# memory - archived, redirects to `mongodb/mongodb-kubernetes`, the unified "MongoDB Controllers for
+# Kubernetes" (MCK) project, v1.12.0 at build time). MCK preserves the exact same
+# `mongodbcommunity.mongodb.com/v1 MongoDBCommunity` CRD the original design named - only the
+# operator that reconciles it changed, confirmed against MCK's own community-operator-migration.md
+# ("no functional changes... only a better and unified experience"). This XRD wraps that CRD.
+#
+# DEDICATED mode only, matching Redis and PostgreSQL's own precedent (this catalog's real deviation
+# from Item 7's original Shared-tenant-for-Mongo proposal, the same way PostgreSQL ended up Dedicated
+# instead of the Shared-tenant plan first written down - see xrds/postgresql.yaml's own header). One
+# MongoDBCommunity replica set per app-env, in the app's own namespace.
+#
+# apiextensions.crossplane.io/v2, scope: Namespaced - matches every other XRD in this catalog.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: mongodbs.catalog.hangar.io
+  annotations:
+    hangar.io/agent-summary: "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment."
+spec:
+  group: catalog.hangar.io
+  names:
+    kind: MongoDB
+    plural: mongodbs
+    singular: mongodb
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - environmentRef
+              properties:
+                environmentRef:
+                  type: object
+                  description: >-
+                    Names the owning ApplicationEnvironment XR (app+cluster+env identity). Labeling/
+                    audit only - not a live lookup, same convention as every other Attached-tier XRD
+                    in this catalog. Auto-stamped by airframe-application's own components.yaml
+                    renderer - a developer adding `- type: mongodb` to a `components:` list never
+                    types this by hand.
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: The ApplicationEnvironment XR's own name.
+                      minLength: 1
+                members:
+                  type: integer
+                  description: >-
+                    1 is a single member with no failover. 3 is a real replica set with automatic
+                    failover, for real environments. MongoDB elections need an odd count, same
+                    constraint RabbitMQ's broker mode documents.
+                  enum: [1, 3]
+                  default: 1
+                storageSize:
+                  type: string
+                  description: Size of each member's volume (a Kubernetes quantity, e.g. 5Gi).
+                  pattern: '^[0-9]+(\.[0-9]+)?(Mi|Gi|Ti)$'
+                  default: 5Gi
+                databaseName:
+                  type: string
+                  description: >-
+                    Name of the database AND of the user that owns it (dbOwner role, scoped to this
+                    one database - same "one database, one owning identity" shape PostgreSQL already
+                    uses here). Defaults to the XR's own name with hyphens turned into underscores.
+                    Lowercase letters, digits and underscores only.
+                  pattern: '^[a-z][a-z0-9_]{0,62}$'
+          required: ["spec"]

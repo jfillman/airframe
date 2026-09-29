@@ -1,0 +1,18 @@
+# alpine, not -slim: the Debian 13 base carries 44 unfixed HIGH util-linux/acl CVEs that fail the
+# image-scan gate. pika has no C extensions at all; pymongo (Skyport Phase 3) has an optional one
+# (bson's _cbson) that needs a compiler - musl-alpine has none, confirmed live (`which gcc cc
+# musl-gcc` all empty on this exact base image), so pip silently falls back to pymongo's own
+# pure-Python bson implementation instead of failing the build. Fully functional, just slower BSON
+# encode/decode than the compiled path - fine at this app's traffic scale.
+# pip and setuptools are removed after the install: their vendored copies of msgpack and setuptools
+# carry HIGH CVEs (GHSA-6v7p-g79w-8964, CVE-2025-47273), and nothing needs them at runtime.
+FROM python:3.13-alpine
+WORKDIR /app
+RUN apk upgrade --no-cache
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip uninstall -y setuptools pip \
+ && python -c "import pika; import pymongo"
+COPY . .
+EXPOSE 8080
+CMD ["python", "main.py"]

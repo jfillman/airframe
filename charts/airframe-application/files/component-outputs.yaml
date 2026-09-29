@@ -1,5 +1,26 @@
 # GENERATED FILE - do not hand-edit. Source: xrds/*.meta.yaml (AF-3).
 # Regenerate with: python3 tools/gen_component_outputs.py
+dex:
+  clientId:
+    key: client-id
+    kind: secretKeyRef
+    secret: '{name}-oauth-credentials'
+  clientSecret:
+    key: client-secret
+    kind: secretKeyRef
+    secret: '{name}-oauth-credentials'
+  issuer:
+    key: issuer
+    kind: secretKeyRef
+    secret: '{name}-oauth-credentials'
+  jwksUrl:
+    key: jwks-url
+    kind: secretKeyRef
+    secret: '{name}-oauth-credentials'
+  tokenUrl:
+    key: token-url
+    kind: secretKeyRef
+    secret: '{name}-oauth-credentials'
 mongodb:
   password:
     key: password

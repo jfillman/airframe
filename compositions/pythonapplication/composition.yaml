@@ -584,19 +584,21 @@ spec:
             #
             # Unconditional - not locally gated on $clusterOk. TektonCICD's own internal
             # devcluster gate now owns that decision.
-            # apiVersion is deliberately still catalog.idp.io, NOT catalog.hangar.io - unlike
-            # SecretStore's own xr-requests literal (fixed in airframe#26/#27 only after EVERY app's
-            # SecretStore had already been migrated), no app has migrated TektonCICD yet. Flipping
-            # this literal directly (done in error, then reverted, in airframe#28) makes every parent
-            # XR compose a brand-new hangar-group TektonCICD child with the same name - Crossplane
-            # treats it as a different resource (apiVersion is part of its identity), so the real,
-            # already-Ready catalog.idp.io child becomes orphaned while the new one starts from
-            # scratch (Synced: False) - a real fleet-wide regression hit live 2026-09-30 across all 8
-            # real apps within minutes of shipping. Only flip this once TektonCICD itself has a real
-            # per-app migration path (see memory project_tier2_domain_rename_plan.md) - the same
-            # bar SecretStore's own fix cleared before its literal was safe to flip.
+            # apiVersion is STICKY to whatever group this app's child already has (Tier 2 domain rename, memory
+            # project_tier2_domain_rename_plan.md): an existing child keeps the apiVersion it was created with,
+            # a brand-new one (nothing observed yet) is created under catalog.hangar.io.
+            #
+            # Why not a plain literal: Crossplane treats apiVersion as part of a composed resource's identity, so
+            # flipping a literal orphans the existing child and spawns an unready duplicate that fights it over the
+            # same external files (hit live 2026-09-30 across all 8 apps, airframe#30). Sticky means deploying this
+            # changes nothing for an existing app. To migrate one app, delete its TektonCICD child: its
+            # RepositoryFile children have no Delete policy (real files survive), and this parent re-renders it
+            # under the new default, which adopts the same files. Same observed-pinning pattern as src-repo.yaml's
+            # scaffoldFile.
+            <<- $obsTektonCicd := index (.observed.resources | default dict) "tektoncicd" | default dict >>
+            <<- $tektonCicdApiVersion := dig "resource" "apiVersion" "catalog.hangar.io/v1alpha1" $obsTektonCicd >>
             <<- $platformOwner := "jfillman" >>
-            apiVersion: catalog.idp.io/v1alpha1
+            apiVersion: <<$tektonCicdApiVersion>>
             kind: TektonCICD
             metadata:
               name: <<$xrName>>-tektoncicd

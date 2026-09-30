@@ -173,7 +173,7 @@ slos: []
 
 # The apiVersion group used to look up component/SLO XRs by componentKinds. Update here, not
 # per-template, if the group ever changes.
-attachedResourceApiVersion: catalog.idp.io/v1alpha1
+attachedResourceApiVersion: catalog.hangar.io/v1alpha1
 
 # Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real
 # XRD yet.

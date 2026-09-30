@@ -22,7 +22,7 @@
         "type": "string"
       },
       "attachedResourceApiVersion": {
-        "default": "catalog.idp.io/v1alpha1",
+        "default": "catalog.hangar.io/v1alpha1",
         "description": "The apiVersion group used to look up component/SLO XRs by componentKinds. Update here, not per-template, if the group ever changes.",
         "type": "string"
       },
@@ -626,8 +626,8 @@
     "MongoDB": {
       "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",
       "apiVersion": "catalog.idp.io/v1alpha1",
-      "fieldsDescribed": 5,
-      "fieldsTotal": 6,
+      "fieldsDescribed": 6,
+      "fieldsTotal": 7,
       "file": "mongodb.yaml",
       "group": "catalog.idp.io",
       "plural": "mongodbs"

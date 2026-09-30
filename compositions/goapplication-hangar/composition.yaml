@@ -90,7 +90,10 @@ spec:
                 <<setResourceNameAnnotation "src-repo-cicd-yaml">>
                 crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:cicd.yaml:" $xrName) (index (.observed.resources | default dict) "src-repo-cicd-yaml" | default dict)>>"
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              # No "Delete": this file is real developer/pipeline config after scaffolding (cicd.yaml) or a
+              # human-edited README; deleting the XR must never delete it from GitHub. A Tier 2 prune once
+              # destroyed cicd.yaml in 5 app repos through this policy.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
@@ -157,7 +160,10 @@ spec:
               annotations:
                 <<setResourceNameAnnotation "gitops-repo-readme">>
             spec:
-              managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+              # No "Delete": this file is real developer/pipeline config after scaffolding (cicd.yaml) or a
+              # human-edited README; deleting the XR must never delete it from GitHub. A Tier 2 prune once
+              # destroyed cicd.yaml in 5 app repos through this policy.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default

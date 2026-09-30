@@ -50,7 +50,10 @@ metadata:
   annotations:
     <<setResourceNameAnnotation "gitops-repo-readme">>
 spec:
-  managementPolicies: ["Create", "Observe", "LateInitialize", "Delete"]
+  # No "Delete": this file is real developer/pipeline config after scaffolding (cicd.yaml) or a
+  # human-edited README; deleting the XR must never delete it from GitHub. A Tier 2 prune once
+  # destroyed cicd.yaml in 5 app repos through this policy.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

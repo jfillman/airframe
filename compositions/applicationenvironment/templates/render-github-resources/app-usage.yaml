@@ -77,7 +77,11 @@ spec:
       name: <<$appName>>
       namespace: <<$xrNamespace>>
   by:
-    apiVersion: catalog.idp.io/v1alpha1
+    # The composite's OWN apiVersion, not a literal: this template is shared by the catalog.idp.io
+    # composition and its catalog.hangar.io twin (Tier 2 domain rename, memory
+    # project_tier2_domain_rename_plan.md). A hardcoded group here made the twin's Usage point `by` at an
+    # ApplicationEnvironment kind that does not exist under the twin's group.
+    apiVersion: <<.observed.composite.resource.apiVersion>>
     kind: ApplicationEnvironment
     resourceRef:
       name: <<$xrName>>

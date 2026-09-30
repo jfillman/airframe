@@ -27,6 +27,14 @@
 # of NodeJSApplication/SpringBootApplication actually exists by that name (see that
 # file's header for why the hardcoded version broke SpringBootApplication envs).
 #
+# apiVersion is $appGroup (also from 00-app-kind-gate.yaml), not a hardcoded
+# catalog.idp.io literal - Tier 2 domain rename (memory
+# project_tier2_domain_rename_plan.md): apps migrate to catalog.hangar.io one at a
+# time, so this Usage must point at whichever group the real app currently lives
+# under, or deletion protection silently stops matching the moment that app
+# migrates (same failure class 00-app-kind-gate.yaml's header documents for the
+# hardcoded-kind version of this bug).
+#
 # $xrNamespace comes from this XR's own metadata (Crossplane v2, scope: Namespaced) -
 # NodeJSApplication and ApplicationEnvironment are always onboarded into the same
 # namespace by this catalog's convention (see both XRDs' own headers), not otherwise
@@ -63,7 +71,7 @@ metadata:
     <<setResourceNameAnnotation "app-usage">>
 spec:
   of:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: <<printf "%s/v1alpha1" $appGroup>>
     kind: <<$appKind>>
     resourceRef:
       name: <<$appName>>

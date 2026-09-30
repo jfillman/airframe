@@ -629,7 +629,7 @@ spec:
             # setting, not a per-app field, same reasoning xrds/nodejsapplication.yaml's own
             # header gives for not exposing owner as a spec field).
             <<- $platformOwner := "jfillman" >>
-            apiVersion: catalog.idp.io/v1alpha1
+            apiVersion: catalog.hangar.io/v1alpha1
             kind: TektonCICD
             metadata:
               name: <<$xrName>>-tektoncicd

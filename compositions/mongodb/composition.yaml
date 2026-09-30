@@ -73,13 +73,15 @@ spec:
             # operator creates and owns this Secret itself once it reads the input password Secret
             # (templates/password.yaml); nothing here renders it directly.
             #
-            # mongod image pinned to quay.io/mongodb/mongodb-community-server:8.0.32-ubi8 - verified against the
-            # real Quay registry at build time (multi-arch: amd64 + arm64), not the chart's own example version.
+            # mongod image defaults to quay.io/mongodb/mongodb-community-server:8.0.32-ubi8 (multi-arch: amd64 +
+            # arm64, verified against the real Quay registry), overridable per XR via spec.mongoVersion - kind-prod
+            # pins 7.0.x because MongoDB 8.0 crashes on Linux kernel 6.19..7.0.13 (SERVER-121912).
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $members := $spec.members | default 1 >>
             <<- $storage := $spec.storageSize | default "5Gi" >>
+            <<- $version := $spec.mongoVersion | default "8.0.32" >>
             <<- $db := $spec.databaseName | default (replace "-" "_" $xrName) >>
             <<- $hangarLabels := dict >>
             <<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
@@ -101,7 +103,7 @@ spec:
             spec:
               members: <<$members | int>>
               type: ReplicaSet
-              version: "8.0.32"
+              version: <<$version | quote>>
               security:
                 authentication:
                   modes: ["SCRAM"]

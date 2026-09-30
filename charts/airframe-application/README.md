@@ -87,11 +87,9 @@ few things as genuinely open. This is where those got resolved, concretely:
   built and live-verified on `kind-dev` this same day - the cluster's real
   ingress controller is Contour, namespace `projectcontour`, not the
   `ingress-nginx` guess this defaulted to before. Updated to match.
-- **`attachedResourceApiVersion: catalog.idp.io/v1alpha1` is a placeholder.**
-  None of the `components:`/`slos:` XRDs exist yet (see `Airframe`'s
-  top-level README) - this is this chart's own guess at the eventual API
-  group, one value to update, not a per-template hunt, once the XRDs are
-  actually authored.
+- **`attachedResourceApiVersion` defaults to `catalog.hangar.io/v1alpha1`.** The catalog's
+  API group was renamed from `catalog.idp.io` (Tier 2 domain rename); one value, not a
+  per-template hunt, if the group ever changes again.
 - **`rollout.strategy: canary` renders a single inert `setWeight: 100` step**
   when `rollout.steps` is empty. §3 "Still open" item 3 explicitly says the
   platform's default canary step sequence "isn't designed here" - this chart

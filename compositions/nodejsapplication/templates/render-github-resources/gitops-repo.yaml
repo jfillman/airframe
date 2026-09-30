@@ -7,6 +7,10 @@
 # header: a cluster rebuild's fresh Repository MR has no external-name, so
 # provider-github tries to Create a repo that already exists on GitHub and 422s. Set to
 # the deterministic gitops-<app> name up front so it Observes/adopts instead.
+#
+# managementPolicies (no "Delete") - same Tier 2 domain-rename finding as src-repo.yaml's
+# own header: no policy at all here defaulted to "*", so deleting this XR would delete
+# the real GitOps repo. Already live-patched on kiac-dev ahead of this landing.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $spec := .observed.composite.resource.spec >>
 <<- $visibility := $spec.visibility >>
@@ -18,6 +22,7 @@ metadata:
     <<setResourceNameAnnotation "gitops-repo">>
     crossplane.io/external-name: <<printf "gitops-%s" $xrName>>
 spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

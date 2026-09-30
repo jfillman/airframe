@@ -10,7 +10,13 @@ metadata:
   annotations:
     <<setResourceNameAnnotation "gitops-repo">>
     crossplane.io/external-name: <<printf "gitops-%s" $xrName>>
+# managementPolicies (no "Delete") - Tier 2 domain-rename finding: this Repository had no
+# managementPolicies at all (full "*" default), so deleting this XR would delete the real
+# GitHub repo, not just a Kubernetes object. See nodejsapplication/templates/render-github-
+# resources/src-repo.yaml's own header for the full writeup. Already live-patched on
+# kiac-dev ahead of this landing.
 spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

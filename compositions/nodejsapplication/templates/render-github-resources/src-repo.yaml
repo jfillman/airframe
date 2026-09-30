@@ -27,6 +27,14 @@
 # every Repository below - RepositoryFile requires the target branch to already exist,
 # which an empty repo doesn't have.
 #
+# managementPolicies: ["Observe", "Create", "Update", "LateInitialize"] (no "Delete") on
+# the Repository itself - Tier 2 domain rename (memory project_tier2_domain_rename_plan.md)
+# found this resource had no managementPolicies at all (full "*" default), meaning the
+# existing delete-old-XR/create-new-XR group-migration recipe used everywhere else in this
+# catalog would delete the real GitHub repo - source code and git history, not just a
+# Kubernetes object. Already live-patched on kiac-dev's 14 real Repository resources ahead
+# of this fix landing; this makes it durable so a future recreate can't regress it.
+#
 # crossplane.io/external-name on the Repository below (this app's GitHub repo name,
 # known deterministically at render time - same $xrName the forProvider.name uses) -
 # added after a real live bug: a cluster rebuild (kind-dev's Crossplane state is
@@ -125,6 +133,7 @@ metadata:
     <<setResourceNameAnnotation "src-repo">>
     crossplane.io/external-name: <<$xrName>>
 spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

@@ -1,0 +1,137 @@
+# First Bootstrap-tier XRD in the catalog - idp/docs/service-catalog-design.md Item 1/2
+# and the Framework tier table. apiextensions.crossplane.io/v2 (not v1) for real
+# namespaced-XR support, same as slos.catalog.hangar.io.
+#
+# XR's own metadata.name IS the app name (no separate spec.appName) - matches SLO's own
+# $xrName convention and Backstage's eventual "New Service" form taking one name field.
+#
+# Deliberately narrow, per the design doc: src repo + boilerplate + an empty, scaffolded
+# gitops-<app-name> repo + a tenants/<app-name>/app.yaml commit, PLUS (2026-08-15,
+# platform-cicd's control plane now running on kind-dev - see idp/docs/
+# service-catalog-design.md's NodeJSApplication note) a real tenants/<app-name>/
+# identity.yaml commit into gitops-cluster-dev-tenants (the same repo/commit as
+# app.yaml above - redirected here 2026-08-16 from a dedicated
+# platform-cicd-kind-dev-tenants repo, eliminated once live history showed it only ever
+# held throwaway apps), onboarding this app's real CICD pipeline via platform-cicd's own
+# tenant-onboarding ApplicationSet. Still NOT
+# upper-env provisioning (ApplicationEnvironment, a separate XRD). The Composition
+# reports CICD-onboarding progress as a real custom CicdOnboarded condition (not Ready
+# itself, which function-go-templating reserves) - see compositions/nodejsapplication/
+# templates/cicd-onboarding-status/status.yaml.
+#
+# No spec.githubOwner: confirmed live against provider-github's own credential-parsing
+# source that `owner` is a ProviderConfig-wide setting (required alongside app_auth),
+# not a per-Repository field - the Repository managed resource has no owner field of its
+# own. A spec field here would imply per-app control that doesn't actually change where
+# the repo lands, so the Composition writes the platform's real, fixed owner
+# (provider-github-config.yaml's own credential) into tenants/<app-name>/app.yaml
+# instead of taking it as input.
+#
+# spec.devCluster (2026-08-18, real and required): this XRD used to be permanently
+# centralized on a single hardcoded "kind-dev" - correct as long as exactly one dev
+# cluster existed, but the fleet now supports multiple. Required, not defaulted -
+# every onboarding must now say explicitly which dev cluster this app belongs to
+# (an app is pinned to exactly one). Checked live against the cluster registry
+# (gitops-cluster-dev/00-bootstrap/cluster-registry/) via the same ExtraResources
+# matchName lookup pattern ApplicationEnvironment's own gate already uses - must
+# resolve to a ConfigMap with type: dev and cicdReady: "true" (platform-cicd's
+# control plane is what makes a cluster a real dev cluster), or the Composition
+# creates nothing and reports DevClusterReady: False rather than partially
+# succeeding - see compositions/nodejsapplication/templates/render-github-
+# resources/00-devcluster-gate.yaml.
+#
+# Real existing XRs (checkout-api, nodejs-demo-app) were backfilled with
+# devCluster: kind-dev in the same change that made this field required, so
+# ArgoCD's selfHeal re-apply of their already-committed manifests doesn't trip
+# the new required-field validation.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: nodejsapplications.catalog.hangar.io
+  annotations:
+    terasky.backstage.io/add-to-catalog: "true"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
+    hangar.io/agent-summary: "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
+spec:
+  group: catalog.hangar.io
+  names:
+    kind: NodeJSApplication
+    plural: nodejsapplications
+    singular: nodejsapplication
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                devCluster:
+                  type: string
+                  description: >-
+                    Which dev cluster this app is onboarded onto - e.g. "kind-dev".
+                    An app is pinned to exactly one. Checked live against the
+                    cluster registry (gitops-cluster-dev/00-bootstrap/
+                    cluster-registry/) via a Crossplane extra-resources lookup:
+                    must resolve to a ConfigMap with type: dev and
+                    cicdReady: "true", or the Composition creates nothing and
+                    reports DevClusterReady: False rather than partially
+                    succeeding - see this XRD's own header comment.
+                  minLength: 1
+                description:
+                  type: string
+                  description: >-
+                    Free-text description - used as the src repo's GitHub description
+                    and in the generated boilerplate README. Optional; omitted sections
+                    render a generic placeholder instead.
+                  minLength: 1
+                nodeVersion:
+                  type: string
+                  description: >-
+                    Node.js major version - drives the Containerfile's FROM line and the
+                    boilerplate package.json's engines field. One of this platform's
+                    currently-supported LTS lines, not a free-form string, so a typo
+                    fails XR admission instead of producing a Containerfile that pulls a
+                    nonexistent image tag.
+                  enum: ["18", "20", "22"]
+                  default: "20"
+                packageManager:
+                  type: string
+                  description: >-
+                    Which package manager's lockfile/install instructions the
+                    boilerplate README and Containerfile reference.
+                  enum: [npm, pnpm, yarn]
+                  default: npm
+                port:
+                  type: integer
+                  description: >-
+                    Port the boilerplate HTTP server listens on (also exposed as
+                    package.json's start script and Containerfile's EXPOSE). Matches
+                    airframe-application's own rollout.ports default convention.
+                  minimum: 1
+                  maximum: 65535
+                  default: 8080
+                visibility:
+                  type: string
+                  description: GitHub visibility for both the src and gitops repos.
+                  enum: [private, public]
+                  default: private
+                extraGitopsRepos:
+                  type: array
+                  description: >-
+                    Passed straight through to the composed TektonCICD child's own
+                    spec.extraGitopsRepos - see xrds/tektoncicd.yaml for what this
+                    grants and why. Only needed by an app whose deploy target isn't
+                    its own gitops-<appName> repo (e.g. Backstage, hand-deployed to
+                    a shared gitops-cluster-* repo) - most apps never set this.
+                  items:
+                    type: string
+                    description: A full gitops repo URL, e.g. https://github.com/jfillman/gitops-cluster-dev.
+                  default: []
+              required: ["devCluster"]
+          required: ["spec"]

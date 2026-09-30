@@ -16,7 +16,7 @@
 # xrds/infraservice.yaml's own header for why appRepoUrl has to point at a real,
 # existing repo at all even though this service has no source code to build.
 <<- $platformOwner := "jfillman" >>
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: TektonCICD
 metadata:
   name: <<$xrName>>-tektoncicd

@@ -491,7 +491,7 @@ spec:
             # Unconditional - not locally gated on $clusterOk. TektonCICD's own internal
             # devcluster gate now owns that decision.
             <<- $platformOwner := "jfillman" >>
-            apiVersion: catalog.idp.io/v1alpha1
+            apiVersion: catalog.hangar.io/v1alpha1
             kind: TektonCICD
             metadata:
               name: <<$xrName>>-tektoncicd

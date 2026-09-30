@@ -22,10 +22,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: applicationenvironments.catalog.idp.io
+  name: applicationenvironments.catalog.hangar.io
 spec:
   compositeTypeRef:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: catalog.hangar.io/v1alpha1
     kind: ApplicationEnvironment
   mode: Pipeline
   pipeline:
@@ -73,19 +73,6 @@ spec:
             # $appName), and keeps this file's own alphabetical position (globbed before
             # app-usage.yaml, which is all that actually matters) independent of
             # 00-cluster-gate.yaml's.
-            #
-            # Tier 2 domain rename (catalog.idp.io -> catalog.hangar.io, see memory
-            # project_tier2_domain_rename_plan.md): the 5 bootstrap-tier app kinds migrate to
-            # catalog.hangar.io one at a time, not in lockstep with this Composition. A
-            # not-yet-migrated app still lives under catalog.idp.io; an already-migrated one
-            # only exists under catalog.hangar.io. Ten ExtraResources requirements, not five -
-            # every $appName is looked up under BOTH groups so this gate keeps resolving
-            # correctly regardless of where any individual app currently sits in the
-            # migration, without needing to land in the same PR as any app's own group flip.
-            # $appGroup (not just $appKind) is now resolved here and threaded into
-            # app-usage.yaml's own of.apiVersion - hardcoding catalog.idp.io there had the
-            # exact same "silently stops matching the real app" failure mode this file's own
-            # header already documents for the hardcoded-kind version of this bug.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $appName := $spec.appName >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
@@ -100,98 +87,42 @@ spec:
             <<- $goItems := index $goEntry "items" | default list >>
             <<- $infraEntry := index $allExtra "app-kind-infra" | default dict >>
             <<- $infraItems := index $infraEntry "items" | default list >>
-            <<- $nodejsHangarEntry := index $allExtra "app-kind-nodejs-hangar" | default dict >>
-            <<- $nodejsHangarItems := index $nodejsHangarEntry "items" | default list >>
-            <<- $springbootHangarEntry := index $allExtra "app-kind-springboot-hangar" | default dict >>
-            <<- $springbootHangarItems := index $springbootHangarEntry "items" | default list >>
-            <<- $pythonHangarEntry := index $allExtra "app-kind-python-hangar" | default dict >>
-            <<- $pythonHangarItems := index $pythonHangarEntry "items" | default list >>
-            <<- $goHangarEntry := index $allExtra "app-kind-go-hangar" | default dict >>
-            <<- $goHangarItems := index $goHangarEntry "items" | default list >>
-            <<- $infraHangarEntry := index $allExtra "app-kind-infra-hangar" | default dict >>
-            <<- $infraHangarItems := index $infraHangarEntry "items" | default list >>
             <<- $appKind := "NodeJSApplication" >>
-            <<- $appGroup := "catalog.idp.io" >>
             <<- if gt (len $nodejsItems) 0 >>
               <<- $appKind = "NodeJSApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
             <<- else if gt (len $springbootItems) 0 >>
               <<- $appKind = "SpringBootApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
             <<- else if gt (len $pythonItems) 0 >>
               <<- $appKind = "PythonApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
             <<- else if gt (len $goItems) 0 >>
               <<- $appKind = "GoApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
             <<- else if gt (len $infraItems) 0 >>
               <<- $appKind = "InfraService" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $nodejsHangarItems) 0 >>
-              <<- $appKind = "NodeJSApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
-            <<- else if gt (len $springbootHangarItems) 0 >>
-              <<- $appKind = "SpringBootApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
-            <<- else if gt (len $pythonHangarItems) 0 >>
-              <<- $appKind = "PythonApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
-            <<- else if gt (len $goHangarItems) 0 >>
-              <<- $appKind = "GoApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
-            <<- else if gt (len $infraHangarItems) 0 >>
-              <<- $appKind = "InfraService" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:
               app-kind-nodejs:
-                apiVersion: catalog.idp.io/v1alpha1
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: NodeJSApplication
                 namespace: <<$xrNamespace>>
                 matchName: <<$appName>>
               app-kind-springboot:
-                apiVersion: catalog.idp.io/v1alpha1
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: SpringBootApplication
                 namespace: <<$xrNamespace>>
                 matchName: <<$appName>>
               app-kind-python:
-                apiVersion: catalog.idp.io/v1alpha1
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: PythonApplication
                 namespace: <<$xrNamespace>>
                 matchName: <<$appName>>
               app-kind-go:
-                apiVersion: catalog.idp.io/v1alpha1
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: GoApplication
                 namespace: <<$xrNamespace>>
                 matchName: <<$appName>>
               app-kind-infra:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: InfraService
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-nodejs-hangar:
-                apiVersion: catalog.hangar.io/v1alpha1
-                kind: NodeJSApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-springboot-hangar:
-                apiVersion: catalog.hangar.io/v1alpha1
-                kind: SpringBootApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-python-hangar:
-                apiVersion: catalog.hangar.io/v1alpha1
-                kind: PythonApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-go-hangar:
-                apiVersion: catalog.hangar.io/v1alpha1
-                kind: GoApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-infra-hangar:
                 apiVersion: catalog.hangar.io/v1alpha1
                 kind: InfraService
                 namespace: <<$xrNamespace>>
@@ -309,14 +240,6 @@ spec:
             # of NodeJSApplication/SpringBootApplication actually exists by that name (see that
             # file's header for why the hardcoded version broke SpringBootApplication envs).
             #
-            # apiVersion is $appGroup (also from 00-app-kind-gate.yaml), not a hardcoded
-            # catalog.idp.io literal - Tier 2 domain rename (memory
-            # project_tier2_domain_rename_plan.md): apps migrate to catalog.hangar.io one at a
-            # time, so this Usage must point at whichever group the real app currently lives
-            # under, or deletion protection silently stops matching the moment that app
-            # migrates (same failure class 00-app-kind-gate.yaml's header documents for the
-            # hardcoded-kind version of this bug).
-            #
             # $xrNamespace comes from this XR's own metadata (Crossplane v2, scope: Namespaced) -
             # NodeJSApplication and ApplicationEnvironment are always onboarded into the same
             # namespace by this catalog's convention (see both XRDs' own headers), not otherwise
@@ -353,13 +276,13 @@ spec:
                 <<setResourceNameAnnotation "app-usage">>
             spec:
               of:
-                apiVersion: <<printf "%s/v1alpha1" $appGroup>>
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: <<$appKind>>
                 resourceRef:
                   name: <<$appName>>
                   namespace: <<$xrNamespace>>
               by:
-                apiVersion: catalog.idp.io/v1alpha1
+                apiVersion: catalog.hangar.io/v1alpha1
                 kind: ApplicationEnvironment
                 resourceRef:
                   name: <<$xrName>>

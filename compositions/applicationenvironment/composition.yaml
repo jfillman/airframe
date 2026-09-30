@@ -74,32 +74,13 @@ spec:
             # app-usage.yaml, which is all that actually matters) independent of
             # 00-cluster-gate.yaml's.
             #
-            # Tier 2 domain rename (catalog.idp.io -> catalog.hangar.io, see memory
-            # project_tier2_domain_rename_plan.md): the 5 bootstrap-tier app kinds migrate to
-            # catalog.hangar.io one at a time, not in lockstep with this Composition. A
-            # not-yet-migrated app still lives under catalog.idp.io; an already-migrated one
-            # only exists under catalog.hangar.io. Ten ExtraResources requirements, not five -
-            # every $appName is looked up under BOTH groups so this gate keeps resolving
-            # correctly regardless of where any individual app currently sits in the
-            # migration, without needing to land in the same PR as any app's own group flip.
-            # $appGroup (not just $appKind) is now resolved here and threaded into
-            # app-usage.yaml's own of.apiVersion - hardcoding catalog.idp.io there had the
-            # exact same "silently stops matching the real app" failure mode this file's own
-            # header already documents for the hardcoded-kind version of this bug.
+            # Phase C: the old catalog.idp.io group is retired, so only catalog.hangar.io is looked up (five
+            # ExtraResources requirements, one per app kind). $appGroup is still threaded into app-usage.yaml's
+            # of.apiVersion.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $appName := $spec.appName >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $allExtra := .extraResources | default dict >>
-            <<- $nodejsEntry := index $allExtra "app-kind-nodejs" | default dict >>
-            <<- $nodejsItems := index $nodejsEntry "items" | default list >>
-            <<- $springbootEntry := index $allExtra "app-kind-springboot" | default dict >>
-            <<- $springbootItems := index $springbootEntry "items" | default list >>
-            <<- $pythonEntry := index $allExtra "app-kind-python" | default dict >>
-            <<- $pythonItems := index $pythonEntry "items" | default list >>
-            <<- $goEntry := index $allExtra "app-kind-go" | default dict >>
-            <<- $goItems := index $goEntry "items" | default list >>
-            <<- $infraEntry := index $allExtra "app-kind-infra" | default dict >>
-            <<- $infraItems := index $infraEntry "items" | default list >>
             <<- $nodejsHangarEntry := index $allExtra "app-kind-nodejs-hangar" | default dict >>
             <<- $nodejsHangarItems := index $nodejsHangarEntry "items" | default list >>
             <<- $springbootHangarEntry := index $allExtra "app-kind-springboot-hangar" | default dict >>
@@ -111,19 +92,7 @@ spec:
             <<- $infraHangarEntry := index $allExtra "app-kind-infra-hangar" | default dict >>
             <<- $infraHangarItems := index $infraHangarEntry "items" | default list >>
             <<- $appKind := "NodeJSApplication" >>
-            <<- $appGroup := "catalog.idp.io" >>
-            # Hangar-group checked FIRST, old-group as fallback - NOT the order this gate shipped with
-            # originally (old-first). During the migration window an app briefly exists under BOTH
-            # groups simultaneously (the new-group XR is created before the old one is deleted, so the
-            # recipe can adopt real external state cleanly - see memory
-            # project_tier2_domain_rename_plan.md). Old-first created a real deadlock, hit live
-            # migrating skyport-broker's InfraService: this gate kept resolving $appGroup to
-            # catalog.idp.io as long as the old XR still existed, so app-usage.yaml's Usage never
-            # stopped pointing at the old group, which meant the admission webhook
-            # (nousages.protection.crossplane.io) never allowed the old XR to be deleted - the exact
-            # thing that would have let this gate see only the new group. Hangar-first breaks the
-            # cycle: the moment the new-group XR exists, this gate (and therefore the Usage) treats it
-            # as authoritative, immediately unblocking the old XR's deletion.
+            <<- $appGroup := "catalog.hangar.io" >>
             <<- if gt (len $nodejsHangarItems) 0 >>
               <<- $appKind = "NodeJSApplication" >>
               <<- $appGroup = "catalog.hangar.io" >>
@@ -139,50 +108,10 @@ spec:
             <<- else if gt (len $infraHangarItems) 0 >>
               <<- $appKind = "InfraService" >>
               <<- $appGroup = "catalog.hangar.io" >>
-            <<- else if gt (len $nodejsItems) 0 >>
-              <<- $appKind = "NodeJSApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $springbootItems) 0 >>
-              <<- $appKind = "SpringBootApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $pythonItems) 0 >>
-              <<- $appKind = "PythonApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $goItems) 0 >>
-              <<- $appKind = "GoApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $infraItems) 0 >>
-              <<- $appKind = "InfraService" >>
-              <<- $appGroup = "catalog.idp.io" >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:
-              app-kind-nodejs:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: NodeJSApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-springboot:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: SpringBootApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-python:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: PythonApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-go:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: GoApplication
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
-              app-kind-infra:
-                apiVersion: catalog.idp.io/v1alpha1
-                kind: InfraService
-                namespace: <<$xrNamespace>>
-                matchName: <<$appName>>
               app-kind-nodejs-hangar:
                 apiVersion: catalog.hangar.io/v1alpha1
                 kind: NodeJSApplication

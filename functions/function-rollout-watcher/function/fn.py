@@ -140,6 +140,28 @@ def build_diagnosis_service_account():
     }
 
 
+# How long after dispatching a diagnosis Job we keep declaring it even if it is not
+# (yet) in req.observed.resources. Crossplane prunes a composed resource the instant a
+# function stops declaring it, so a lagging observed read right after dispatch must not
+# delete a live Job.
+DISPATCH_GRACE_SECONDS = 120
+
+
+def recently_dispatched(prev_status, now=None):
+    """True if the last diagnosis Job was dispatched within DISPATCH_GRACE_SECONDS."""
+    stamp = safe_get(prev_status, "lastDiagnosisTime")
+    if not stamp:
+        return False
+    try:
+        dispatched = datetime.datetime.fromisoformat(str(stamp))
+    except ValueError:
+        return False
+    now = now or datetime.datetime.now(datetime.UTC)
+    if dispatched.tzinfo is None:
+        dispatched = dispatched.replace(tzinfo=datetime.UTC)
+    return (now - dispatched).total_seconds() < DISPATCH_GRACE_SECONDS
+
+
 def build_diagnosis_job(job_name, xr_namespace, diagnosis_image, xr_name, gitops, src, notifications):
     """A plain, native batch/v1 Job — no provider-kubernetes wrapping needed.
 
@@ -359,8 +381,23 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             # that field, leaving the already-created Job's template alone
             # (which is genuinely never allowed to change), while still
             # keeping the resource in the desired set.
-            if last_handled_revision and safe_get(prev_status, "lastDiagnosisJob"):
-                rsp.desired.resources[f"diagnosis-job-{last_handled_revision}"].resource.update({
+            #
+            # ONLY when that Job actually exists (observed) or was dispatched
+            # moments ago. A spec-less Job can never be CREATED (containers and
+            # restartPolicy are required), so re-declaring one that has since been
+            # removed (ttlSecondsAfterFinished, GC, manual cleanup) pins the XR at
+            # Synced=False ("Job ... is invalid: spec.template.spec.containers:
+            # Required value") for as long as the Rollout stays Degraded - seen live
+            # on kind-prod's baggage-api. Not re-declaring it is harmless: the
+            # revision was already diagnosed, so nothing re-dispatches.
+            job_key = f"diagnosis-job-{last_handled_revision}"
+            job_is_live = job_key in req.observed.resources
+            if (
+                last_handled_revision
+                and safe_get(prev_status, "lastDiagnosisJob")
+                and (job_is_live or recently_dispatched(prev_status))
+            ):
+                rsp.desired.resources[job_key].resource.update({
                     "apiVersion": "batch/v1",
                     "kind": "Job",
                     "metadata": {"name": safe_get(prev_status, "lastDiagnosisJob")},

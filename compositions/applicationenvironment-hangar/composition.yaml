@@ -112,22 +112,19 @@ spec:
             <<- $infraHangarItems := index $infraHangarEntry "items" | default list >>
             <<- $appKind := "NodeJSApplication" >>
             <<- $appGroup := "catalog.idp.io" >>
-            <<- if gt (len $nodejsItems) 0 >>
-              <<- $appKind = "NodeJSApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $springbootItems) 0 >>
-              <<- $appKind = "SpringBootApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $pythonItems) 0 >>
-              <<- $appKind = "PythonApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $goItems) 0 >>
-              <<- $appKind = "GoApplication" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $infraItems) 0 >>
-              <<- $appKind = "InfraService" >>
-              <<- $appGroup = "catalog.idp.io" >>
-            <<- else if gt (len $nodejsHangarItems) 0 >>
+            # Hangar-group checked FIRST, old-group as fallback - NOT the order this gate shipped with
+            # originally (old-first). During the migration window an app briefly exists under BOTH
+            # groups simultaneously (the new-group XR is created before the old one is deleted, so the
+            # recipe can adopt real external state cleanly - see memory
+            # project_tier2_domain_rename_plan.md). Old-first created a real deadlock, hit live
+            # migrating skyport-broker's InfraService: this gate kept resolving $appGroup to
+            # catalog.idp.io as long as the old XR still existed, so app-usage.yaml's Usage never
+            # stopped pointing at the old group, which meant the admission webhook
+            # (nousages.protection.crossplane.io) never allowed the old XR to be deleted - the exact
+            # thing that would have let this gate see only the new group. Hangar-first breaks the
+            # cycle: the moment the new-group XR exists, this gate (and therefore the Usage) treats it
+            # as authoritative, immediately unblocking the old XR's deletion.
+            <<- if gt (len $nodejsHangarItems) 0 >>
               <<- $appKind = "NodeJSApplication" >>
               <<- $appGroup = "catalog.hangar.io" >>
             <<- else if gt (len $springbootHangarItems) 0 >>
@@ -142,6 +139,21 @@ spec:
             <<- else if gt (len $infraHangarItems) 0 >>
               <<- $appKind = "InfraService" >>
               <<- $appGroup = "catalog.hangar.io" >>
+            <<- else if gt (len $nodejsItems) 0 >>
+              <<- $appKind = "NodeJSApplication" >>
+              <<- $appGroup = "catalog.idp.io" >>
+            <<- else if gt (len $springbootItems) 0 >>
+              <<- $appKind = "SpringBootApplication" >>
+              <<- $appGroup = "catalog.idp.io" >>
+            <<- else if gt (len $pythonItems) 0 >>
+              <<- $appKind = "PythonApplication" >>
+              <<- $appGroup = "catalog.idp.io" >>
+            <<- else if gt (len $goItems) 0 >>
+              <<- $appKind = "GoApplication" >>
+              <<- $appGroup = "catalog.idp.io" >>
+            <<- else if gt (len $infraItems) 0 >>
+              <<- $appKind = "InfraService" >>
+              <<- $appGroup = "catalog.idp.io" >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources

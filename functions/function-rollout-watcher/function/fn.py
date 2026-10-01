@@ -1,4 +1,4 @@
-"""function-rollout-watcher (extra-resources redesign)
+"""function-rollout-watcher (extra-resources redesign).
 
 Second redesign of this function. The first (see git history / this repo's
 README) swapped the diagnosis agent for a thin HolmesGPT dispatch Job. This
@@ -88,8 +88,9 @@ def safe_get(d, *keys, default=None):
 
 
 def resolve_gitops_config(app_name, cluster, env, cfg):
-    """Deterministic GitOps manifest-repo coordinates for app_name, matching
-    exactly what ApplicationEnvironment's own Composition computes when it
+    """Return the deterministic GitOps manifest-repo coordinates for app_name.
+
+    Matches exactly what ApplicationEnvironment's own Composition computes when it
     bootstraps this same app's <cluster>/<env>/values.yaml (see
     compositions/applicationenvironment's render-github-resources step) —
     owner is the platform's fixed GitHub owner (cfg.gitopsOwner can override
@@ -108,11 +109,14 @@ def resolve_gitops_config(app_name, cluster, env, cfg):
 
 
 def resolve_src_config(app_name, gitops):
-    """The app's own source repo — same owner/base branch as the GitOps repo
+    """Return the app's own source repo coordinates.
+
+    Same owner/base branch as the GitOps repo
     (NodeJSApplication always creates both under the same platform owner),
     named after the app itself (not gitops-<appName>), root path (this
     platform's NodeJSApplication scaffold is always a single-app monorepo —
-    there's no polyrepo/subdirectory case in the real system to resolve)."""
+    there's no polyrepo/subdirectory case in the real system to resolve).
+    """
     return {
         "owner": gitops["owner"],
         "repo": app_name,
@@ -162,7 +166,9 @@ def recently_dispatched(prev_status, now=None):
     return (now - dispatched).total_seconds() < DISPATCH_GRACE_SECONDS
 
 
-def build_diagnosis_job(job_name, xr_namespace, diagnosis_image, xr_name, gitops, src, notifications):
+def build_diagnosis_job(  # noqa: PLR0913 - a flat builder over the resolved config
+    job_name, xr_namespace, diagnosis_image, xr_name, gitops, src, notifications
+):
     """A plain, native batch/v1 Job — no provider-kubernetes wrapping needed.
 
     kind-dev redesign: this Job no longer runs its own Claude tool-use loop.
@@ -202,11 +208,24 @@ def build_diagnosis_job(job_name, xr_namespace, diagnosis_image, xr_name, gitops
     slack = safe_get(notifications, "slack")
     if slack:
         env.append({"name": "NOTIFY_SLACK_ENABLED", "value": "true"})
-        env.append({"name": "NOTIFY_SLACK_CHANNEL", "value": safe_get(slack, "channel", default="")})
-        env.append({
-            "name": "SLACK_WEBHOOK_URL",
-            "valueFrom": {"secretKeyRef": {"name": "notify-secrets", "key": "slack-webhook-url", "optional": True}},
-        })
+        env.append(
+            {
+                "name": "NOTIFY_SLACK_CHANNEL",
+                "value": safe_get(slack, "channel", default=""),
+            }
+        )
+        env.append(
+            {
+                "name": "SLACK_WEBHOOK_URL",
+                "valueFrom": {
+                    "secretKeyRef": {
+                        "name": "notify-secrets",
+                        "key": "slack-webhook-url",
+                        "optional": True,
+                    }
+                },
+            }
+        )
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -247,11 +266,13 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
     """A FunctionRunner handles gRPC RunFunctionRequests."""
 
     def __init__(self):
+        """Create the runner with a structured logger."""
         self.log = logging.get_logger()
 
-    async def RunFunction(
+    async def RunFunction(  # noqa: PLR0915 - one linear request->response pipeline; splitting it would scatter shared state
         self, req: fnv1.RunFunctionRequest, _: grpc.aio.ServicerContext
     ) -> fnv1.RunFunctionResponse:
+        """Compose the diagnosis Job and status for one RolloutWatch reconcile."""
         log = self.log.bind(tag=req.meta.tag)
         rsp = response.to(req)
 
@@ -264,7 +285,9 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         env = safe_get(spec, "env", default="")
 
         cfg = req.input if req.input else {}
-        diagnosis_image = safe_get(cfg, "diagnosisJobImage", default="diagnosis-job:latest")
+        diagnosis_image = safe_get(
+            cfg, "diagnosisJobImage", default="diagnosis-job:latest"
+        )
 
         # Always compose the diagnosis Job's ServiceAccount, whether or not a
         # diagnosis is happening this reconcile - see build_diagnosis_service_account's
@@ -277,7 +300,9 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         # ServiceAccount is created successfully. Caught live on kind-prod -
         # RolloutWatch stuck Ready=False since generation 1, which ArgoCD's
         # health check surfaces as the Application sitting in Progressing.
-        rsp.desired.resources["diagnosis-dispatch-sa"].resource.update(build_diagnosis_service_account())
+        rsp.desired.resources["diagnosis-dispatch-sa"].resource.update(
+            build_diagnosis_service_account()
+        )
         rsp.desired.resources["diagnosis-dispatch-sa"].ready = fnv1.READY_TRUE
 
         # --- Watch the observed (live) Rollout status ---
@@ -299,8 +324,14 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             namespace=xr_namespace,
         )
         observed_rollout = request.get_required_resource(req, ROLLOUT_REQUIREMENT_NAME)
-        phase = safe_get(observed_rollout, "status", "phase") if observed_rollout else None
-        revision = safe_get(observed_rollout, "status", "currentPodHash") if observed_rollout else None
+        phase = (
+            safe_get(observed_rollout, "status", "phase") if observed_rollout else None
+        )
+        revision = (
+            safe_get(observed_rollout, "status", "currentPodHash")
+            if observed_rollout
+            else None
+        )
 
         prev_status = safe_get(xr, "status", default={}) or {}
         last_handled_revision = safe_get(prev_status, "lastDiagnosisRevision")
@@ -333,17 +364,35 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             gitops = resolve_gitops_config(app_name, cluster, env, cfg)
             src = resolve_src_config(app_name, gitops)
             notifications = safe_get(spec, "notifications", default={}) or {}
-            job_manifest = build_diagnosis_job(job_name, xr_namespace, diagnosis_image, app_name, gitops, src, notifications)
-            rsp.desired.resources[f"diagnosis-job-{revision}"].resource.update(job_manifest)
-            # Ready=True: the Job is an artifact of the watcher, not a dependency of it. A finished
-            # or failed Job never gains a Ready condition, so without this the XR's Ready sticks
-            # at False ("Unready resources: diagnosis-job-...") for as long as the Rollout is Degraded.
+            job_manifest = build_diagnosis_job(
+                job_name,
+                xr_namespace,
+                diagnosis_image,
+                app_name,
+                gitops,
+                src,
+                notifications,
+            )
+            rsp.desired.resources[f"diagnosis-job-{revision}"].resource.update(
+                job_manifest
+            )
+            # Ready=True: the Job is an artifact of the watcher, not a dependency of
+            # it. A finished or failed Job never gains a Ready condition, so without
+            # this the XR's Ready sticks at False ("Unready resources:
+            # diagnosis-job-...") for as long as the Rollout is Degraded.
             rsp.desired.resources[f"diagnosis-job-{revision}"].ready = fnv1.READY_TRUE
             new_status["lastDiagnosisRevision"] = revision
             new_status["lastDiagnosisJob"] = job_name
-            new_status["lastDiagnosisTime"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-            response.warning(rsp, f"Rollout {xr_name} is {phase}; dispatched diagnosis Job {job_name}")
-            log.info("dispatched diagnosis job", job=job_name, revision=revision, phase=phase)
+            new_status["lastDiagnosisTime"] = datetime.datetime.now(
+                datetime.UTC
+            ).isoformat()
+            response.warning(
+                rsp,
+                f"Rollout {xr_name} is {phase}; dispatched diagnosis Job {job_name}",
+            )
+            log.info(
+                "dispatched diagnosis job", job=job_name, revision=revision, phase=phase
+            )
         elif phase and phase not in DEGRADED_PHASES:
             # Recovered (or was never degraded). Stop declaring the prior
             # diagnosis Job — a native composed resource is pruned by
@@ -366,7 +415,11 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 new_status.pop("lastDiagnosisRevision", None)
                 new_status.pop("lastDiagnosisJob", None)
                 new_status.pop("lastDiagnosisTime", None)
-                log.info("rollout recovered, clearing diagnosis tracking", xr=xr_name, phase=phase)
+                log.info(
+                    "rollout recovered, clearing diagnosis tracking",
+                    xr=xr_name,
+                    phase=phase,
+                )
             response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
             log.info("watched rollout", xr=xr_name, phase=phase)
         else:
@@ -409,7 +462,12 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 rsp.desired.resources[job_key].resource.update(
                     build_diagnosis_job(
                         safe_get(prev_status, "lastDiagnosisJob"),
-                        xr_namespace, diagnosis_image, app_name, gitops, src, notifications,
+                        xr_namespace,
+                        diagnosis_image,
+                        app_name,
+                        gitops,
+                        src,
+                        notifications,
                     )
                 )
                 rsp.desired.resources[job_key].ready = fnv1.READY_TRUE

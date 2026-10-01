@@ -335,6 +335,10 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             notifications = safe_get(spec, "notifications", default={}) or {}
             job_manifest = build_diagnosis_job(job_name, xr_namespace, diagnosis_image, app_name, gitops, src, notifications)
             rsp.desired.resources[f"diagnosis-job-{revision}"].resource.update(job_manifest)
+            # Ready=True: the Job is an artifact of the watcher, not a dependency of it. A finished
+            # or failed Job never gains a Ready condition, so without this the XR's Ready sticks
+            # at False ("Unready resources: diagnosis-job-...") for as long as the Rollout is Degraded.
+            rsp.desired.resources[f"diagnosis-job-{revision}"].ready = fnv1.READY_TRUE
             new_status["lastDiagnosisRevision"] = revision
             new_status["lastDiagnosisJob"] = job_name
             new_status["lastDiagnosisTime"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -368,28 +372,30 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         else:
             # Still degraded on the same already-diagnosed revision, or the
             # Rollout's phase isn't known yet this reconcile (extra-resources
-            # requirement not resolved yet — phase is falsy). Keep declaring
-            # an already-dispatched job's identity every reconcile — a native
-            # composed resource is pruned by Crossplane the instant a
-            # function stops including its key in the response, and there's
-            # no "Observe/Create only" management policy for it like the old
-            # provider-kubernetes Object wrapper had. Deliberately NOT
-            # re-submitting `spec`: Job.spec.template is immutable after
-            # creation, and Kubernetes' immutability check compares the
-            # post-merge object against the stored one — omitting spec here
-            # means Crossplane's server-side-apply patch simply doesn't touch
-            # that field, leaving the already-created Job's template alone
-            # (which is genuinely never allowed to change), while still
-            # keeping the resource in the desired set.
+            # requirement not resolved yet - phase is falsy). Keep declaring an
+            # already-dispatched Job every reconcile: a native composed resource is
+            # pruned by Crossplane the instant a function stops including its key in
+            # the response, and there is no "Observe/Create only" management policy
+            # for it like the old provider-kubernetes Object wrapper had.
+            #
+            # Declare the FULL Job (rebuilt from the same inputs, so byte-identical
+            # to what was created), never a spec-less identity. Crossplane applies
+            # composed resources with server-side apply under one field manager, and
+            # SSA REMOVES any field that manager owned but omits from a later apply.
+            # The Job's spec.template is owned by that manager from creation, so a
+            # spec-less re-declaration deletes it from the merged object and the
+            # apiserver rejects the result ("Job ... is invalid:
+            # spec.template.spec.containers: Required value") on every reconcile,
+            # pinning the XR at Synced=False for as long as the Rollout stays Degraded
+            # (seen live on kiac-dev's flight-api-pr-9 with the Job present, not just
+            # when it had vanished). Re-applying identical values is a no-op even
+            # though Job.spec.template is immutable.
             #
             # ONLY when that Job actually exists (observed) or was dispatched
-            # moments ago. A spec-less Job can never be CREATED (containers and
-            # restartPolicy are required), so re-declaring one that has since been
-            # removed (ttlSecondsAfterFinished, GC, manual cleanup) pins the XR at
-            # Synced=False ("Job ... is invalid: spec.template.spec.containers:
-            # Required value") for as long as the Rollout stays Degraded - seen live
-            # on kind-prod's baggage-api. Not re-declaring it is harmless: the
-            # revision was already diagnosed, so nothing re-dispatches.
+            # moments ago. Re-declaring one that has since been removed
+            # (ttlSecondsAfterFinished, GC, manual cleanup) would recreate it and
+            # re-run the diagnosis; not re-declaring it is harmless: the revision was
+            # already diagnosed, so nothing re-dispatches.
             job_key = f"diagnosis-job-{last_handled_revision}"
             job_is_live = job_key in req.observed.resources
             if (
@@ -397,11 +403,16 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 and safe_get(prev_status, "lastDiagnosisJob")
                 and (job_is_live or recently_dispatched(prev_status))
             ):
-                rsp.desired.resources[job_key].resource.update({
-                    "apiVersion": "batch/v1",
-                    "kind": "Job",
-                    "metadata": {"name": safe_get(prev_status, "lastDiagnosisJob")},
-                })
+                gitops = resolve_gitops_config(app_name, cluster, env, cfg)
+                src = resolve_src_config(app_name, gitops)
+                notifications = safe_get(spec, "notifications", default={}) or {}
+                rsp.desired.resources[job_key].resource.update(
+                    build_diagnosis_job(
+                        safe_get(prev_status, "lastDiagnosisJob"),
+                        xr_namespace, diagnosis_image, app_name, gitops, src, notifications,
+                    )
+                )
+                rsp.desired.resources[job_key].ready = fnv1.READY_TRUE
             response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
             log.info("watched rollout", xr=xr_name, phase=phase)
 

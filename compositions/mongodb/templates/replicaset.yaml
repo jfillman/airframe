@@ -10,12 +10,22 @@
 # mongod image defaults to quay.io/mongodb/mongodb-community-server:8.0.32-ubi8 (multi-arch: amd64 +
 # arm64, verified against the real Quay registry), overridable per XR via spec.mongoVersion - kind-prod
 # pins 7.0.x because MongoDB 8.0 crashes on Linux kernel 6.19..7.0.13 (SERVER-121912).
+#
+# Readiness: function-auto-ready only trusts a Ready condition, which neither the MongoDBCommunity
+# (it only has status.phase) nor a Role/RoleBinding ever has, so each is marked ready explicitly -
+# the replica set when phase is Running, the RBAC objects on existence - otherwise the XR sticks at
+# Ready=False ("Unready resources: appdb-role, appdb-rolebinding, and replicaset").
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $spec := .observed.composite.resource.spec >>
 <<- $members := $spec.members | default 1 >>
 <<- $storage := $spec.storageSize | default "5Gi" >>
 <<- $version := $spec.mongoVersion | default "8.0.32" >>
+<<- $rsObs := index (.observed.resources | default dict) "replicaset" | default dict >>
+<<- $rsReady := "False" >>
+<<- if eq (dig "resource" "status" "phase" "" $rsObs) "Running" >>
+  <<- $rsReady = "True" >>
+<<- end >>
 <<- $db := $spec.databaseName | default (replace "-" "_" $xrName) >>
 <<- $hangarLabels := dict >>
 <<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
@@ -30,6 +40,7 @@ metadata:
   namespace: <<$xrNamespace>>
   annotations:
     <<setResourceNameAnnotation "replicaset">>
+    gotemplating.fn.crossplane.io/ready: <<$rsReady | quote>>
   labels:
     <<- range $k, $v := $hangarLabels >>
     <<$k>>: <<$v | quote>>

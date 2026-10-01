@@ -8,7 +8,7 @@
 # templates/attached/slos.yaml already toYaml's each `slos:` values entry
 # straight under spec:, alongside spec.environmentRef. kind/plural/group match
 # what _helpers.tpl already hardcodes (type: slo -> kind: SLO) and what
-# values.yaml already sets (attachedResourceApiVersion: catalog.idp.io/v1alpha1).
+# values.yaml already sets (attachedResourceApiVersion: catalog.hangar.io/v1alpha1).
 #
 # Wraps Sloth (sloth.dev) rather than hand-rolling multi-window-multi-burn-rate
 # PromQL - see service-catalog-design.md Item 4's revision history. This is
@@ -23,11 +23,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: slos.catalog.idp.io
+  name: slos.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: SLO
     plural: slos
@@ -37,7 +37,7 @@ spec:
     # Confirmed live: `kubectl get slo` resolved to Sloth's category grouping
     # instead of this resource's shortname and 404'd looking for a
     # PrometheusServiceLevel that didn't exist yet - use `kubectl get
-    # slos.catalog.idp.io` (or plain `slos`, which is this resource's actual
+    # slos.catalog.hangar.io` (or plain `slos`, which is this resource's actual
     # plural, not a category, and wins unambiguously) instead.
   scope: Namespaced
   versions:

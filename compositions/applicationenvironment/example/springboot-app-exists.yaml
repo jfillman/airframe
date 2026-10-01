@@ -7,7 +7,7 @@
 # 00-app-kind-gate.yaml's own header for why this matters (a hardcoded
 # NodeJSApplication kind left the composite's own Ready condition stuck forever for
 # any real SpringBootApplication env, confirmed live on order-api-kind-prod-prod).
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: SpringBootApplication
 metadata:
   name: widget-service

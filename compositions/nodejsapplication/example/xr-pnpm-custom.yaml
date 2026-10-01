@@ -1,4 +1,4 @@
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: NodeJSApplication
 metadata:
   name: checkout-api

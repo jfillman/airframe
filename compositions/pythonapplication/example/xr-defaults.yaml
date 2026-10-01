@@ -3,7 +3,7 @@
 # so this fixture spells out the XRD's actual defaults explicitly rather than relying on
 # `spec: {}`. See ../../../xrds/pythonapplication.yaml for these being schema-level
 # defaults, not template-side ones.
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: PythonApplication
 metadata:
   name: widget-service

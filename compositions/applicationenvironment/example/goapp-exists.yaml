@@ -6,7 +6,7 @@
 # NodeJSApplication default - see 00-app-kind-gate.yaml's own header for why this
 # matters (confirmed live on process-api-kind-prod-prod, same class of bug
 # springboot-app-exists.yaml's own fixture already proved for SpringBootApplication).
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: GoApplication
 metadata:
   name: widget-service

@@ -28,7 +28,7 @@ credential to any other cluster's API.
 
 ## The catalog: eleven XRDs, one composition graph
 
-All eleven kinds share the group `catalog.idp.io`, are namespaced
+All eleven kinds share the group `catalog.hangar.io`, are namespaced
 (`apiextensions.crossplane.io/v2`), and rely on the standard `Ready`/`Synced`
 conditions plus catalog-specific custom conditions layered on top. Only
 `RolloutWatch` publishes a real `status.properties` schema.

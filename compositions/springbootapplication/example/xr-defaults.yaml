@@ -5,7 +5,7 @@
 # exercising the real default values a live cluster would apply. See ../../../xrds/
 # springbootapplication.yaml for these being schema-level defaults, not template-side
 # ones.
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: SpringBootApplication
 metadata:
   name: widget-service

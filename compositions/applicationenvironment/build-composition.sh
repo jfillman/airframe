@@ -58,10 +58,10 @@ cat > "$OUT" <<HEADER
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: applicationenvironments.catalog.idp.io
+  name: applicationenvironments.catalog.hangar.io
 spec:
   compositeTypeRef:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: catalog.hangar.io/v1alpha1
     kind: ApplicationEnvironment
   mode: Pipeline
   pipeline:

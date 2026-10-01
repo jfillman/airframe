@@ -1,5 +1,5 @@
 # Exercises the poetry packageManager branch (pyproject.toml, not requirements.txt).
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: PythonApplication
 metadata:
   name: widget-service

@@ -58,7 +58,7 @@ class FakeDexServer:
 def xr(mode, **spec_extra):
     spec = {"mode": mode, "environmentRef": {"name": "env-1"}, **spec_extra}
     return resource.dict_to_struct({
-        "apiVersion": "catalog.idp.io/v1alpha1",
+        "apiVersion": "catalog.hangar.io/v1alpha1",
         "kind": "Dex",
         "metadata": {"name": "my-dex", "namespace": "app-x-dev", "labels": {"hangar.io/app": "x"}},
         "spec": spec,

@@ -73,7 +73,7 @@ def main():
 
     # Q7: Which apiVersion does a Redis XR need? (an agent writing a raw XR, not going through the chart)
     redis_xrd = ask("xrd", "Redis")
-    checks.append(("Q7 Redis apiVersion", redis_xrd["apiVersion"] == "catalog.idp.io/v1alpha1"))
+    checks.append(("Q7 Redis apiVersion", redis_xrd["apiVersion"] == "catalog.hangar.io/v1alpha1"))
 
     # Q8: What's the default replica count for a new rollout?
     rollout_field = ask("field", "rollout")

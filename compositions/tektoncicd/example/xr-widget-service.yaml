@@ -2,7 +2,7 @@
 # own Compositions, not standalone-created - this fixture mirrors the shape those
 # parents' new tekton-cicd-child.yaml template renders, for offline testing this
 # Composition in isolation.
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: TektonCICD
 metadata:
   name: widget-service-tektoncicd

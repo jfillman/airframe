@@ -93,7 +93,7 @@ Merge the PR Tower opens, then check the XR:
 ```
 $ kubectl get springbootapplication flight-api -n app-flight-api-cicd
 NAME         SYNCED   READY   COMPOSITION                              AGE
-flight-api   True     True    springbootapplications.catalog.idp.io    3m
+flight-api   True     True    springbootapplications.catalog.hangar.io    3m
 ```
 
 The source repo starts with a hello-world `Application.java`, a `pom.xml` (web and actuator

@@ -333,7 +333,7 @@ parent readiness.
 **`SLO` XRD + Composition — first XRD in the catalog, live-verified on
 the dev cluster.** Item 4's design (`idp/docs/service-catalog-design.md`), wraps
 Sloth (sloth.dev) rather than hand-rolling multi-window-multi-burn-rate
-PromQL: one `SLO` XRD (`catalog.idp.io/v1alpha1`, Crossplane v2 namespaced,
+PromQL: one `SLO` XRD (`catalog.hangar.io/v1alpha1`, Crossplane v2 namespaced,
 just `environmentRef`/`service`/`objective`/`indicator` - no burn-rate or
 window fields, Sloth computes the full canonical pattern itself) whose
 Composition (`function-go-templating`, `source: Inline` - see
@@ -376,7 +376,7 @@ comments):
 - Sloth's own CRD claims `slo`/`slos` as `categories` (not shortNames) on
   `prometheusservicelevels` - this XRD's own `slo` shortName collided with
   that (`kubectl get slo` resolved to Sloth's category and 404'd looking for
-  the wrong resource type). Removed; use `kubectl get slos.catalog.idp.io` or
+  the wrong resource type). Removed; use `kubectl get slos.catalog.hangar.io` or
   plain `slos` (this resource's actual plural, unambiguous).
 - kube-prometheus-stack's `Prometheus` CR only loads a `PrometheusRule` if
   the object itself carries `release: kube-prometheus-stack` - Sloth's own
@@ -424,9 +424,9 @@ tools/
   validate.Containerfile       the image CI runs it from (ghcr.io/jfillman/airframe-validate:<tag>, built on release tags)
 AGENTS.md                      what an AI agent should know, today vs planned
 xrds/
-  nodejsapplication.yaml        NodeJSApplication XRD (catalog.idp.io/v1alpha1)
-  applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.idp.io/v1alpha1)
-  slo.yaml                      SLO XRD (catalog.idp.io/v1alpha1)
+  nodejsapplication.yaml        NodeJSApplication XRD (catalog.hangar.io/v1alpha1)
+  applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.hangar.io/v1alpha1)
+  slo.yaml                      SLO XRD (catalog.hangar.io/v1alpha1)
 compositions/
   nodejsapplication/            NodeJSApplication Composition (source: Inline) + templates + build-composition.sh
   applicationenvironment/       ApplicationEnvironment Composition (source: Inline) + templates + build-composition.sh

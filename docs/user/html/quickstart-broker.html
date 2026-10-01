@@ -321,7 +321,7 @@
 <p class="prose"><code>dev</code> exactly, as in part 1. Tower opens a PR against the tenants repo; <b>merge it</b>. Within a few minutes:</p>
 <pre>$ kubectl get infraservice skyport-broker -n app-skyport-broker-cicd
 NAME             SYNCED   READY   COMPOSITION                    AGE
-skyport-broker   True     True    infraservices.catalog.idp.io   2m</pre>
+skyport-broker   True     True    infraservices.catalog.hangar.io   2m</pre>
 <p class="prose">It created one repo, <code>gitops-infra-skyport-broker</code>, holding only a <code>README.md</code> and a stub <code>cicd.yaml</code>. There is no application to build, so there is no pipeline.</p>
 <div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
 <p class="label" style="color:var(--accent)">Found by walking it</p>
@@ -361,12 +361,12 @@ components:
 <tr><td class="name"><code>allowedNamespaces</code></td><td><b>The trust boundary.</b> A namespace not listed can neither create a user nor reach the broker's port. Adding an app to the broker is a one-line change here.</td></tr>
 </tbody></table></div>
 <p class="prose" style="max-width:68ch">The dev cluster polls the repo, so the file is picked up within a few minutes, the namespace <code>app-skyport-broker-dev</code> is created and the component starts. The first start pulls the image and takes about two minutes:</p>
-<pre>$ kubectl get rabbitmqs.catalog.idp.io -n app-skyport-broker-dev
+<pre>$ kubectl get rabbitmqs.catalog.hangar.io -n app-skyport-broker-dev
 NAME             SYNCED   READY   COMPOSITION               AGE
-skyport-broker   True     True    rabbitmq.catalog.idp.io   2m
+skyport-broker   True     True    rabbitmq.catalog.hangar.io   2m
 
 $ kubectl get pods,svc,pvc -n app-skyport-broker-dev -l hangar.io/app=skyport-broker</pre>
-<p class="prose" style="max-width:68ch">Use the full name <code>rabbitmqs.catalog.idp.io</code>: plain <code>rabbitmq</code> is ambiguous with the operator's own API group. The broker's admin credentials are in the Secret <code>skyport-broker-default-user</code>; apps never need them.</p>
+<p class="prose" style="max-width:68ch">Use the full name <code>rabbitmqs.catalog.hangar.io</code>: plain <code>rabbitmq</code> is ambiguous with the operator's own API group. The broker's admin credentials are in the Secret <code>skyport-broker-default-user</code>; apps never need them.</p>
 </section>
 
 <section>
@@ -537,7 +537,7 @@ curl -s localhost:8080/api/whoami           <span class="c"># "eventsReceived" w
 <h2>What will actually bite you</h2>
 </div>
 <div class="cards c2">
-<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Broker and attach are one component</h3></div><p>The broker is an <code>InfraService</code> with a <code>rabbitmq</code> component in <code>mode: broker</code>. Apps use the same type in <code>mode: attach</code>. In <code>kubectl</code> use <code>rabbitmqs.catalog.idp.io</code>.</p></div>
+<div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Broker and attach are one component</h3></div><p>The broker is an <code>InfraService</code> with a <code>rabbitmq</code> component in <code>mode: broker</code>. Apps use the same type in <code>mode: attach</code>. In <code>kubectl</code> use <code>rabbitmqs.catalog.hangar.io</code>.</p></div>
 <div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>allowedNamespaces first</h3></div><p>Add an app's namespace there before it attaches; an unlisted namespace's user is refused.</p></div>
 <div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Credentials come from two objects</h3></div><p>Secret <code>&lt;name&gt;-user-credentials</code> (<code>username</code>, <code>password</code>) and ConfigMap <code>&lt;name&gt;-connection</code> (<code>host</code>, <code>port</code>, <code>vhost</code>). Read them with <code>valueFrom</code>; nothing goes through Infisical.</p></div>
 <div class="card"><div class="card-head"><span class="card-dot accent"></span><h3>Permissions from names</h3></div><p><code>queuePrefix</code>, <code>publish</code>, <code>consume</code>. The broker's Service is <code>&lt;name&gt;.&lt;namespace&gt;.svc:5672</code>.</p></div>

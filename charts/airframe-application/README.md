@@ -88,7 +88,7 @@ few things as genuinely open. This is where those got resolved, concretely:
   ingress controller is Contour, namespace `projectcontour`, not the
   `ingress-nginx` guess this defaulted to before. Updated to match.
 - **`attachedResourceApiVersion` defaults to `catalog.hangar.io/v1alpha1`.** The catalog's
-  API group was renamed from `catalog.idp.io` (Tier 2 domain rename); one value, not a
+  API group was renamed from `catalog.hangar.io` (Tier 2 domain rename); one value, not a
   per-template hunt, if the group ever changes again.
 - **`rollout.strategy: canary` renders a single inert `setWeight: 100` step**
   when `rollout.steps` is empty. §3 "Still open" item 3 explicitly says the

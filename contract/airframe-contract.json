@@ -589,137 +589,137 @@
   "xrds": {
     "ApplicationEnvironment": {
       "agentSummary": "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 5,
       "fieldsTotal": 6,
       "file": "applicationenvironment.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "applicationenvironments"
     },
     "Dex": {
       "agentSummary": "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach).",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 12,
       "fieldsTotal": 14,
       "file": "dex.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "dexes"
     },
     "GoApplication": {
       "agentSummary": "Onboard a new Go service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 5,
       "fieldsTotal": 6,
       "file": "goapplication.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "goapplications"
     },
     "InfraService": {
       "agentSummary": "Provisions standalone shared infrastructure (e.g. a cache or datastore another app depends on) - just an empty GitOps deploy repo, no application source code.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 3,
       "fieldsTotal": 4,
       "file": "infraservice.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "infraservices"
     },
     "MongoDB": {
       "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 6,
       "fieldsTotal": 7,
       "file": "mongodb.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "mongodbs"
     },
     "NodeJSApplication": {
       "agentSummary": "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 8,
       "fieldsTotal": 9,
       "file": "nodejsapplication.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "nodejsapplications"
     },
     "PostgreSQL": {
       "agentSummary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 6,
       "fieldsTotal": 7,
       "file": "postgresql.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "postgresqls"
     },
     "PythonApplication": {
       "agentSummary": "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 6,
       "fieldsTotal": 7,
       "file": "pythonapplication.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "pythonapplications"
     },
     "RabbitMQ": {
       "agentSummary": "A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach).",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 19,
       "fieldsTotal": 20,
       "file": "rabbitmq.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "rabbitmqs"
     },
     "Redis": {
       "agentSummary": "A Redis cache or shared-counter store, dedicated to one application environment.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 4,
       "fieldsTotal": 5,
       "file": "redis.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "redis"
     },
     "RolloutWatch": {
       "agentSummary": "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 9,
       "fieldsTotal": 10,
       "file": "rolloutwatch.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "rolloutwatches"
     },
     "SLO": {
       "agentSummary": "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 10,
       "fieldsTotal": 11,
       "file": "slo.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "slos"
     },
     "SecretStore": {
       "agentSummary": "Creates or extends this app's Infisical-backed secret store (project, identity, ClusterSecretStore) for one cluster.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 4,
       "fieldsTotal": 5,
       "file": "secretstore.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "secretstores"
     },
     "SpringBootApplication": {
       "agentSummary": "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 7,
       "fieldsTotal": 8,
       "file": "springbootapplication.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "springbootapplications"
     },
     "TektonCICD": {
       "agentSummary": "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding.",
-      "apiVersion": "catalog.idp.io/v1alpha1",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 8,
       "fieldsTotal": 9,
       "file": "tektoncicd.yaml",
-      "group": "catalog.idp.io",
+      "group": "catalog.hangar.io",
       "plural": "tektoncicds"
     }
   }

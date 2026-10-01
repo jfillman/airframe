@@ -1,6 +1,6 @@
 # First Bootstrap-tier XRD in the catalog - idp/docs/service-catalog-design.md Item 1/2
 # and the Framework tier table. apiextensions.crossplane.io/v2 (not v1) for real
-# namespaced-XR support, same as slos.catalog.idp.io.
+# namespaced-XR support, same as slos.catalog.hangar.io.
 #
 # XR's own metadata.name IS the app name (no separate spec.appName) - matches SLO's own
 # $xrName convention and Backstage's eventual "New Service" form taking one name field.
@@ -47,14 +47,14 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: nodejsapplications.catalog.idp.io
+  name: nodejsapplications.catalog.hangar.io
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
     terasky.backstage.io/description: "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
     hangar.io/agent-summary: "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: NodeJSApplication
     plural: nodejsapplications

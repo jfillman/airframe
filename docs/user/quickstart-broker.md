@@ -66,7 +66,7 @@ Tower opens a PR against the tenants repo. **Merge it.** Within a few minutes:
 ```bash
 kubectl get infraservice skyport-broker -n app-skyport-broker-cicd
 NAME             SYNCED   READY   COMPOSITION                         AGE
-skyport-broker   True     True    infraservices.catalog.idp.io        2m
+skyport-broker   True     True    infraservices.catalog.hangar.io        2m
 ```
 
 It created one repo, `gitops-infra-skyport-broker`, containing only a `README.md` and a stub
@@ -115,14 +115,14 @@ The dev cluster picks the file up within a few minutes (it polls the repo), crea
 two minutes:
 
 ```bash
-kubectl get rabbitmqs.catalog.idp.io -n app-skyport-broker-dev
+kubectl get rabbitmqs.catalog.hangar.io -n app-skyport-broker-dev
 NAME             SYNCED   READY   COMPOSITION               AGE
-skyport-broker   True     True    rabbitmq.catalog.idp.io   2m
+skyport-broker   True     True    rabbitmq.catalog.hangar.io   2m
 
 kubectl get pods,svc,pvc -n app-skyport-broker-dev -l hangar.io/app=skyport-broker
 ```
 
-(Use the full name `rabbitmqs.catalog.idp.io`: plain `rabbitmq` is ambiguous with the operator's own
+(Use the full name `rabbitmqs.catalog.hangar.io`: plain `rabbitmq` is ambiguous with the operator's own
 API group.) Its admin credentials are in the Secret `skyport-broker-default-user`; apps never need
 them.
 
@@ -352,7 +352,7 @@ its `componentKinds` entry), and **v0.3.90** for section 08 (`ApplicationEnviron
 
 - **The broker is an `InfraService` with a `rabbitmq` component (`mode: broker`).** Apps use the same
   component type in `mode: attach`.
-- **Use `rabbitmqs.catalog.idp.io`** in `kubectl`, not `rabbitmq`.
+- **Use `rabbitmqs.catalog.hangar.io`** in `kubectl`, not `rabbitmq`.
 - **One vhost per domain** (`flights`), created by `vhosts:`. Apps that exchange messages share one.
 - **`allowedNamespaces` is the trust boundary.** Add an app's namespace there before it attaches; an
   unlisted namespace's user is refused.

@@ -338,7 +338,7 @@
         <h3>Check the XR</h3>
         <pre>$ kubectl get nodejsapplication boarding-api -n app-boarding-api-cicd
 NAME           SYNCED   READY   COMPOSITION                         AGE
-boarding-api   True     True    nodejsapplications.catalog.idp.io   3m</pre>
+boarding-api   True     True    nodejsapplications.catalog.hangar.io   3m</pre>
         <p class="prose"><code>kubectl describe</code> shows the two custom conditions this
           catalog adds: <code>DevClusterReady</code> and <code>CicdOnboarded</code> (Glidepath
           has picked the app up).</p>
@@ -629,7 +629,7 @@ pipelines:
           the env up — no cross-cluster credential is involved.</p>
         <pre>$ kubectl get applicationenvironment -n app-boarding-api-cicd
 NAME                             SYNCED   READY   COMPOSITION                              AGE
-boarding-api-prod-staging   True     True    applicationenvironments.catalog.idp.io   2m</pre>
+boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m</pre>
         <p class="prose"><code>kubectl describe</code> shows <code>ClusterReady: True</code> and
           <code>WorkloadDeployed: False</code>. The bootstrap file is <code>rollout: null</code>:
           a namespace, no workload.</p>

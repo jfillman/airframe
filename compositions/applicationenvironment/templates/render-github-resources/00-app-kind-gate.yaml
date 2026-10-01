@@ -34,7 +34,7 @@
 # app-usage.yaml, which is all that actually matters) independent of
 # 00-cluster-gate.yaml's.
 #
-# Phase C: the old catalog.idp.io group is retired, so only catalog.hangar.io is looked up (five
+# Phase C: the old catalog.hangar.io group is retired, so only catalog.hangar.io is looked up (five
 # ExtraResources requirements, one per app kind). $appGroup is still threaded into app-usage.yaml's
 # of.apiVersion.
 <<- $spec := .observed.composite.resource.spec >>

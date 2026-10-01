@@ -4,7 +4,7 @@
 # `spec: {}`, which would leave every field <no value> in the rendered output instead of
 # exercising the real default values a live cluster would apply. See ../../../xrds/
 # nodejsapplication.yaml for these being schema-level defaults, not template-side ones.
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: NodeJSApplication
 metadata:
   name: widget-service

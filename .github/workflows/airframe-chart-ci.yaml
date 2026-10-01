@@ -12,7 +12,7 @@ name: airframe-chart-ci
 
 on:
   pull_request:
-    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "tools/gen_hangar_twins.py", "docs/**", "AGENTS.md", ".github/workflows/airframe-chart-ci.yaml"]
+    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", ".github/workflows/airframe-chart-ci.yaml"]
   push:
     branches: [main]
     paths: ["charts/**", "xrds/**", "compositions/**", "contract/**"]
@@ -30,9 +30,6 @@ jobs:
       - run: python3 tools/gen_airframe_schema.py --check --coverage
       - run: python3 tools/gen_component_outputs.py --check
       - run: python3 tools/gen_contract.py --check
-      - run: python3 tools/gen_hangar_twins.py --check
-        # Tier 2: *-hangar twin Compositions/XRDs are generated from their bases; a hand edit or an
-        # unpropagated base fix fails here instead of reaching a live migration (drifted 3x on 2026-09-30)
       - run: python3 tools/test_capabilities_coldstart.py
 
   scorecard:

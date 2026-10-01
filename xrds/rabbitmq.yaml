@@ -29,11 +29,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: rabbitmqs.catalog.idp.io
+  name: rabbitmqs.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach)."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: RabbitMQ
     plural: rabbitmqs

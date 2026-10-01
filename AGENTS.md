@@ -34,7 +34,6 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 - Put a secret value in `env` or `configMaps`. Secrets are references to Infisical keys.
 - Name an environment after a pipeline stage (`build`, `test`, `deploy`, `release`).
 - Change a shared XRD or composition in place; ArgoCD self-heal reverts it. Test a copy through one XR's `spec.crossplane.compositionRef`.
-- Hand-edit a `*-hangar` twin (`compositions/<type>-hangar/`, `xrds/<type>.hangar.yaml`). They are generated from their bases: edit the base, then run `python3 tools/gen_hangar_twins.py` and commit both. CI's `--check` fails on drift.
 - Commit, tag or push to a shared checkout without checking the branch and using a worktree. Humans cut tags.
 
 ## Rollout before an image exists

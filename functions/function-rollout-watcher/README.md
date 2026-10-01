@@ -2,7 +2,7 @@
 
 Crossplane Composition Function (Python). Second redesign — see "Origin and
 redesign history" below. Today it's the sole pipeline step on the
-`RolloutWatch` XRD (`catalog.idp.io`, see
+`RolloutWatch` XRD (`catalog.hangar.io`, see
 [`../../xrds/rolloutwatch.yaml`](../../xrds/rolloutwatch.yaml) /
 [`../../compositions/rolloutwatch`](../../compositions/rolloutwatch)):
 

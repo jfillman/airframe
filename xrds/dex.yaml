@@ -26,11 +26,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: dexes.catalog.idp.io
+  name: dexes.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach)."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: Dex
     plural: dexes

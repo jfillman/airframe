@@ -7,7 +7,7 @@
 # deviations get their own comments here.
 #
 # apiextensions.crossplane.io/v2 (not v1) for real namespaced-XR support, same as
-# nodejsapplications.catalog.idp.io and slos.catalog.idp.io.
+# nodejsapplications.catalog.hangar.io and slos.catalog.hangar.io.
 #
 # XR's own metadata.name IS the app name (no separate spec.appName) - same convention as
 # NodeJSApplication, doubles as this app's Maven artifactId / Gradle project name below.
@@ -46,14 +46,14 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: springbootapplications.catalog.idp.io
+  name: springbootapplications.catalog.hangar.io
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
     terasky.backstage.io/description: "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
     hangar.io/agent-summary: "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: SpringBootApplication
     plural: springbootapplications

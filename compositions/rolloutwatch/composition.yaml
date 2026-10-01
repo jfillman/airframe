@@ -10,7 +10,7 @@
 # gitopsOwner/diagnosisJobImage are the only two org-wide settings this Composition's
 # `input` carries - everything else (which app, which cluster/env, GitOps repo name,
 # manifest path) the function derives from the XR's own spec + the fixed platform
-# owner default baked into fn.py. See rolloutwatches.catalog.idp.io's own header for
+# owner default baked into fn.py. See rolloutwatches.catalog.hangar.io's own header for
 # why this XRD needs no ApplicationEnvironment/NodeJSApplication live lookup at all.
 #
 # function-auto-ready is NOT included here, deliberately - unlike SLO/PrometheusServiceLevel,
@@ -22,10 +22,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: rolloutwatches.catalog.idp.io
+  name: rolloutwatches.catalog.hangar.io
 spec:
   compositeTypeRef:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: catalog.hangar.io/v1alpha1
     kind: RolloutWatch
   mode: Pipeline
   pipeline:

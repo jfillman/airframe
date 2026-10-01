@@ -36,11 +36,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: tektoncicds.catalog.idp.io
+  name: tektoncicds.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: TektonCICD
     plural: tektoncicds

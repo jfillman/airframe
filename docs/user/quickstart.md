@@ -83,7 +83,7 @@ Submitting opens a pull request into `gitops-cluster-dev-tenants` at
 ```
 $ kubectl get nodejsapplication boarding-api -n app-boarding-api-cicd
 NAME           SYNCED   READY   COMPOSITION                          AGE
-boarding-api   True     True    nodejsapplications.catalog.idp.io    3m
+boarding-api   True     True    nodejsapplications.catalog.hangar.io    3m
 ```
 
 `kubectl describe` shows the two custom conditions this catalog adds:
@@ -328,7 +328,7 @@ cross-cluster credential is involved.
 ```
 $ kubectl get applicationenvironment -n app-boarding-api-cicd
 NAME                             SYNCED   READY   COMPOSITION                              AGE
-boarding-api-prod-staging   True     True    applicationenvironments.catalog.idp.io   2m
+boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m
 ```
 
 `kubectl describe` shows `ClusterReady: True` and `WorkloadDeployed: False`. The

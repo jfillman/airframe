@@ -20,11 +20,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: mongodbs.catalog.idp.io
+  name: mongodbs.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: MongoDB
     plural: mongodbs

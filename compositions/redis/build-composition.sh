@@ -38,10 +38,10 @@ cat > "$OUT" <<HEADER
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: redis.catalog.idp.io
+  name: redis.catalog.hangar.io
 spec:
   compositeTypeRef:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: catalog.hangar.io/v1alpha1
     kind: Redis
   mode: Pipeline
   pipeline:

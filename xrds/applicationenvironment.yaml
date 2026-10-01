@@ -42,14 +42,14 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: applicationenvironments.catalog.idp.io
+  name: applicationenvironments.catalog.hangar.io
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.appName }}/xr-requests"
     terasky.backstage.io/description: "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded."
     hangar.io/agent-summary: "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: ApplicationEnvironment
     plural: applicationenvironments

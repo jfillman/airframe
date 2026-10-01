@@ -22,10 +22,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: applicationenvironments.catalog.idp.io
+  name: applicationenvironments.catalog.hangar.io
 spec:
   compositeTypeRef:
-    apiVersion: catalog.idp.io/v1alpha1
+    apiVersion: catalog.hangar.io/v1alpha1
     kind: ApplicationEnvironment
   mode: Pipeline
   pipeline:
@@ -74,7 +74,7 @@ spec:
             # app-usage.yaml, which is all that actually matters) independent of
             # 00-cluster-gate.yaml's.
             #
-            # Phase C: the old catalog.idp.io group is retired, so only catalog.hangar.io is looked up (five
+            # Phase C: the old catalog.hangar.io group is retired, so only catalog.hangar.io is looked up (five
             # ExtraResources requirements, one per app kind). $appGroup is still threaded into app-usage.yaml's
             # of.apiVersion.
             <<- $spec := .observed.composite.resource.spec >>
@@ -251,7 +251,7 @@ spec:
             # file's header for why the hardcoded version broke SpringBootApplication envs).
             #
             # apiVersion is $appGroup (also from 00-app-kind-gate.yaml), not a hardcoded
-            # catalog.idp.io literal - Tier 2 domain rename (memory
+            # catalog.hangar.io literal - Tier 2 domain rename (memory
             # project_tier2_domain_rename_plan.md): apps migrate to catalog.hangar.io one at a
             # time, so this Usage must point at whichever group the real app currently lives
             # under, or deletion protection silently stops matching the moment that app
@@ -300,7 +300,7 @@ spec:
                   name: <<$appName>>
                   namespace: <<$xrNamespace>>
               by:
-                # The composite's OWN apiVersion, not a literal: this template is shared by the catalog.idp.io
+                # The composite's OWN apiVersion, not a literal: this template is shared by the catalog.hangar.io
                 # composition and its catalog.hangar.io twin (Tier 2 domain rename, memory
                 # project_tier2_domain_rename_plan.md). A hardcoded group here made the twin's Usage point `by` at an
                 # ApplicationEnvironment kind that does not exist under the twin's group.

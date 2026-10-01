@@ -23,11 +23,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: redis.catalog.idp.io
+  name: redis.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "A Redis cache or shared-counter store, dedicated to one application environment."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: Redis
     plural: redis

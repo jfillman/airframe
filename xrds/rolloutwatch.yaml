@@ -1,5 +1,5 @@
 # AI-triage redesign (2026-08-18) - Attached-tier XRD, same shape/conventions as
-# slos.catalog.idp.io (see that XRD's own header). Wraps function-rollout-watcher
+# slos.catalog.hangar.io (see that XRD's own header). Wraps function-rollout-watcher
 # (extracted from the ai-rollout prototype - see that function's own README for the
 # HolmesGPT redesign history).
 #
@@ -27,11 +27,11 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: rolloutwatches.catalog.idp.io
+  name: rolloutwatches.catalog.hangar.io
   annotations:
     hangar.io/agent-summary: "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: RolloutWatch
     plural: rolloutwatches

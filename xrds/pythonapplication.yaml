@@ -19,14 +19,14 @@
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
-  name: pythonapplications.catalog.idp.io
+  name: pythonapplications.catalog.hangar.io
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
     terasky.backstage.io/description: "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
     hangar.io/agent-summary: "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
 spec:
-  group: catalog.idp.io
+  group: catalog.hangar.io
   names:
     kind: PythonApplication
     plural: pythonapplications

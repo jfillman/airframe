@@ -12,7 +12,7 @@
 # target an upper-env cluster name. Paired with cluster-registry-ready.yaml
 # (--required-resources) for the gate-pass render; cluster-registry-not-ready.yaml
 # for the gate-fail one - see README.md.
-apiVersion: catalog.idp.io/v1alpha1
+apiVersion: catalog.hangar.io/v1alpha1
 kind: ApplicationEnvironment
 metadata:
   name: widget-service-kind-prod-staging

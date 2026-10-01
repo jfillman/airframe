@@ -1,7 +1,7 @@
 # function-dex
 
 Crossplane Composition Function (Python), SP-4 (M2). The sole pipeline step on the `Dex`
-XRD (`catalog.idp.io`, see [`../../xrds/dex.yaml`](../../xrds/dex.yaml) /
+XRD (`catalog.hangar.io`, see [`../../xrds/dex.yaml`](../../xrds/dex.yaml) /
 [`../../compositions/dex`](../../compositions/dex)):
 
 - **`mode: server`** renders the shared Dex OIDC Deployment/Service/ConfigMap/PVC/NetworkPolicy.

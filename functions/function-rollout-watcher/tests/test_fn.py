@@ -21,6 +21,7 @@ def make_req(  # noqa: PLR0913
     last_revision=None,
     last_job=None,
     last_time=None,
+    *,
     job_observed=False,
 ):
     status = {}
@@ -88,8 +89,10 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
         # A newly dispatched Job carries a real pod template.
         self.assertTrue(job["spec"]["template"]["spec"]["containers"])
         self.assertEqual(job["spec"]["template"]["spec"]["restartPolicy"], "Never")
+        # Ready so a Failed/finished Job does not pin the XR's Ready at False.
+        self.assertEqual(rsp.desired.resources[JOB_KEY].ready, fnv1.READY_TRUE)
 
-    async def test_degraded_same_revision_keeps_an_observed_job(self) -> None:
+    async def test_degraded_same_revision_redeclares_full_observed_job(self) -> None:
         req = make_req(
             "Degraded",
             last_revision="7466d56885",
@@ -100,14 +103,22 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
         rsp = await self.run_fn(req)
         self.assertIn(JOB_KEY, rsp.desired.resources)
         job = resource.struct_to_dict(rsp.desired.resources[JOB_KEY].resource)
-        # Bare identity only: no spec, so the immutable template is never re-submitted.
-        self.assertNotIn("spec", job)
+        # The FULL Job, never a spec-less identity: Crossplane's server-side apply
+        # removes owned
+        # fields a later apply omits, so a bare re-declaration strips
+        # spec.template.spec.containers
+        # and the apiserver rejects it (seen live on kiac-dev's flight-api-pr-9).
+        self.assertTrue(job["spec"]["template"]["spec"]["containers"])
+        self.assertEqual(rsp.desired.resources[JOB_KEY].ready, fnv1.READY_TRUE)
+        # Same name as the Job that was dispatched, so the apply targets it.
+        self.assertEqual(job["metadata"]["name"], "diagnosis-baggage-api-7466d56885")
 
     async def test_degraded_same_revision_does_not_redeclare_a_vanished_job(
         self,
     ) -> None:
         # The Job was dispatched long ago and has since been removed (TTL / GC).
-        # Re-declaring a spec-less Job would wedge the XR at "containers: Required value".
+        # Re-declaring a spec-less Job would wedge the XR at "containers: Required
+        # value".
         req = make_req(
             "Degraded",
             last_revision="7466d56885",
@@ -123,7 +134,8 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["rolloutPhase"], "Degraded")
 
     async def test_just_dispatched_job_is_kept_even_if_not_yet_observed(self) -> None:
-        # Crossplane prunes a composed resource the instant it stops being declared, so a
+        # Crossplane prunes a composed resource the instant it stops being declared, so
+        # a
         # lagging observed read right after dispatch must not delete a live Job.
         req = make_req(
             "Degraded",
@@ -187,7 +199,8 @@ class TestRecentlyDispatched(unittest.TestCase):
         naive = (
             datetime.datetime.now(datetime.UTC) - datetime.timedelta(seconds=5)
         ).replace(tzinfo=None)
-        self.assertTrue(fn.recently_dispatched({"lastDiagnosisTime": naive.isoformat()}))
+        stamp = {"lastDiagnosisTime": naive.isoformat()}
+        self.assertTrue(fn.recently_dispatched(stamp))
 
 
 if __name__ == "__main__":

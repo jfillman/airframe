@@ -1,0 +1,11 @@
+# crossplane render doesn't run the XRD's own OpenAPI defaulting - this spells out its defaults.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: LambdaFunction
+metadata:
+  name: resize-fn
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: nodejs22
+  region: us-east-1
+  visibility: private

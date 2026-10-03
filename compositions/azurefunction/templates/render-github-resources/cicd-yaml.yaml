@@ -1,0 +1,77 @@
+# Commits a minimal, real cicd.yaml into the function's own src repo: build, then deploy to the
+# existing Azure Container App that hosts the function app (deploy.target: azure-container-apps).
+#
+# Why azure-container-apps and not an azure-functions target: Azure Functions can be hosted
+# on Azure Container Apps, where the function app IS a Container App (kind functionapp), and
+# updating its image is `az containerapp update --image`, which Glidepath already does. ASSUMPTION,
+# not yet verified against a real subscription: that this update path works on a function app.
+#
+# build.platforms is amd64 only: the mcr.microsoft.com/azure-functions base images are published
+# for amd64 only, so Glidepath's default (amd64 + arm64) would fail the arm64 build.
+#
+# Like the Lambda starter: it never creates the Container Apps environment or the app, and it
+# declares no environments file (no Helm chart).
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $runtime := .observed.composite.resource.spec.runtime >>
+<<- $resourceGroup := .observed.composite.resource.spec.resourceGroup >>
+<<- $appName := .observed.composite.resource.spec.appName | default $xrName >>
+<<- $agent := "nodejs-20" >>
+<<- if eq $runtime "python3.12" >><<- $agent = "python-3.12" >><<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "src-repo-cicd-yaml">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:cicd.yaml:" $xrName) (index (.observed.resources | default dict) "src-repo-cicd-yaml" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: true
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+
+      build:
+        agent: <<$agent>>
+        platforms:
+          - amd64
+        unitTest:
+          enabled: false # no test script exists yet - add one, then flip this on
+
+      pipelines:
+        ci:
+          trigger:
+            source: git
+            event: push
+            branch: main
+          steps:
+            - stage: build
+            - stage: deploy
+              env: dev
+      deploy:
+        target: azure-container-apps
+        azureContainerApps:
+          resourceGroup: <<$resourceGroup>>
+          appName: <<$appName>>
+        lowerEnvironments:
+          - dev
+        upperEnvironments: []
+        strategy: rollout
+        promotionOrder:
+          - dev
+
+      secrets:
+        - name: azure-client-id
+        - name: azure-client-secret
+        - name: azure-tenant-id
+
+      notifications:
+        backstage:
+          enabled: true # build/deploy results show in Backstage and Tower
+    commitMessage: "AzureFunction scaffold: cicd.yaml (build + deploy-to-Container-Apps starter)"

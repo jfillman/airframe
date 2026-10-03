@@ -1,0 +1,396 @@
+# Src repo + boilerplate for a container-image Lambda function. Rendered by function-go-templating
+# (source: Inline), double-angle-bracket delimiters, same conventions as goapplication's src-repo.yaml (read its
+# header and the scaffold-file policy block below before changing anything).
+#
+# The boilerplate is one tiny handler per runtime, packaged on AWS's own Lambda base images
+# (public.ecr.aws/lambda/*), which bundle the Runtime Interface Emulator: `docker run -p 9000:8080`
+# then POST to /2015-03-31/functions/function/invocations runs the handler locally.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $description := $spec.description | default (printf "%s - an AWS Lambda function" $xrName) >>
+<<- $runtime := $spec.runtime >>
+<<- $region := $spec.region >>
+<<- $visibility := $spec.visibility >>
+<<- $platformOwner := "jfillman" >>
+<<- $rieFlag := "" >>
+<<- $rieArgs := "" >>
+<<- if eq $runtime "go" >><<- $rieFlag = "--entrypoint /usr/local/bin/aws-lambda-rie " >><<- $rieArgs = " ./main" >><<- end >>
+# ---------------------------------------------------------------------------
+# Scaffold files never delete or overwrite developer content, and never re-identify.
+# (Added 2026-09-23 after a real incident - read before changing anything here.)
+#
+# These RepositoryFile resources exist only to seed a brand-new app's repo. After the
+# first commit the file belongs to the developer. They used to be reconciled forever
+# with policies Create, Observe, LateInitialize, Delete and overwriteOnCreate true, which
+# had two real failure modes:
+#   1. A composition change to a field of an ALREADY-COMPOSED resource is a fleet-wide
+#      write even without an Update policy. The 2026-09-22 Dockerfile-to-Containerfile
+#      rename rewrote file: and external-name on every existing resource while the
+#      provider's Terraform state (and the repo) still said Dockerfile. file: is a
+#      force-replace field, so the provider could neither update nor settle, and
+#      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
+#      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
+#   2. Delete let a mis-observed 403 or a resource-name change remove a developer-owned
+#      file, and overwriteOnCreate true let a mis-observed 403 overwrite real content.
+#
+# Therefore: no Delete policy (deleting the Kubernetes object can never remove a file
+# from GitHub), overwriteOnCreate false, and the identity fields (file:, external-name)
+# of an EXISTING resource are pinned to what the provider itself reports it manages
+# (status.atProvider.file), falling back to the live spec, then to the template default.
+# The default therefore only ever applies to a resource that does not exist yet, so a
+# future change of the default can never re-identify a live object. A cluster rebuild
+# still adopts existing files: nothing is observed, external-name is set, Observe adopts.
+# Do NOT try to make these objects disappear after creation by rendering nothing: a
+# missing object looks identical to a brand-new one, so the next reconcile recreates it
+# (proved live on 2026-09-23 - an endless create/garbage-collect loop, ~800 GitHub calls
+# in 4 minutes). If retirement is ever wanted it needs a durable marker outside this
+# render, and a multi-pass test.
+# NOTE for editors: never write two adjacent angle-bracket characters in comments (see
+# the note further down) - this block deliberately avoids them.
+# ---------------------------------------------------------------------------
+<<- define "scaffoldFile" ->>
+<<- $f := "" ->>
+<<- if .obs ->>
+<<-   $f = dig "resource" "status" "atProvider" "file" "" .obs ->>
+<<-   if not $f ->><<- $f = dig "resource" "spec" "forProvider" "file" "" .obs ->><<- end ->>
+<<- end ->>
+<<- if $f ->><<- $f ->><<- else ->><<- .default ->><<- end ->>
+<<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: Repository
+metadata:
+  name: <<$xrName>>-src
+  annotations:
+    <<setResourceNameAnnotation "src-repo">>
+    crossplane.io/external-name: <<$xrName>>
+# managementPolicies (no "Delete"): deleting this XR must never delete the real GitHub repo.
+spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    name: <<$xrName>>
+    description: <<$description | toJson>>
+    visibility: <<$visibility>>
+    autoInit: true
+    hasIssues: true
+    deleteBranchOnMerge: true
+    securityAndAnalysis:
+      - secretScanning:
+          - status: disabled
+        secretScanningPushProtection:
+          - status: disabled
+---
+<<- if eq $runtime "nodejs22" >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-package-json
+  annotations:
+    <<setResourceNameAnnotation "src-repo-package-json">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:package.json:" $xrName) (index (.observed.resources | default dict) "src-repo-package-json" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: package.json
+    overwriteOnCreate: false
+    content: |
+      {
+        "name": "<<$xrName>>",
+        "version": "0.1.0",
+        "type": "module",
+        "main": "index.mjs"
+      }
+    commitMessage: "LambdaFunction scaffold: package.json"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-index-mjs
+  annotations:
+    <<setResourceNameAnnotation "src-repo-index-mjs">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:index.mjs:" $xrName) (index (.observed.resources | default dict) "src-repo-index-mjs" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: index.mjs
+    overwriteOnCreate: false
+    content: |
+      export const handler = async event => {
+        return {
+          statusCode: 200,
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ message: 'Hello from <<$xrName>>', path: event.rawPath ?? null }),
+        };
+      };
+    commitMessage: "LambdaFunction scaffold: index.mjs"
+---
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-dockerfile
+  annotations:
+    <<setResourceNameAnnotation "src-repo-dockerfile">>
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: <<$pinnedFile>>
+    overwriteOnCreate: false
+    content: |
+      FROM public.ecr.aws/lambda/nodejs:22
+      COPY package.json index.mjs ${LAMBDA_TASK_ROOT}/
+      CMD ["index.handler"]
+    commitMessage: "LambdaFunction scaffold: Containerfile"
+---
+<<- end >>
+<<- if eq $runtime "python3.13" >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-app-py
+  annotations:
+    <<setResourceNameAnnotation "src-repo-app-py">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:app.py:" $xrName) (index (.observed.resources | default dict) "src-repo-app-py" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: app.py
+    overwriteOnCreate: false
+    content: |
+      import json
+
+
+      def handler(event, context):
+          return {
+              "statusCode": 200,
+              "headers": {"content-type": "application/json"},
+              "body": json.dumps({"message": "Hello from <<$xrName>>", "path": event.get("rawPath")}),
+          }
+    commitMessage: "LambdaFunction scaffold: app.py"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-requirements
+  annotations:
+    <<setResourceNameAnnotation "src-repo-requirements">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:requirements.txt:" $xrName) (index (.observed.resources | default dict) "src-repo-requirements" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: requirements.txt
+    overwriteOnCreate: false
+    content: |
+      # runtime dependencies, one per line
+    commitMessage: "LambdaFunction scaffold: requirements.txt"
+---
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-dockerfile
+  annotations:
+    <<setResourceNameAnnotation "src-repo-dockerfile">>
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: <<$pinnedFile>>
+    overwriteOnCreate: false
+    content: |
+      FROM public.ecr.aws/lambda/python:3.13
+      COPY requirements.txt ${LAMBDA_TASK_ROOT}/
+      RUN pip install --no-cache-dir -r requirements.txt
+      COPY app.py ${LAMBDA_TASK_ROOT}/
+      CMD ["app.handler"]
+    commitMessage: "LambdaFunction scaffold: Containerfile"
+---
+<<- end >>
+<<- if eq $runtime "go" >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-go-mod
+  annotations:
+    <<setResourceNameAnnotation "src-repo-go-mod">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:go.mod:" $xrName) (index (.observed.resources | default dict) "src-repo-go-mod" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: go.mod
+    overwriteOnCreate: false
+    content: |
+      module github.com/<<$platformOwner>>/<<$xrName>>
+
+      go 1.24
+
+      require github.com/aws/aws-lambda-go v1.47.0
+    commitMessage: "LambdaFunction scaffold: go.mod"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-main-go
+  annotations:
+    <<setResourceNameAnnotation "src-repo-main-go">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:main.go:" $xrName) (index (.observed.resources | default dict) "src-repo-main-go" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: main.go
+    overwriteOnCreate: false
+    content: |
+      package main
+
+      import (
+      	"context"
+      	"encoding/json"
+
+      	"github.com/aws/aws-lambda-go/events"
+      	"github.com/aws/aws-lambda-go/lambda"
+      )
+
+      func handler(ctx context.Context, req events.LambdaFunctionURLRequest) (events.LambdaFunctionURLResponse, error) {
+      	body, _ := json.Marshal(map[string]string{"message": "Hello from <<$xrName>>", "path": req.RawPath})
+      	return events.LambdaFunctionURLResponse{
+      		StatusCode: 200,
+      		Headers:    map[string]string{"content-type": "application/json"},
+      		Body:       string(body),
+      	}, nil
+      }
+
+      func main() {
+      	lambda.Start(handler)
+      }
+    commitMessage: "LambdaFunction scaffold: main.go"
+---
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-dockerfile
+  annotations:
+    <<setResourceNameAnnotation "src-repo-dockerfile">>
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: <<$pinnedFile>>
+    overwriteOnCreate: false
+    content: |
+      FROM golang:1.24 AS build
+      WORKDIR /src
+      COPY go.mod main.go ./
+      RUN go mod tidy && CGO_ENABLED=0 go build -tags lambda.norpc -o /out/main .
+
+      FROM public.ecr.aws/lambda/provided:al2023
+      COPY --from=build /out/main ./main
+      ENTRYPOINT ["./main"]
+    commitMessage: "LambdaFunction scaffold: Containerfile"
+---
+<<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-gitignore
+  annotations:
+    <<setResourceNameAnnotation "src-repo-gitignore">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:.gitignore:" $xrName) (index (.observed.resources | default dict) "src-repo-gitignore" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: .gitignore
+    overwriteOnCreate: false
+    content: |
+      node_modules/
+      __pycache__/
+      /out
+      *.log
+      .env
+    commitMessage: "LambdaFunction scaffold: .gitignore"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-readme
+  annotations:
+    <<setResourceNameAnnotation "src-repo-readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:README.md:" $xrName) (index (.observed.resources | default dict) "src-repo-readme" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: README.md
+    overwriteOnCreate: false
+    content: |
+      # <<$xrName>>
+
+      <<$description>>
+
+      Scaffolded by `LambdaFunction` (Airframe). Runtime: `<<$runtime>>`. Region: `<<$region>>`.
+
+      Run it locally (the AWS Lambda base image bundles the Runtime Interface Emulator):
+
+      ```
+      container build -t <<$xrName>> -f Containerfile .
+      container run --rm <<$rieFlag>>-p 9000:8080 <<$xrName>><<$rieArgs>>
+      curl -s -XPOST http://localhost:9000/2015-03-31/functions/function/invocations -d '{}'
+      ```
+
+      **Deploys to an existing Lambda function.** Glidepath updates the function's container image
+      (`deploy.target: aws-lambda` in `cicd.yaml`); it never creates the function. Create the function
+      (package type `Image`), its execution role and its ECR repository first, then add
+      `aws-access-key-id` and `aws-secret-access-key` to this app's Infisical project.
+
+      **Known gap:** Lambda can only pull from Amazon ECR, and Glidepath currently pushes every image to
+      `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
+    commitMessage: "LambdaFunction scaffold: README.md"

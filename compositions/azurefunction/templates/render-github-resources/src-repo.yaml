@@ -1,0 +1,352 @@
+# Src repo + boilerplate for an Azure Functions app packaged as a container image. Double-angle-bracket delimiters,
+# same conventions as goapplication's src-repo.yaml (read its header and the policy block below).
+#
+# The Containerfiles follow Microsoft's documented images (mcr.microsoft.com/azure-functions/*),
+# programming models v4 (Node) and v2 (Python), one anonymous HTTP trigger.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $description := $spec.description | default (printf "%s - an Azure Functions app" $xrName) >>
+<<- $runtime := $spec.runtime >>
+<<- $visibility := $spec.visibility >>
+# ---------------------------------------------------------------------------
+# Scaffold files never delete or overwrite developer content, and never re-identify.
+# (Added 2026-09-23 after a real incident - read before changing anything here.)
+#
+# These RepositoryFile resources exist only to seed a brand-new app's repo. After the
+# first commit the file belongs to the developer. They used to be reconciled forever
+# with policies Create, Observe, LateInitialize, Delete and overwriteOnCreate true, which
+# had two real failure modes:
+#   1. A composition change to a field of an ALREADY-COMPOSED resource is a fleet-wide
+#      write even without an Update policy. The 2026-09-22 Dockerfile-to-Containerfile
+#      rename rewrote file: and external-name on every existing resource while the
+#      provider's Terraform state (and the repo) still said Dockerfile. file: is a
+#      force-replace field, so the provider could neither update nor settle, and
+#      crossplane-runtime retried at its 60s backoff cap ignoring --poll: 7 resources,
+#      roughly 16,000 GitHub calls/hour against a 5,000/hour budget shared with Backstage.
+#   2. Delete let a mis-observed 403 or a resource-name change remove a developer-owned
+#      file, and overwriteOnCreate true let a mis-observed 403 overwrite real content.
+#
+# Therefore: no Delete policy (deleting the Kubernetes object can never remove a file
+# from GitHub), overwriteOnCreate false, and the identity fields (file:, external-name)
+# of an EXISTING resource are pinned to what the provider itself reports it manages
+# (status.atProvider.file), falling back to the live spec, then to the template default.
+# The default therefore only ever applies to a resource that does not exist yet, so a
+# future change of the default can never re-identify a live object. A cluster rebuild
+# still adopts existing files: nothing is observed, external-name is set, Observe adopts.
+# Do NOT try to make these objects disappear after creation by rendering nothing: a
+# missing object looks identical to a brand-new one, so the next reconcile recreates it
+# (proved live on 2026-09-23 - an endless create/garbage-collect loop, ~800 GitHub calls
+# in 4 minutes). If retirement is ever wanted it needs a durable marker outside this
+# render, and a multi-pass test.
+# NOTE for editors: never write two adjacent angle-bracket characters in comments (see
+# the note further down) - this block deliberately avoids them.
+# ---------------------------------------------------------------------------
+<<- define "scaffoldFile" ->>
+<<- $f := "" ->>
+<<- if .obs ->>
+<<-   $f = dig "resource" "status" "atProvider" "file" "" .obs ->>
+<<-   if not $f ->><<- $f = dig "resource" "spec" "forProvider" "file" "" .obs ->><<- end ->>
+<<- end ->>
+<<- if $f ->><<- $f ->><<- else ->><<- .default ->><<- end ->>
+<<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: Repository
+metadata:
+  name: <<$xrName>>-src
+  annotations:
+    <<setResourceNameAnnotation "src-repo">>
+    crossplane.io/external-name: <<$xrName>>
+# managementPolicies (no "Delete"): deleting this XR must never delete the real GitHub repo.
+spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    name: <<$xrName>>
+    description: <<$description | toJson>>
+    visibility: <<$visibility>>
+    autoInit: true
+    hasIssues: true
+    deleteBranchOnMerge: true
+    securityAndAnalysis:
+      - secretScanning:
+          - status: disabled
+        secretScanningPushProtection:
+          - status: disabled
+---
+<<- if eq $runtime "nodejs20" >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-package-json
+  annotations:
+    <<setResourceNameAnnotation "src-repo-package-json">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:package.json:" $xrName) (index (.observed.resources | default dict) "src-repo-package-json" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: package.json
+    overwriteOnCreate: false
+    content: |
+      {
+        "name": "<<$xrName>>",
+        "version": "0.1.0",
+        "main": "src/functions/*.js",
+        "dependencies": {
+          "@azure/functions": "^4.0.0"
+        }
+      }
+    commitMessage: "AzureFunction scaffold: package.json"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-host-json
+  annotations:
+    <<setResourceNameAnnotation "src-repo-host-json">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:host.json:" $xrName) (index (.observed.resources | default dict) "src-repo-host-json" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: host.json
+    overwriteOnCreate: false
+    content: |
+      {
+        "version": "2.0",
+        "extensionBundle": {
+          "id": "Microsoft.Azure.Functions.ExtensionBundle",
+          "version": "[4.*, 5.0.0)"
+        }
+      }
+    commitMessage: "AzureFunction scaffold: host.json"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-hello-js
+  annotations:
+    <<setResourceNameAnnotation "src-repo-hello-js">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:src/functions/hello.js:" $xrName) (index (.observed.resources | default dict) "src-repo-hello-js" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: src/functions/hello.js
+    overwriteOnCreate: false
+    content: |
+      const { app } = require('@azure/functions');
+
+      app.http('hello', {
+        methods: ['GET'],
+        authLevel: 'anonymous',
+        handler: async (request, context) => {
+          return { jsonBody: { message: 'Hello from <<$xrName>>' } };
+        },
+      });
+    commitMessage: "AzureFunction scaffold: src/functions/hello.js"
+---
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-dockerfile
+  annotations:
+    <<setResourceNameAnnotation "src-repo-dockerfile">>
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: <<$pinnedFile>>
+    overwriteOnCreate: false
+    content: |
+      FROM mcr.microsoft.com/azure-functions/node:4-node20
+      ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
+          AzureFunctionsJobHost__Logging__Console__IsEnabled=true
+      WORKDIR /home/site/wwwroot
+      COPY package.json host.json ./
+      RUN npm install --omit=dev
+      COPY src ./src
+    commitMessage: "AzureFunction scaffold: Containerfile"
+---
+<<- end >>
+<<- if eq $runtime "python3.12" >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-host-json
+  annotations:
+    <<setResourceNameAnnotation "src-repo-host-json">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:host.json:" $xrName) (index (.observed.resources | default dict) "src-repo-host-json" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: host.json
+    overwriteOnCreate: false
+    content: |
+      {
+        "version": "2.0",
+        "extensionBundle": {
+          "id": "Microsoft.Azure.Functions.ExtensionBundle",
+          "version": "[4.*, 5.0.0)"
+        }
+      }
+    commitMessage: "AzureFunction scaffold: host.json"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-function-app
+  annotations:
+    <<setResourceNameAnnotation "src-repo-function-app">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:function_app.py:" $xrName) (index (.observed.resources | default dict) "src-repo-function-app" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: function_app.py
+    overwriteOnCreate: false
+    content: |
+      import azure.functions as func
+
+      app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+
+
+      @app.route(route="hello", methods=["GET"])
+      def hello(req: func.HttpRequest) -> func.HttpResponse:
+          return func.HttpResponse('{"message": "Hello from <<$xrName>>"}', mimetype="application/json")
+    commitMessage: "AzureFunction scaffold: function_app.py"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-requirements
+  annotations:
+    <<setResourceNameAnnotation "src-repo-requirements">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:requirements.txt:" $xrName) (index (.observed.resources | default dict) "src-repo-requirements" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: requirements.txt
+    overwriteOnCreate: false
+    content: |
+      azure-functions
+    commitMessage: "AzureFunction scaffold: requirements.txt"
+---
+<<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
+<<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-dockerfile
+  annotations:
+    <<setResourceNameAnnotation "src-repo-dockerfile">>
+    crossplane.io/external-name: "<<$dExt := printf "%s:%s:" $xrName $pinnedFile>><<$oExt := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $dExt (index (.observed.resources | default dict) "src-repo-dockerfile" | default dict)>><<if hasPrefix $dExt $oExt>><<$oExt>><<else>><<$dExt>><<end>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: <<$pinnedFile>>
+    overwriteOnCreate: false
+    content: |
+      FROM mcr.microsoft.com/azure-functions/python:4-python3.12
+      ENV AzureWebJobsScriptRoot=/home/site/wwwroot \
+          AzureFunctionsJobHost__Logging__Console__IsEnabled=true
+      COPY requirements.txt /
+      RUN pip install --no-cache-dir -r /requirements.txt
+      COPY host.json function_app.py /home/site/wwwroot/
+    commitMessage: "AzureFunction scaffold: Containerfile"
+---
+<<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-gitignore
+  annotations:
+    <<setResourceNameAnnotation "src-repo-gitignore">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:.gitignore:" $xrName) (index (.observed.resources | default dict) "src-repo-gitignore" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: .gitignore
+    overwriteOnCreate: false
+    content: |
+      node_modules/
+      __pycache__/
+      *.log
+      .env
+      local.settings.json
+    commitMessage: "AzureFunction scaffold: .gitignore"
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-readme
+  annotations:
+    <<setResourceNameAnnotation "src-repo-readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:README.md:" $xrName) (index (.observed.resources | default dict) "src-repo-readme" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: README.md
+    overwriteOnCreate: false
+    content: |
+      # <<$xrName>>
+
+      <<$description>>
+
+      Scaffolded by `AzureFunction` (Airframe). Runtime: `<<$runtime>>`.
+
+      Run it locally:
+
+      ```
+      container build -t <<$xrName>> -f Containerfile .
+      container run --rm -p 8080:80 <<$xrName>>
+      curl -s http://localhost:8080/api/hello
+      ```
+
+      **Deploys to an existing Azure Container App.** Glidepath updates the image of the Container App
+      that hosts this function app (`deploy.target: azure-container-apps` in `cicd.yaml`); it never
+      creates the Container Apps environment or the app. Create them first, then add `azure-client-id`,
+      `azure-client-secret` and `azure-tenant-id` to this app's Infisical project.
+
+      The image is built for amd64 only: Microsoft's Functions base images are not published for arm64.
+    commitMessage: "AzureFunction scaffold: README.md"

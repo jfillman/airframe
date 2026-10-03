@@ -14,6 +14,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## The model in five lines
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
+- **Function XRDs** (`LambdaFunction`, `AzureFunction`): a repo, CI/CD and a handler for a container-image function that Glidepath deploys to an existing AWS Lambda function or Azure Container App. No chart, no Ground/Flight environments. *Not usable end to end yet*: Glidepath cannot push to ECR (Lambda needs it), and neither deploy target has run against a real account.
 - **Ground** environment: `platform/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.

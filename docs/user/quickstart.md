@@ -167,7 +167,9 @@ anywhere.** Onboarding creates the app, its repos, and its pipeline; it does not
 create a Deployment. Environments are separate objects, added next. There are two
 places to configure them, matching the two tiers:
 
-- **Ground** — you edit `platform/envs/dev.yaml` yourself (section 06).
+- **Ground** — onboarding scaffolds `platform/envs/dev.yaml` and a build-then-deploy-to-`dev`
+  `cicd.yaml` for you; you only edit them to customize (section 06).
+  *(Apps onboarded before 2026-10-03 have neither and need the manual steps in section 06.)*
 - **Flight** — you use Tower's **App Configuration** tab (section 07). That tab
   edits `gitops-<app>/<cluster>/<env>/values.yaml` through pull requests, and it
   only lists **flight** environments — the ones your `cicd.yaml` declares under
@@ -179,16 +181,21 @@ places to configure them, matching the two tiers:
 A ground environment is two things: a file that creates the namespace, and a
 pipeline stage that puts an image in it.
 
-**Step 1 — declare the environment.** Create `platform/envs/dev.yaml` in the
-`boarding-api` repo:
+**Step 1 — declare the environment.** New apps already have this file: the
+onboarding PR adds `platform/envs/dev.yaml` (plus `platform/base.yaml` and
+`platform/pr-env.yaml`) for every environment in `deploy.lowerEnvironments`. For an app
+onboarded earlier, create `platform/envs/dev.yaml` in the `boarding-api` repo:
 
 ```yaml
 # envName, not env — env is a reserved key in the chart's container env-var list.
-# rollout: null must be explicit — omitting it makes the chart render its own
-# default rollout with an empty image (two InvalidImageName pods).
+# No workload renders until the release pipeline sets release.image, so this file
+# alone yields just the namespace.
 envName: dev
-rollout: null
 ```
+
+Do not copy another app's `platform/envs/*.release.yaml` — it is machine-owned, wins the
+merge over everything else, and pins that app's image (a copied one made `sky-marshall`
+run `boarding-api`'s container).
 
 A dev-cluster-only `ApplicationSet` (`boarding-api-lower-envs`) watches
 `platform/envs/*.yaml` in your repo. Within a sync interval you get an empty
@@ -485,9 +492,10 @@ the chart's own values, but no canary has been run with this app yet.
 - **Merge the `.tekton/` PR** — after creating the app, and again after every
   `cicd.yaml` change. No merge, no pipeline.
 - **Copy the demo code over the scaffold**, keep the scaffolded `Containerfile`.
-- **Nothing is deployed after onboarding.** Ground needs `platform/envs/dev.yaml`
-  plus a `deploy` stage; flight needs an `ApplicationEnvironment`, App
-  Configuration, and a `release` stage.
+- **Ground deploys itself after onboarding**: merge the onboarding PR(s) and the first push
+  builds and deploys to `dev` (the scaffold has both `platform/envs/dev.yaml` and a
+  `deploy` stage). Flight needs an `ApplicationEnvironment`, App Configuration, and a
+  `release` stage.
 - **App Configuration is flight-only**, and only lists envs declared in
   `deploy.upperEnvironments`.
 - **`envName`, never `env`**, as the environment's name key in

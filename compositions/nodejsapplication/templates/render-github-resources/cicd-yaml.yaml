@@ -1,4 +1,4 @@
-# Commits a minimal, real, build-only cicd.yaml into this app's own src repo -
+# Commits a minimal, real cicd.yaml (build, then deploy to dev) into this app's own src repo -
 # closes a real onboarding gap found live 2026-09-21: without this file,
 # glidepath's own tenant-onboarding ArgoCD Application always declares a source
 # reading $appsrc/cicd.yaml as a Helm valueFiles entry (see
@@ -19,6 +19,13 @@
 # boilerplate file in this directory (package.json/index.js/Containerfile/...) -
 # a developer is expected to add real test/deploy stages immediately; the
 # platform must never drift-correct that back to this stub.
+#
+# 2026-10-03 (found end-to-end on sky-marshall): the starter used to stop at build, so a
+# freshly onboarded app never reached "running healthy in dev" until a developer
+# hand-added a deploy stage, and it declared no notifications. It now deploys to dev
+# (Glidepath's onboarding scaffolds the matching platform/envs/dev.yaml) and turns the
+# Backstage notification channel on. No upper environments: those need a real
+# cluster/gitops decision, so adding one stays a deliberate step in Tower.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $nodeVersion := .observed.composite.resource.spec.nodeVersion >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
@@ -57,4 +64,17 @@ spec:
             branch: main
           steps:
             - stage: build
-    commitMessage: "NodeJSApplication scaffold: cicd.yaml (build-only starter)"
+            - stage: deploy
+              env: dev
+      deploy:
+        lowerEnvironments:
+          - dev
+        upperEnvironments: []
+        strategy: rollout
+        promotionOrder:
+          - dev
+
+      notifications:
+        backstage:
+          enabled: true # build/deploy results show in Backstage and Tower
+    commitMessage: "NodeJSApplication scaffold: cicd.yaml (build + deploy-to-dev starter)"

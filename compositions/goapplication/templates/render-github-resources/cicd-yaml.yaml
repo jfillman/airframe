@@ -1,4 +1,4 @@
-# Commits a minimal, real, build-only cicd.yaml into this app's own src repo -
+# Commits a minimal, real cicd.yaml (build, then deploy to dev) into this app's own src repo -
 # same fix, same reasoning, as nodejsapplication's own copy of this file (see
 # its header for the full write-up of the onboarding gap this closes).
 #
@@ -10,6 +10,13 @@
 # fixed "go-1.22" regardless of the version actually picked, to avoid
 # committing a cicd.yaml that would fail glidepath's own schema validation -
 # see this file's git history if that workaround needs to be understood.
+#
+# 2026-10-03 (found end-to-end on sky-marshall): the starter used to stop at build, so a
+# freshly onboarded app never reached "running healthy in dev" until a developer
+# hand-added a deploy stage, and it declared no notifications. It now deploys to dev
+# (Glidepath's onboarding scaffolds the matching platform/envs/dev.yaml) and turns the
+# Backstage notification channel on. No upper environments: those need a real
+# cluster/gitops decision, so adding one stays a deliberate step in Tower.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $goVersion := .observed.composite.resource.spec.goVersion >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
@@ -48,4 +55,17 @@ spec:
             branch: main
           steps:
             - stage: build
-    commitMessage: "GoApplication scaffold: cicd.yaml (build-only starter)"
+            - stage: deploy
+              env: dev
+      deploy:
+        lowerEnvironments:
+          - dev
+        upperEnvironments: []
+        strategy: rollout
+        promotionOrder:
+          - dev
+
+      notifications:
+        backstage:
+          enabled: true # build/deploy results show in Backstage and Tower
+    commitMessage: "GoApplication scaffold: cicd.yaml (build + deploy-to-dev starter)"

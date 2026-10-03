@@ -85,7 +85,7 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 15 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 17 and all(xrds.values())))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -1,0 +1,10 @@
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureFunction
+metadata:
+  name: thumb-fn
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: nodejs20
+  resourceGroup: glidepath-smoke
+  visibility: private

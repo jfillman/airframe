@@ -1,0 +1,78 @@
+# Commits a minimal, real cicd.yaml into the function's own src repo: build, then deploy to the
+# existing Lambda function (deploy.target: aws-lambda). Same mechanism as goapplication's copy.
+#
+# What the starter does NOT do, on purpose:
+#  - It never creates the Lambda function. Glidepath's aws-lambda target only updates an
+#    existing function's image (PackageType: Image). The function, its execution role and its
+#    ECR repository are created by the platform owner first. See xrds/lambdafunction.yaml.
+#  - It declares no environments file. A function has no Helm chart, so Glidepath's onboarding
+#    must not scaffold glidepath/envs/dev.yaml for it (see glidepath docs/admin/chart-contract.md).
+#
+# KNOWN GAP (found by reading glidepath's deliver-onboarding-files.yaml, not yet fixed): the
+# image repository is hardcoded to ghcr.io/<owner>/<app> at onboarding, and Lambda can only
+# pull from ECR. Until Glidepath can build and push to ECR, the deploy stage of this starter
+# stops at deploy-lambda's own "image-repo must be an ECR URI" error.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $runtime := .observed.composite.resource.spec.runtime >>
+<<- $region := .observed.composite.resource.spec.region >>
+<<- $functionName := .observed.composite.resource.spec.functionName | default $xrName >>
+<<- $agent := "nodejs-22" >>
+<<- if eq $runtime "python3.13" >><<- $agent = "python-3.13" >><<- end >>
+<<- if eq $runtime "go" >><<- $agent = "go-1.24" >><<- end >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-src-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "src-repo-cicd-yaml">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:cicd.yaml:" $xrName) (index (.observed.resources | default dict) "src-repo-cicd-yaml" | default dict)>>"
+spec:
+  # No "Delete": cicd.yaml is real developer config after scaffolding. A Tier 2 prune once
+  # destroyed it in 5 app repos through that policy.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: true
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+
+      build:
+        agent: <<$agent>>
+        unitTest:
+          enabled: false # no test script exists yet - add one, then flip this on
+
+      pipelines:
+        ci:
+          trigger:
+            source: git
+            event: push
+            branch: main
+          steps:
+            - stage: build
+            - stage: deploy
+              env: dev
+      deploy:
+        target: aws-lambda
+        lambda:
+          functionName: <<$functionName>>
+          region: <<$region>>
+        lowerEnvironments:
+          - dev
+        upperEnvironments: []
+        strategy: rollout
+        promotionOrder:
+          - dev
+
+      secrets:
+        - name: aws-access-key-id
+        - name: aws-secret-access-key
+
+      notifications:
+        backstage:
+          enabled: true # build/deploy results show in Backstage and Tower
+    commitMessage: "LambdaFunction scaffold: cicd.yaml (build + deploy-to-Lambda starter)"

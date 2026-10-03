@@ -1,0 +1,10 @@
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureFunction
+metadata:
+  name: thumb-py
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: python3.12
+  resourceGroup: glidepath-smoke
+  visibility: private

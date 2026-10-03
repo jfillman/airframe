@@ -596,6 +596,15 @@
       "group": "catalog.hangar.io",
       "plural": "applicationenvironments"
     },
+    "AzureFunction": {
+      "agentSummary": "Onboard a new Azure Functions app (container image) - creates its source repo with an HTTP function and CI/CD that deploys to an existing Container App.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 6,
+      "fieldsTotal": 7,
+      "file": "azurefunction.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "azurefunctions"
+    },
     "Dex": {
       "agentSummary": "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach).",
       "apiVersion": "catalog.hangar.io/v1alpha1",
@@ -622,6 +631,15 @@
       "file": "infraservice.yaml",
       "group": "catalog.hangar.io",
       "plural": "infraservices"
+    },
+    "LambdaFunction": {
+      "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 6,
+      "fieldsTotal": 7,
+      "file": "lambdafunction.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "lambdafunctions"
     },
     "MongoDB": {
       "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",

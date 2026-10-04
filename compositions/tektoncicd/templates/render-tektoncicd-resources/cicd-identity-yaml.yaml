@@ -64,7 +64,7 @@ spec:
       platformIdentity:
         appName: <<$xrName>>
         type: <<$spec.type>>
-        gitopsRepoUrl: <<$spec.gitopsRepoUrl>>
+        gitopsRepoUrl: <<$spec.gitopsRepoUrl | default "">>
         appRepoUrl: <<$spec.appRepoUrl>>
         githubOwner: <<$platformOwner>>
         catalogNamespace: platform-catalog

@@ -58,7 +58,6 @@ spec:
               type: object
               required:
                 - appName
-                - gitopsRepoUrl
                 - appRepoUrl
                 - devCluster
               properties:
@@ -111,7 +110,11 @@ spec:
                     Full URL of the app's gitops-<appName> repo, computed by the
                     parent XR the same way its own gitops-repo.yaml template does.
                     Passed in rather than recomputed here so this XRD stays
-                    agnostic to repo-naming convention.
+                    agnostic to repo-naming convention. Omit it for a service
+                    that has no gitops repo (a LambdaFunction or AzureFunction
+                    deploys straight to its cloud, with no release stage): the
+                    identity file then carries an empty value and Glidepath
+                    skips gitops delivery and registration.
                   minLength: 1
                 appRepoUrl:
                   type: string

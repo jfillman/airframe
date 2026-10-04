@@ -623,7 +623,6 @@ spec:
                 <<setResourceNameAnnotation "tektoncicd">>
             spec:
               appName: <<$xrName>>
-              gitopsRepoUrl: <<printf "https://github.com/%s/gitops-%s" $platformOwner $xrName>>
               appRepoUrl: <<printf "https://github.com/%s/%s" $platformOwner $xrName>>
               devCluster: <<$devCluster>>
             ---

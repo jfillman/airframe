@@ -73,6 +73,15 @@ spec:
                     Drives the boilerplate, the Containerfile's FROM and build.agent.
                   enum: ["nodejs22", "python3.13", "go"]
                   default: "nodejs22"
+                architecture:
+                  type: string
+                  description: >-
+                    CPU architecture of the existing Lambda function: arm64 or x86_64. Must match the
+                    function. The pipeline builds only this architecture (deploy-lambda copies the
+                    matching single-platform image and refuses a function it has no image for), which
+                    also avoids the amd64 build that runs under emulation on the arm64 build node.
+                  enum: ["arm64", "x86_64"]
+                  default: "arm64"
                 region:
                   type: string
                   description: AWS region of the function and its ECR repository.

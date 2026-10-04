@@ -635,8 +635,8 @@
     "LambdaFunction": {
       "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
-      "fieldsTotal": 7,
+      "fieldsDescribed": 7,
+      "fieldsTotal": 8,
       "file": "lambdafunction.yaml",
       "group": "catalog.hangar.io",
       "plural": "lambdafunctions"

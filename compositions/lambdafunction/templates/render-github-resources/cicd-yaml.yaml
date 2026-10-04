@@ -15,6 +15,9 @@
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $runtime := .observed.composite.resource.spec.runtime >>
 <<- $region := .observed.composite.resource.spec.region >>
+<<- $architecture := .observed.composite.resource.spec.architecture | default "arm64" >>
+<<- $platform := "arm64" >>
+<<- if eq $architecture "x86_64" >><<- $platform = "amd64" >><<- end >>
 <<- $functionName := .observed.composite.resource.spec.functionName | default $xrName >>
 <<- $agent := "nodejs-22" >>
 <<- if eq $runtime "python3.13" >><<- $agent = "python-3.13" >><<- end >>
@@ -43,6 +46,10 @@ spec:
 
       build:
         agent: <<$agent>>
+        # Only the function's own architecture: Lambda takes a single-platform image, and deploy-lambda
+        # copies the <tag>-<arch> one. Building the other would just run under emulation for nothing.
+        platforms:
+          - <<$platform>>
         unitTest:
           enabled: false # no test script exists yet - add one, then flip this on
 

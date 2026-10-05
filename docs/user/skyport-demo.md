@@ -117,7 +117,7 @@ artifacts, ask a human and spawn narrower runs. **None of them can apply a chang
 | Team | `irregular-ops-team` | A planner with researcher, drafter and checker workers, each narrower than its parent. |
 
 Definitions and their tests exist (`clearance/agents/skyport/`, six Preflight cases); the runtime that
-would run them (Clearance, the `AgentRun` claim, a model proxy) is not built yet. The design, the
+would run them (Clearance, the `AgentRun` XR, a model proxy) is not built yet. The design, the
 safety demonstrations (prompt injection, redelivered events, an over-broad spawn, a sandbox the dev
 cluster cannot provide) and the build order are in
 [hangar/docs/autopilot/skyport-ai-workloads.md](https://github.com/jfillman/hangar/blob/main/docs/autopilot/skyport-ai-workloads.md).

@@ -60,6 +60,13 @@ metadata:
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
     hangar.io/subcomponent: workload
+    {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.labels" "map" .Values.rollout.labels) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+  {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.annotations" "map" .Values.rollout.annotations) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 spec:
   replicas: {{ .Values.rollout.replicas }}
   selector:
@@ -69,7 +76,10 @@ spec:
     metadata:
       labels:
         {{- include "airframe-application.labels" . | nindent 8 }}
-      {{- if or .Values.configMaps .Values.secrets }}
+        {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.podLabels" "map" .Values.rollout.podLabels) }}
+        {{- . | nindent 8 }}
+        {{- end }}
+      {{- if or .Values.configMaps .Values.secrets .Values.rollout.podAnnotations }}
       annotations:
         {{- /* Forces a new pod template hash (and so a new Rollout revision) on a
         pure data-value edit that leaves the pod spec's own references (ConfigMap/
@@ -91,6 +101,9 @@ spec:
         {{- end }}
         {{- if .Values.secrets }}
         checksum/secrets: {{ include (print $.Template.BasePath "/config/external-secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.podAnnotations" "map" .Values.rollout.podAnnotations) }}
+        {{- . | nindent 8 }}
         {{- end }}
       {{- end }}
     spec:

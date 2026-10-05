@@ -445,3 +445,30 @@ Usage: {{ include "airframe-application.networkPolicyPorts" . }}
 {{- end -}}
 {{- $ports | toYaml -}}
 {{- end -}}
+
+{{/*
+airframe-application.userMeta - rollout.labels/annotations, rollout.podLabels/podAnnotations and
+rollout.serviceLabels/serviceAnnotations: extra metadata a developer sets on the objects this chart renders.
+Returns the map as YAML ("" when unset) and fails the render, naming the key, when it would override something the
+chart owns: any label the chart itself stamps (app.kubernetes.io/*, hangar.io/*, helm.sh/chart - the selector labels
+above all, which must never change), and the checksum/* pod annotations that force a new revision on a config change.
+Same "guard the chart-owned identity, let the developer have the rest" idiom as podSpec's containers guard, and failing
+beats silently ignoring or (worse) rendering a duplicate YAML key.
+Usage: {{ include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.podLabels" "map" .Values.rollout.podLabels) }}
+*/}}
+{{- define "airframe-application.userMeta" -}}
+{{- $root := .root -}}
+{{- if .map -}}
+{{- $reserved := include "airframe-application.labels" $root | fromYaml -}}
+{{- range $key, $_ := .map -}}
+{{- if eq $.kind "labels" -}}
+{{- if or (hasKey $reserved $key) (hasPrefix "hangar.io/" $key) (hasPrefix "app.kubernetes.io/" $key) (eq $key "helm.sh/chart") -}}
+{{- fail (printf "%s must not set '%s': the chart owns that label (app.kubernetes.io/*, hangar.io/* and helm.sh/chart are reserved)" $.field $key) -}}
+{{- end -}}
+{{- else if hasPrefix "checksum/" $key -}}
+{{- fail (printf "%s must not set '%s': checksum/* annotations are chart-owned (they roll the pods when a ConfigMap or Secret entry changes)" $.field $key) -}}
+{{- end -}}
+{{- end -}}
+{{- toYaml .map -}}
+{{- end -}}
+{{- end -}}

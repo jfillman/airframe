@@ -13,6 +13,13 @@ metadata:
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
     hangar.io/subcomponent: workload
+    {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.serviceLabels" "map" .Values.rollout.serviceLabels) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+  {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.serviceAnnotations" "map" .Values.rollout.serviceAnnotations) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 spec:
   selector:
     {{- include "airframe-application.selectorLabels" . | nindent 4 }}
@@ -32,6 +39,13 @@ metadata:
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
     hangar.io/subcomponent: workload
+    {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.serviceLabels" "map" .Values.rollout.serviceLabels) }}
+    {{- . | nindent 4 }}
+    {{- end }}
+  {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.serviceAnnotations" "map" .Values.rollout.serviceAnnotations) }}
+  annotations:
+    {{- . | nindent 4 }}
+  {{- end }}
 spec:
   selector:
     {{- include "airframe-application.selectorLabels" . | nindent 4 }}

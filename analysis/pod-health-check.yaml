@@ -1,0 +1,39 @@
+# Every pod of the app is Ready.
+#
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# referenced from an app's values with `clusterScope: true`:
+#
+#   rollout:
+#     canaryAnalysis:
+#       templates:
+#         - templateName: pod-health-check
+#           clusterScope: true
+#       args:
+#         - name: namespace
+#           value: app-<app>-<env>
+#         - name: app
+#           value: <app>
+#
+# Uses kube-state-metrics only. Passes while no pod of the app exists yet (a scale-to-zero or first deploy).
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterAnalysisTemplate
+metadata:
+  name: pod-health-check
+  labels:
+    app.kubernetes.io/part-of: airframe
+    hangar.io/analysis-catalog: "true"
+spec:
+  args:
+    - name: namespace
+    - name: app
+  metrics:
+    - name: pods-ready
+      interval: 30s
+      count: 6
+      failureLimit: 1
+      successCondition: "len(result) == 0 || result[0] >= 1"
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.observability:9090
+          query: |
+            min(kube_pod_status_ready{namespace="{{args.namespace}}", pod=~"{{args.app}}-.*", condition="true"}) or vector(1)

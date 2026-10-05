@@ -1,0 +1,47 @@
+# The share of 5xx responses stays under max-error-rate (default 0.05).
+#
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# referenced from an app's values with `clusterScope: true`:
+#
+#   rollout:
+#     canaryAnalysis:
+#       templates:
+#         - templateName: error-rate-check
+#           clusterScope: true
+#       args:
+#         - name: namespace
+#           value: app-<app>-<env>
+#         - name: app
+#           value: <app>
+#
+# NEEDS REQUEST METRICS: Traefik's traefik_service_requests_total scraped by Prometheus, which neither cluster has yet. Until then the query returns nothing and the check passes. `service-regex` narrows the Traefik `service` label if the default (namespace and app in the name) is not enough.
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterAnalysisTemplate
+metadata:
+  name: error-rate-check
+  labels:
+    app.kubernetes.io/part-of: airframe
+    hangar.io/analysis-catalog: "true"
+spec:
+  args:
+    - name: namespace
+    - name: app
+    - name: service-regex
+      value: "^$"
+    - name: max-error-rate
+      value: "0.05"
+    - name: min-success-rate
+      value: "0.95"
+    - name: max-p95-seconds
+      value: "0.5"
+  metrics:
+    - name: error-rate
+      interval: 30s
+      count: 6
+      failureLimit: 1
+      successCondition: "len(result) == 0 || isNaN(result[0]) || result[0] < {{args.max-error-rate}}"
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.observability:9090
+          query: |
+            sum(rate(traefik_service_requests_total{service=~".*{{args.namespace}}.*{{args.app}}.*|{{args.service-regex}}", code=~"5.."}[2m])) / sum(rate(traefik_service_requests_total{service=~".*{{args.namespace}}.*{{args.app}}.*|{{args.service-regex}}"}[2m]))

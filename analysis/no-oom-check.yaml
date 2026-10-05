@@ -1,0 +1,39 @@
+# No container of the app was OOM-killed.
+#
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# referenced from an app's values with `clusterScope: true`:
+#
+#   rollout:
+#     canaryAnalysis:
+#       templates:
+#         - templateName: no-oom-check
+#           clusterScope: true
+#       args:
+#         - name: namespace
+#           value: app-<app>-<env>
+#         - name: app
+#           value: <app>
+#
+# Uses kube-state-metrics only.
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterAnalysisTemplate
+metadata:
+  name: no-oom-check
+  labels:
+    app.kubernetes.io/part-of: airframe
+    hangar.io/analysis-catalog: "true"
+spec:
+  args:
+    - name: namespace
+    - name: app
+  metrics:
+    - name: no-oom
+      interval: 30s
+      count: 6
+      failureLimit: 0
+      successCondition: "len(result) == 0 || result[0] == 0"
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.observability:9090
+          query: |
+            sum(kube_pod_container_status_last_terminated_reason{namespace="{{args.namespace}}", pod=~"{{args.app}}-.*", reason="OOMKilled"}) or vector(0)

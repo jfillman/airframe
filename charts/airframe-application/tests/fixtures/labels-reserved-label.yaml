@@ -1,0 +1,6 @@
+appName: guard-test
+rollout:
+  image: {repository: registry.example/guard-test, tag: v1}
+  ports:
+    - {name: http, containerPort: 8080}
+  podLabels: {"app.kubernetes.io/name": "hijack"}

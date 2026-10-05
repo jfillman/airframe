@@ -106,6 +106,13 @@ response to "what else should be in v1 so we don't have to keep changing this
 chart" - not part of `service-catalog-design.md` §3's original schema at all,
 though `service-catalog-design.md` was updated with a pointer to this pass.
 
+- **Custom labels and annotations** - `rollout.labels`/`rollout.annotations` (the Rollout object),
+  `rollout.podLabels`/`rollout.podAnnotations` (the pod template, so every pod: Prometheus scrape hints, Vault or
+  Reloader settings, cost-allocation labels) and `rollout.serviceLabels`/`rollout.serviceAnnotations` (the Service, and
+  the `-preview` Service for blueGreen). Elsewhere: `namespace.labels/annotations`, `serviceAccount.annotations`,
+  `ingress.annotations`, `httpRoute.annotations`, `serviceMonitor.additionalLabels`. A label the chart owns
+  (`app.kubernetes.io/*`, `hangar.io/*`, `helm.sh/chart`: the selector labels above all) or a `checksum/*` pod annotation
+  fails the render naming the key. Changing a pod label or annotation rolls the pods like any pod template change.
 - **`serviceAccount`** - a dedicated per-app ServiceAccount (`serviceAccount.create:
   true`, name defaults to `appName`), referenced by every pod this chart renders.
   Added specifically *before* any real deployment exists, since it's the anchor

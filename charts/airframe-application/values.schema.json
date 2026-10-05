@@ -327,6 +327,54 @@
           "description": "Raw passthrough map, deep-merged last onto .spec.template.spec. NOT for containers[0] (use the curated fields above) or additional containers (use extraContainers).",
           "type": "object",
           "default": {}
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra labels on the Rollout object itself. Must not set a label the chart owns (app.kubernetes.io/*, hangar.io/*, helm.sh/chart): the render fails with the key named."
+        },
+        "annotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations on the Rollout object itself."
+        },
+        "podLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra labels on the pod template (so on every pod). Must not set a label the chart owns; the selector labels in particular can never change."
+        },
+        "podAnnotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations on the pod template (so on every pod), for example Prometheus scrape hints, Vault or Reloader settings. Changing one rolls the pods, like any pod template change. checksum/configmaps and checksum/secrets are chart-owned."
+        },
+        "serviceLabels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra labels on the Service (and the -preview Service for blueGreen). Must not set a label the chart owns."
+        },
+        "serviceAnnotations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "description": "Extra annotations on the Service (and the -preview Service for blueGreen)."
         }
       }
     },

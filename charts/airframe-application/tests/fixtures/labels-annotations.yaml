@@ -1,0 +1,17 @@
+appName: guard-test
+configMaps:
+  - name: app-config
+    data: {a: "1"}
+rollout:
+  image: {repository: registry.example/guard-test, tag: v1}
+  ports:
+    - {name: http, containerPort: 8080}
+  strategy: blueGreen
+  labels: {team: platform}
+  annotations: {owner: "ops@example.com"}
+  podLabels: {tier: backend}
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+  serviceLabels: {exposure: internal}
+  serviceAnnotations: {"example.com/lb": "internal"}

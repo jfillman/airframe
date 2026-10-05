@@ -76,4 +76,41 @@ $V --no-render tests/validate/secret-literal.yaml 2>&1 | grep -q AF-SECRET-001 |
 $V --no-render tests/validate/good-boarding-api-dev.yaml 2>&1 | grep -q "warn.*AF-COMP-003" || { echo "FAIL: AF-COMP-003 advisory did not fire on the boarding-api fixture"; fail=1; }
 $V --no-render --format json tests/validate/good-boarding-api-dev.yaml | python3 -c "import json,sys; json.load(sys.stdin)" || { echo "FAIL: --format json did not produce valid JSON"; fail=1; }
 
+# Extra labels and annotations (rollout.labels/annotations, podLabels/podAnnotations, serviceLabels/serviceAnnotations):
+# each lands on its own object, chart-owned labels and checksum annotations are reserved and fail the render naming the key,
+# and a values file that sets none renders exactly as before.
+out=$(helm template t . -f tests/fixtures/labels-annotations.yaml 2>&1)
+render_ok() { python3 -c "
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(sys.stdin.read()) if d]
+by = lambda kind, name=None: [d for d in docs if d['kind'] == kind and (name is None or d['metadata']['name'] == name)]
+ro = by('Rollout')[0]; svc = by('Service', 'guard-test')[0]; prev = by('Service', 'guard-test-preview')[0]
+tmpl = ro['spec']['template']['metadata']
+checks = {
+  'rollout labels': ro['metadata']['labels'].get('team') == 'platform',
+  'rollout annotations': ro['metadata'].get('annotations') == {'owner': 'ops@example.com'},
+  'pod labels': tmpl['labels'].get('tier') == 'backend',
+  'pod annotations': tmpl['annotations'].get('prometheus.io/scrape') == 'true' and tmpl['annotations'].get('prometheus.io/port') == '8080',
+  'checksum kept next to pod annotations': 'checksum/configmaps' in tmpl['annotations'],
+  'service labels': svc['metadata']['labels'].get('exposure') == 'internal',
+  'service annotations': svc['metadata'].get('annotations') == {'example.com/lb': 'internal'},
+  'preview service too': prev['metadata']['labels'].get('exposure') == 'internal' and prev['metadata'].get('annotations') == {'example.com/lb': 'internal'},
+  'selector untouched': ro['spec']['selector']['matchLabels'] == {'app.kubernetes.io/name': 'guard-test', 'app.kubernetes.io/instance': 't'},
+  'pod labels do not leak to the service': 'tier' not in svc['metadata']['labels'],
+}
+bad = [k for k, v in checks.items() if not v]
+print('; '.join(bad)); sys.exit(1 if bad else 0)
+"; }
+echo "$out" | render_ok || { echo "FAIL: extra labels/annotations ($(echo "$out" | render_ok 2>&1 | tail -1))"; fail=1; }
+helm template t . -f tests/fixtures/labels-reserved-label.yaml 2>&1 | grep -q "rollout.podLabels must not set 'app.kubernetes.io/name'" || { echo "FAIL: a reserved app.kubernetes.io label was accepted"; fail=1; }
+helm template t . -f tests/fixtures/labels-reserved-hangar.yaml 2>&1 | grep -q "rollout.labels must not set 'hangar.io/env'" || { echo "FAIL: a reserved hangar.io label was accepted"; fail=1; }
+helm template t . -f tests/fixtures/labels-reserved-checksum.yaml 2>&1 | grep -q "rollout.podAnnotations must not set 'checksum/secrets'" || { echo "FAIL: a chart-owned checksum annotation was accepted"; fail=1; }
+# No new fields set: the rendered objects have no annotations block they did not have before.
+helm template t . -f tests/fixtures/with-image.yaml | python3 -c "
+import sys, yaml
+for d in (x for x in yaml.safe_load_all(sys.stdin.read()) if x):
+    if d['kind'] in ('Rollout', 'Service'):
+        assert 'annotations' not in d['metadata'], d['kind']
+" || { echo "FAIL: an empty annotations block is rendered when none is set"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok" || exit 1

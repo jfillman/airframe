@@ -106,6 +106,23 @@ rollout:
   # Raw passthrough map, deep-merged last onto .spec.template.spec. NOT for containers[0] (use the
   # curated fields above) or additional containers (use extraContainers).
   podSpec: {}
+  # Extra labels on the Rollout object itself. Must not set a label the chart owns (app.kubernetes.io/*,
+  # hangar.io/*, helm.sh/chart): the render fails with the key named.
+  labels: {}
+  # Extra annotations on the Rollout object itself.
+  annotations: {}
+  # Extra labels on the pod template (so on every pod). Must not set a label the chart owns; the
+  # selector labels in particular can never change.
+  podLabels: {}
+  # Extra annotations on the pod template (so on every pod), for example Prometheus scrape hints, Vault
+  # or Reloader settings. Changing one rolls the pods, like any pod template change. checksum/configmaps
+  # and checksum/secrets are chart-owned.
+  podAnnotations: {}
+  # Extra labels on the Service (and the -preview Service for blueGreen). Must not set a label the chart
+  # owns.
+  serviceLabels: {}
+  # Extra annotations on the Service (and the -preview Service for blueGreen).
+  serviceAnnotations: {}
 
 # App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or
 # rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.

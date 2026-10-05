@@ -1,0 +1,39 @@
+# The kubelet's liveness and readiness probes of the app's pods succeed.
+#
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# referenced from an app's values with `clusterScope: true`:
+#
+#   rollout:
+#     canaryAnalysis:
+#       templates:
+#         - templateName: probe-success-check
+#           clusterScope: true
+#       args:
+#         - name: namespace
+#           value: app-<app>-<env>
+#         - name: app
+#           value: <app>
+#
+# Uses the kubelet's prober_probe_total (kiac-dev already scrapes it). Passes when no probe has run yet, so a first deploy is never blocked by it.
+apiVersion: argoproj.io/v1alpha1
+kind: ClusterAnalysisTemplate
+metadata:
+  name: probe-success-check
+  labels:
+    app.kubernetes.io/part-of: airframe
+    hangar.io/analysis-catalog: "true"
+spec:
+  args:
+    - name: namespace
+    - name: app
+  metrics:
+    - name: probe-success
+      interval: 30s
+      count: 6
+      failureLimit: 1
+      successCondition: "len(result) == 0 || isNaN(result[0]) || result[0] >= 0.95"
+      provider:
+        prometheus:
+          address: http://kube-prometheus-stack-prometheus.observability:9090
+          query: |
+            sum(rate(prober_probe_total{namespace="{{args.namespace}}", pod=~"{{args.app}}-.*", result="successful"}[2m])) / sum(rate(prober_probe_total{namespace="{{args.namespace}}", pod=~"{{args.app}}-.*"}[2m]))

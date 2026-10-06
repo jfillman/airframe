@@ -17,6 +17,8 @@ _helpers.tpl for why that's shared rather than copied three times, and for how
 configMaps:/secrets: `as: env|volume|both` map onto env vs envFrom vs volume mounts.
 */}}
 {{- if eq (include "airframe-application.hasRollout" .) "true" }}
+{{- $releaseId := "" }}
+{{- if .Values.releaseTracking }}{{- $releaseId = .Values.releaseTracking.releaseId | default "" }}{{- end }}
 {{- $image := include "airframe-application.image" . | fromYaml }}
 {{- $firstPort := index .Values.rollout.ports 0 }}
 {{- $defaultProbe := dict "httpGet" (dict "path" "/" "port" $firstPort.name) }}
@@ -60,12 +62,32 @@ metadata:
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
     hangar.io/subcomponent: workload
+    {{- if $releaseId }}
+    hangar.io/release-tracked: "true"
+    {{- end }}
     {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.labels" "map" .Values.rollout.labels) }}
     {{- . | nindent 4 }}
     {{- end }}
-  {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.annotations" "map" .Values.rollout.annotations) }}
+  {{- $userAnnotations := include "airframe-application.userMeta" (dict "root" $ "kind" "annotations" "field" "rollout.annotations" "map" .Values.rollout.annotations) }}
+  {{- if or $releaseId $userAnnotations }}
   annotations:
+    {{- if $releaseId }}
+    {{- /* ADR-0021 (glidepath): release identity for the Argo Rollouts notifications
+    engine, whose templates can read a Rollout's own metadata (Argo CD's cannot). On the
+    Rollout's metadata, never the pod template, so it can never force a new ReplicaSet.
+    The label above is what the cluster's notification subscription selects on. release-id
+    is "<chain-id>:<cluster>/<env>", written by glidepath's open-release-pr.yaml into
+    releaseTracking.releaseId; app-namespace is the dev-cluster Application namespace the
+    dev-side release record lives in. Nothing else rides here: the rest of a release's
+    context stays on dev, joined by release-id. */}}
+    hangar.io/release-id: {{ $releaseId | quote }}
+    {{- with $.Values.releaseTracking.appNamespace }}
+    hangar.io/app-namespace: {{ . | quote }}
+    {{- end }}
+    {{- end }}
+    {{- with $userAnnotations }}
     {{- . | nindent 4 }}
+    {{- end }}
   {{- end }}
 spec:
   replicas: {{ .Values.rollout.replicas }}

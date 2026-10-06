@@ -49,7 +49,9 @@ release:
 # Opaque escape hatch, deliberately excluded from the strictness rule: written whole-block by
 # platform-cicd's open-release-pr.yaml (relayUrl, chainId, flowStartTime, appNamespace, etc. - see
 # docs/user for the full field list), never hand-authored. Null when this env hasn't gone through a
-# release pipeline yet.
+# release pipeline yet. releaseTracking.releaseId (ADR-0021) is rendered onto the Rollout as the
+# hangar.io/release-id annotation, with a hangar.io/release-tracked label, for the Argo Rollouts
+# notifications engine.
 releaseTracking: null
 
 # Kubernetes ServiceAccount for every workload this chart renders.

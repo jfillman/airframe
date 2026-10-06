@@ -113,4 +113,21 @@ for d in (x for x in yaml.safe_load_all(sys.stdin.read()) if x):
         assert 'annotations' not in d['metadata'], d['kind']
 " || { echo "FAIL: an empty annotations block is rendered when none is set"; fail=1; }
 
+# ADR-0021: release identity on the Rollout's own metadata, only when releaseTracking.releaseId is set.
+ro() { helm template t . -f "tests/fixtures/$1.yaml" --show-only templates/workload/rollout.yaml 2>&1; }
+meta() { ro "$1" | awk '/^kind: Rollout/{f=1} f&&/^spec:/{exit} f'; }
+meta release-tracking-id | grep -q 'hangar.io/release-id: "chain1:kind-prod/staging"' || { echo "FAIL: release-id annotation missing"; fail=1; }
+meta release-tracking-id | grep -q 'hangar.io/app-namespace: "app-guard-test-cicd"' || { echo "FAIL: app-namespace annotation missing"; fail=1; }
+meta release-tracking-id | grep -q 'hangar.io/release-tracked: "true"' || { echo "FAIL: release-tracked label missing"; fail=1; }
+ro release-tracking-id | awk '/^  template:/{f=1} f' | grep -q 'hangar.io/release-id' && { echo "FAIL: release-id leaked into the pod template (would force a new ReplicaSet)"; fail=1; }
+helm template t . -f tests/fixtures/release-tracking-id-with-user-meta.yaml --show-only templates/workload/rollout.yaml | python3 -c "
+import sys, yaml
+m = yaml.safe_load(sys.stdin.read())['metadata']
+ok = (m['annotations'].get('hangar.io/release-id') == 'chain1:kind-prod/staging' and m['annotations'].get('owner') == 'sre'
+      and m['labels'].get('team') == 'payments' and m['labels'].get('hangar.io/release-tracked') == 'true')
+sys.exit(0 if ok else 1)" || { echo "FAIL: release identity and rollout.labels/annotations did not merge into one labels and one annotations block"; fail=1; }
+for fx in release-tracking-no-id release-image; do
+  meta "$fx" | grep -qE 'release-id|release-tracked' && { echo "FAIL: $fx rendered release identity without a releaseId"; fail=1; }
+done
+
 [ $fail -eq 0 ] && echo "ok" || exit 1

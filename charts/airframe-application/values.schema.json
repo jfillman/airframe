@@ -85,7 +85,7 @@
       }
     },
     "releaseTracking": {
-      "description": "Opaque escape hatch, deliberately excluded from the strictness rule: written whole-block by platform-cicd's open-release-pr.yaml (relayUrl, chainId, flowStartTime, appNamespace, etc. - see docs/user for the full field list), never hand-authored. Null when this env hasn't gone through a release pipeline yet. releaseTracking.releaseId (ADR-0021) is rendered onto the Rollout as the hangar.io/release-id annotation, with a hangar.io/release-tracked label, for the Argo Rollouts notifications engine.",
+      "description": "Opaque escape hatch, deliberately excluded from the strictness rule: written by glidepath's open-release-pr.yaml, never hand-authored. Null when this env hasn't gone through a release pipeline yet. Only releaseId and appNamespace are read (glidepath ADR-0021): releaseId is rendered onto the Rollout as the hangar.io/release-id annotation, with a hangar.io/release-tracked label, so the Argo Rollouts notifications engine can report the release; appNamespace is the dev-cluster namespace of the release record. Older release files also carry relayUrl, relayHostAliasIP, configJsonB64 and other fields for the removed hook Jobs; they are ignored. Setting releaseTracking on a release with no Rollout fails the render.",
       "type": [
         "object",
         "null"
@@ -146,7 +146,7 @@
     "platformSecretStore": {
       "type": "object",
       "additionalProperties": false,
-      "description": "This cluster's Infisical-backed ClusterSecretStore, used by the release-tracking relay token ExternalSecret.",
+      "description": "Unused since the release-tracking hook Jobs and their relay-token ExternalSecret were removed (glidepath ADR-0021 phase 3b); kept so existing env files that set it still validate.",
       "default": {
         "name": "platform-secret-store",
         "kind": "ClusterSecretStore"

@@ -1,0 +1,16 @@
+{{/*
+templates/release-tracking-guard.yaml - renders nothing; fails the render when release tracking is
+asked for on a release that has no Rollout (glidepath ADR-0021).
+
+Release events come from the Rollout: glidepath's relay turns the Rollouts notifications engine's
+facts into release events, joined by the hangar.io/release-id annotation on the Rollout
+(templates/workload/rollout.yaml). The PreSync/PostSync/SyncFail hook Jobs that used to report a
+release from any workload are gone (phase 3b), so a release with `releaseTracking` and no Rollout
+would silently report nothing at all. Failing loudly here is the point: an infra-type release
+(rollout: null) must not carry releaseTracking, and if one ever needs release events it needs the
+fallback ADR-0021 describes (Argo CD's on-deployed trigger joined by gitops revision), not a
+silent gap.
+*/}}
+{{- if and .Values.releaseTracking (ne (include "airframe-application.hasRollout" .) "true") }}
+{{- fail "releaseTracking is set but this release has no Rollout (rollout: null, or no release.image): release events come from the Rollout's facts, so nothing would be reported. Remove releaseTracking, or give the release a Rollout." }}
+{{- end }}

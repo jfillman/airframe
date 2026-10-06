@@ -3,6 +3,10 @@
 # Usage: charts/airframe-application/tests/run.sh
 set -u
 cd "$(dirname "$0")/.."
+# helm template takes its default namespace from the ambient kube context (found 2026-10-06: a
+# context set to app-gate-api-cicd made the fromComponent host assertion fail). The render must not
+# depend on whatever cluster the person running this happens to be pointed at.
+export KUBECONFIG=/dev/null
 fail=0
 
 kinds() { helm template t . -f "tests/fixtures/$1.yaml" 2>&1 | grep -E '^kind:|^Error' | sort -u | tr '\n' ' '; }
@@ -129,5 +133,12 @@ sys.exit(0 if ok else 1)" || { echo "FAIL: release identity and rollout.labels/a
 for fx in release-tracking-no-id release-image; do
   meta "$fx" | grep -qE 'release-id|release-tracked' && { echo "FAIL: $fx rendered release identity without a releaseId"; fail=1; }
 done
+
+# ADR-0021 phase 3b: the PreSync/PostSync/SyncFail hook Jobs are gone, and release tracking with no
+# Rollout fails the render instead of silently reporting nothing.
+helm template t . -f tests/fixtures/release-tracking-id.yaml | grep -q 'platform-outcome\|argocd.argoproj.io/hook' && { echo "FAIL: an outcome hook Job rendered"; fail=1; }
+out=$(helm template t . -f tests/fixtures/release-tracking-no-rollout.yaml 2>&1)
+echo "$out" | grep -q 'releaseTracking is set but this release has no Rollout' || { echo "FAIL: releaseTracking without a Rollout must fail the render"; fail=1; }
+helm template t . -f tests/fixtures/rollout-null.yaml >/dev/null 2>&1 || { echo "FAIL: a rollout-null release with no releaseTracking must still render"; fail=1; }
 
 [ $fail -eq 0 ] && echo "ok" || exit 1

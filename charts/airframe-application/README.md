@@ -374,26 +374,25 @@ not just successful apply:
   out and the new value landed in the running pods, not just that the annotation
   changed.
 
-## Release-tracking hooks (2026-08-17, sixth pass)
+## Release tracking (ADR-0021)
 
-`releaseTracking:` (see `values.yaml`) - two ArgoCD PostSync/SyncFail sync-hook
-Jobs, `templates/release-tracking/`, that report a confirmed release outcome back
-to platform-cicd's dev-cluster relay. Relocated here from platform-cicd's own
-per-release GitOps writer, which used to write a second, competing `Application`
-manifest for this - see `platform-cicd/docs/multi-cluster.md`'s 2026-08-16 note for
-why that raced idp's own ApplicationSet and had to be retired, and this chart's own
-`values.yaml` for the full mechanism. `platform-cicd/open-release-pr.yaml` is the
-only writer of this block; nothing in Airframe itself ever sets it.
+`releaseTracking:` is written by glidepath's `open-release-pr` and read for two fields:
+`releaseId` (rendered as the `hangar.io/release-id` annotation and a `hangar.io/release-tracked`
+label on the Rollout, never the pod template) and `appNamespace` (where the dev-side release
+record lives). The Argo Rollouts notifications engine reports the Rollout's phase to glidepath's
+relay, which joins it to the record by release-id; see glidepath's `docs/admin/release-state.md`.
 
-**Live-verified same day**, against the real `checkout-api` tenant on `kind-prod`, not
-just `helm template`: a real release wrote a real `releaseTracking:` block, both the
-`PostSync` and `SyncFail` Jobs this chart renders fired for real (confirmed via
-`kubectl get jobs`/pod logs, not inferred), and both reached platform-cicd's relay
-successfully (real `release-outcome-notify` PipelineRuns, a real Slack post, real DORA
-metric increments) - see `platform-cicd/docs/multi-cluster.md`'s "Live-verified end to
-end, 2026-08-17" section for the full account, including three unrelated `kind-prod`
-infra gaps found and fixed along the way (missing Argo Rollouts/ServiceMonitor CRDs, an
-undeployed relay, no private-registry pull credential).
+Until 2026-10-06 this chart also rendered three ArgoCD sync-hook Jobs (PreSync, PostSync,
+SyncFail) that reported a release from inside the sync, with a separate `airframe-identity`
+chart for their ServiceAccount and relay-token ExternalSecret. They are gone: a PostSync hook
+holds the sync operation open while a canary is paused, so a revert merged during a bad canary
+could not start syncing (measured, glidepath ADR-0021 phase 0), and PreSync was in the deploy
+path. Older `release.yaml` files still carry `relayUrl`, `relayHostAliasIP`, `configJsonB64` and
+other fields for them; they are ignored. `releaseTracking` on a release with no Rollout now fails
+the render (`templates/release-tracking-guard.yaml`) instead of silently reporting nothing.
+
+The notes below about the 2026-08-17 pass describe what was built and verified then, including
+the hook Jobs this chart no longer renders.
 
 **Two real bugs found and fixed during this pass**:
 

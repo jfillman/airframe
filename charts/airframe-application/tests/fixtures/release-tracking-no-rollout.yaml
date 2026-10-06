@@ -1,0 +1,7 @@
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout: null
+releaseTracking:
+  appNamespace: app-guard-test-cicd
+  releaseId: "chain1:kind-prod/staging"

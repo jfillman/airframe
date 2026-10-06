@@ -1,0 +1,9 @@
+appName: guard-test
+envName: staging
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+releaseTracking:
+  cluster: kind-prod
+  appNamespace: app-guard-test-cicd
+  chainId: chain1
+  releaseId: "chain1:kind-prod/staging"

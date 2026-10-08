@@ -10,6 +10,14 @@
 <<- $childConditions := index $childStatus "conditions" | default list >>
 <<- $devClusterCondition := dict >>
 <<- $cicdOnboardedCondition := dict >>
+<<- $target := .observed.composite.resource.spec.target | default dict >>
+<<- $targetRes := index $allObserved "aws-lambda-target" | default dict >>
+<<- $targetCondition := dict >>
+<<- range (dig "resource" "status" "conditions" list $targetRes) >>
+  <<- if eq .type "TargetReady" >>
+    <<- $targetCondition = . >>
+  <<- end >>
+<<- end >>
 <<- range $childConditions >>
   <<- if eq .type "DevClusterReady" >>
     <<- $devClusterCondition = . >>
@@ -49,4 +57,21 @@ conditions:
       Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
       its own CicdOnboarded condition - resolves itself once it does.
     target: CompositeAndClaim
+<<- end >>
+<<- if $target.enabled >>
+<<- if $targetCondition >>
+  - type: TargetReady
+    status: <<$targetCondition.status | toJson>>
+    reason: <<$targetCondition.reason>>
+    message: <<$targetCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: TargetReady
+    status: "False"
+    reason: TargetPending
+    message: >-
+      spec.target.enabled is set; waiting on the composed AwsLambdaTarget child (<<$xrName>>-target)
+      to report its own TargetReady condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>
 <<- end >>

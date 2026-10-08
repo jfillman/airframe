@@ -1,0 +1,12 @@
+# The bootstrap Job after it copied the placeholder image.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-fn-ecr-bootstrap
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: bootstrap-job
+status:
+  succeeded: 1
+  conditions:
+    - {type: Complete, status: "True"}

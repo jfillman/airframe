@@ -1,0 +1,69 @@
+# TargetReady (a closed reason set, see xrds/awslambdatarget.meta.yaml) plus the XR's own status
+# fields: everything an app or an agent needs to point a cicd.yaml at this target, including the
+# deploy block itself as text (status.cicd), without reading AWS. The composite document below
+# carries no composition-resource-name annotation, which is how function-go-templating knows it
+# updates the composite's status rather than composing a resource.
+<<- $xr := .observed.composite.resource >>
+<<- $xrName := $xr.metadata.name >>
+<<- $spec := $xr.spec >>
+<<- $functionName := $spec.functionName | default $xrName >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $architecture := $spec.architecture | default "arm64" >>
+<<- $wantUrl := true >>
+<<- if hasKey $spec "functionUrl" >><<- $wantUrl = $spec.functionUrl >><<- end >>
+<<- $obs := .observed.resources | default dict >>
+<<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" (index $obs "ecr-repository" | default dict) >>
+<<- $roleArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "iam-role" | default dict) >>
+<<- $jobObs := index $obs "bootstrap-job" | default dict >>
+<<- $jobSucceeded := int (dig "resource" "status" "succeeded" 0 $jobObs) >>
+<<- $jobFailed := int (dig "resource" "status" "failed" 0 $jobObs) >>
+<<- $fnObs := index $obs "lambda-function" | default dict >>
+<<- $fnReady := false >>
+<<- range (dig "resource" "status" "conditions" list $fnObs) >>
+  <<- if and (eq .type "Ready") (eq .status "True") >><<- $fnReady = true >><<- end >>
+<<- end >>
+<<- $functionUrl := dig "resource" "status" "atProvider" "functionUrl" "" (index $obs "function-url" | default dict) >>
+<<- $reason := "AwsLambdaTargetProvisioning" >>
+<<- $status := "False" >>
+<<- $message := "Waiting for the ECR repository and execution role to be observed (just created, or the AWS provider has no credentials yet)." >>
+<<- if and $fnReady (or (not $wantUrl) $functionUrl) >>
+  <<- $reason = "AwsLambdaTargetReady" >>
+  <<- $status = "True" >>
+  <<- $message = printf "Lambda function %s exists in %s with an ECR image; Glidepath can deploy to it (status.cicd has the deploy block)." $functionName $region >>
+<<- else if and $jobObs (ge $jobFailed 1) (lt $jobSucceeded 1) >>
+  <<- $reason = "AwsLambdaTargetBootstrapFailed" >>
+  <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (credentials in the %s Secret, network egress); delete the Job to retry." $xrName $repoUrl ($spec.credentialsSecret | default "app-secrets") >>
+<<- else if $repoUrl >>
+  <<- $reason = "AwsLambdaTargetBootstrapping" >>
+  <<- $message = printf "Copying the placeholder image into %s (Job %s-ecr-bootstrap); the function is created once that succeeds." $repoUrl $xrName >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: TargetReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: AwsLambdaTarget
+status:
+  functionName: <<$functionName>>
+  region: <<$region>>
+  architecture: <<$architecture>>
+  <<- if $repoUrl >>
+  repositoryUrl: <<$repoUrl>>
+  <<- end >>
+  <<- if $roleArn >>
+  roleArn: <<$roleArn>>
+  <<- end >>
+  <<- if $functionUrl >>
+  functionUrl: <<$functionUrl>>
+  <<- end >>
+  cicd: |
+    deploy:
+      target: aws-lambda
+      lambda:
+        functionName: <<$functionName>>
+        region: <<$region>>

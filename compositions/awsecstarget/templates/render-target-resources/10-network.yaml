@@ -1,0 +1,174 @@
+# network.mode: create (the default) - a dedicated, self-contained place for the task to run: one
+# VPC, one public subnet in one availability zone, an internet gateway, a default route and a
+# security group that opens containerPort to the internet. Deleting the XR removes all of it.
+# network.mode: existing renders nothing here; service.yaml uses the ids from spec instead.
+#
+# No egress rule is composed: AWS creates an allow-all egress rule on every new security group and
+# this provider does not manage inline rules, so that default stays (needed for the image pull).
+# If a task ever fails to pull with the security group as the cause, add a
+# SecurityGroupRule of type egress here - creating one while the default exists would fail as a
+# duplicate, which is why it is not done preemptively.
+<<- if eq $networkMode "create" >>
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: VPC
+metadata:
+  name: <<$xrName>>-vpc
+  annotations:
+    <<setResourceNameAnnotation "vpc">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    cidrBlock: <<$vpcCidr>>
+    enableDnsSupport: true
+    enableDnsHostnames: true
+    tags:
+      Name: <<$family>>
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Subnet
+metadata:
+  name: <<$xrName>>-subnet
+  annotations:
+    <<setResourceNameAnnotation "subnet">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    availabilityZone: <<$az>>
+    cidrBlock: <<$subnetCidr>>
+    mapPublicIpOnLaunch: true
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$family>>-public
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: InternetGateway
+metadata:
+  name: <<$xrName>>-igw
+  annotations:
+    <<setResourceNameAnnotation "internet-gateway">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$family>>
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTable
+metadata:
+  name: <<$xrName>>-rt
+  annotations:
+    <<setResourceNameAnnotation "route-table">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$family>>-public
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Route
+metadata:
+  name: <<$xrName>>-default-route
+  annotations:
+    <<setResourceNameAnnotation "route">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    destinationCidrBlock: 0.0.0.0/0
+    routeTableIdRef:
+      name: <<$xrName>>-rt
+    gatewayIdRef:
+      name: <<$xrName>>-igw
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTableAssociation
+metadata:
+  name: <<$xrName>>-rta
+  annotations:
+    <<setResourceNameAnnotation "route-table-association">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    routeTableIdRef:
+      name: <<$xrName>>-rt
+    subnetIdRef:
+      name: <<$xrName>>-subnet
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata:
+  name: <<$xrName>>-sg
+  annotations:
+    <<setResourceNameAnnotation "security-group">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    name: <<$family>>-ecs
+    description: <<printf "Fargate tasks of %s - containerPort open to the internet (Airframe AwsEcsTarget %s)" $family $xrName | toJson>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$family>>-ecs
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroupRule
+metadata:
+  name: <<$xrName>>-sg-ingress
+  annotations:
+    <<setResourceNameAnnotation "security-group-ingress">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    type: ingress
+    protocol: tcp
+    fromPort: <<$port | int>>
+    toPort: <<$port | int>>
+    cidrBlocks:
+      - 0.0.0.0/0
+    description: <<printf "%s containerPort" $family | toJson>>
+    securityGroupIdRef:
+      name: <<$xrName>>-sg
+<<- end >>

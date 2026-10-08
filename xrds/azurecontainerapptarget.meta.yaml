@@ -1,0 +1,28 @@
+# Sidecar meta for the AzureContainerAppTarget cloud target (AF-3/AF-6a conventions). Not a
+# `components:` entry, so no fromComponent outputs; the app-facing values are on the XR's own status.
+kind: AzureContainerAppTarget
+summary: >-
+  The minimum Azure infrastructure a container deploys into on Container Apps - a resource group,
+  a Container Apps environment and the app with public ingress, seeded with a placeholder image.
+  Disposable: delete the XR to remove all of it.
+# Not a component: nothing in a values.yaml references it, so it stays out of the chart's
+# fromComponent table and the contract's `components`; it is published under `targets` instead.
+component: false
+outputs: {}
+conditions:
+  - type: TargetReady
+    reasons:
+      - reason: AzureContainerAppTargetReady
+        status: "True"
+        meaning: The Container App exists with an ingress FQDN - Glidepath can deploy to it now.
+      - reason: AzureContainerAppTargetProvisioning
+        status: "False"
+        meaning: The resource group, environment or app has not been observed yet (just created, or the provider's credentials are not in place). Environments take a few minutes.
+verify:
+  - id: xr-ready
+    check: The AzureContainerAppTarget XR's TargetReady condition has reason AzureContainerAppTargetReady.
+  - id: app-running
+    check: az containerapp show --name {appName} --resource-group {resourceGroup} reports properties.runningStatus Running.
+  - id: url-answers
+    check: An HTTP GET of status.url returns a response (the Azure Functions placeholder serves its landing page).
+owner: human

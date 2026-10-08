@@ -1,0 +1,51 @@
+# TargetReady (closed reason set, see xrds/azurecontainerapptarget.meta.yaml) plus the XR's own
+# status: the names Glidepath's deploy.azureContainerApps block needs, the deploy block itself as
+# text (status.cicd) and the public URL. The composite document carries no
+# composition-resource-name annotation, so function-go-templating updates the composite's status.
+<<- $xr := .observed.composite.resource >>
+<<- $xrName := $xr.metadata.name >>
+<<- $spec := $xr.spec >>
+<<- $appName := $spec.appName | default $xrName >>
+<<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $appName) >>
+<<- $location := $spec.location | default "eastus" >>
+<<- $obs := .observed.resources | default dict >>
+<<- $appObs := index $obs "container-app" | default dict >>
+<<- $appReady := false >>
+<<- range (dig "resource" "status" "conditions" list $appObs) >>
+  <<- if and (eq .type "Ready") (eq .status "True") >><<- $appReady = true >><<- end >>
+<<- end >>
+<<- $fqdn := dig "resource" "status" "atProvider" "ingress" "fqdn" "" $appObs >>
+<<- if not $fqdn >><<- $fqdn = dig "resource" "status" "atProvider" "latestRevisionFqdn" "" $appObs >><<- end >>
+<<- $reason := "AzureContainerAppTargetProvisioning" >>
+<<- $status := "False" >>
+<<- $message := printf "Waiting for resource group %s, its Container Apps environment and the app %s to be observed (environments take a few minutes; or the Azure provider has no credentials yet)." $resourceGroup $appName >>
+<<- if and $appReady $fqdn >>
+  <<- $reason = "AzureContainerAppTargetReady" >>
+  <<- $status = "True" >>
+  <<- $message = printf "Container App %s in %s answers at https://%s; Glidepath can deploy to it (status.cicd has the deploy block)." $appName $resourceGroup $fqdn >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: TargetReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: AzureContainerAppTarget
+status:
+  appName: <<$appName>>
+  resourceGroup: <<$resourceGroup>>
+  location: <<$location>>
+  environment: <<$xrName>>-env
+  <<- if $fqdn >>
+  url: https://<<$fqdn>>
+  <<- end >>
+  cicd: |
+    deploy:
+      target: azure-container-apps
+      azureContainerApps:
+        resourceGroup: <<$resourceGroup>>
+        appName: <<$appName>>

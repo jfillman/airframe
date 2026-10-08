@@ -1,0 +1,25 @@
+# Everything observed and Ready - the steady state.
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: Cluster
+metadata: {name: smoke-ecs-cluster, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: ecs-cluster}}
+status: {conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: TaskDefinition
+metadata: {name: smoke-ecs-taskdef, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: task-definition}}
+status: {conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: Service
+metadata: {name: smoke-ecs-service, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: ecs-service}}
+status: {conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Subnet
+metadata: {name: smoke-ecs-subnet, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: subnet}}
+status: {atProvider: {id: subnet-0aaaaaaaaaaaaaaaa}, conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata: {name: smoke-ecs-sg, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: security-group}}
+status: {atProvider: {id: sg-0bbbbbbbbbbbbbbbb}, conditions: [{type: Ready, status: "True"}]}

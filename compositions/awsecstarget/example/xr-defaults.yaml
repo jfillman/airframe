@@ -1,0 +1,12 @@
+# The ECS target for a smoke-ecs app in dev: cluster smoke-ecs, service and task-definition family
+# smoke-ecs-dev, container smoke-ecs on port 8080, arm64 Fargate, a dedicated public network.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsEcsTarget
+metadata:
+  name: smoke-ecs
+  namespace: app-smoke-ecs-cicd
+spec:
+  appName: smoke-ecs
+  env: dev
+  region: us-east-1
+  architecture: arm64

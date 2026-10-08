@@ -1,0 +1,84 @@
+# TargetReady (closed reason set, see xrds/awsecstarget.meta.yaml) plus the XR's own status: the
+# names Glidepath's deploy.ecs block needs, the deploy block itself as text (status.cicd), and the
+# subnet/security-group ids a smoke test needs to find the task's public IP. The composite document
+# carries no composition-resource-name annotation, so function-go-templating updates the composite's
+# status instead of composing a resource.
+<<- $xr := .observed.composite.resource >>
+<<- $xrName := $xr.metadata.name >>
+<<- $spec := $xr.spec >>
+<<- $appName := $spec.appName | default $xrName >>
+<<- $env := $spec.env | default "dev" >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $port := $spec.containerPort | default 8080 >>
+<<- $family := printf "%s-%s" $appName $env >>
+<<- $network := $spec.network | default dict >>
+<<- $networkMode := $network.mode | default "create" >>
+<<- $obs := .observed.resources | default dict >>
+<<- $ready := dict >>
+<<- range $name := list "task-definition" "ecs-service" "ecs-cluster" >>
+  <<- $isReady := false >>
+  <<- range (dig "resource" "status" "conditions" list (index $obs $name | default dict)) >>
+    <<- if and (eq .type "Ready") (eq .status "True") >><<- $isReady = true >><<- end >>
+  <<- end >>
+  <<- $_ := set $ready $name $isReady >>
+<<- end >>
+<<- $subnetIds := list >>
+<<- $sgIds := list >>
+<<- if eq $networkMode "create" >>
+  <<- $sid := dig "resource" "status" "atProvider" "id" "" (index $obs "subnet" | default dict) >>
+  <<- if $sid >><<- $subnetIds = list $sid >><<- end >>
+  <<- $gid := dig "resource" "status" "atProvider" "id" "" (index $obs "security-group" | default dict) >>
+  <<- if $gid >><<- $sgIds = list $gid >><<- end >>
+<<- else >>
+  <<- $subnetIds = $network.subnetIds | default list >>
+  <<- $sgIds = $network.securityGroupIds | default list >>
+<<- end >>
+<<- $reason := "AwsEcsTargetProvisioning" >>
+<<- $status := "False" >>
+<<- $message := "Waiting for the network, execution role, cluster and task definition to be observed (just created, or the AWS provider has no credentials yet)." >>
+<<- if index $ready "ecs-service" >>
+  <<- $reason = "AwsEcsTargetReady" >>
+  <<- $status = "True" >>
+  <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $appName $region $family >>
+<<- else if and (index $ready "task-definition") (index $ready "ecs-cluster") >>
+  <<- $reason = "AwsEcsTargetServicePending" >>
+  <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service to report ready." $appName $family >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: TargetReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: AwsEcsTarget
+status:
+  cluster: <<$appName>>
+  service: <<$family>>
+  taskDefinitionFamily: <<$family>>
+  containerName: <<$appName>>
+  region: <<$region>>
+  containerPort: <<$port | int>>
+  <<- if $subnetIds >>
+  subnetIds:
+    <<- range $subnetIds >>
+    - <<. | quote>>
+    <<- end >>
+  <<- end >>
+  <<- if $sgIds >>
+  securityGroupIds:
+    <<- range $sgIds >>
+    - <<. | quote>>
+    <<- end >>
+  <<- end >>
+  cicd: |
+    deploy:
+      target: aws-ecs
+      ecs:
+        cluster: <<$appName>>
+        service: <<$family>>
+        containerName: <<$appName>>
+        region: <<$region>>

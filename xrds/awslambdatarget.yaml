@@ -1,0 +1,142 @@
+# Cloud-target XRD (2026-10-08): the minimum AWS infrastructure Glidepath's `deploy.target:
+# aws-lambda` needs to exist BEFORE a LambdaFunction app can deploy - the pieces the catalog
+# essay's "bring your own, today" box lists as "created by hand, before onboarding": an ECR
+# repository, an execution role and a Lambda function already pointing at an image in that
+# repository (deploy-lambda.yaml reads the function's CURRENT image to find the repository it
+# copies the new build into, so the function must exist with an ECR image from the start).
+# Plus a public Function URL, so a smoke test can curl the deployed function.
+#
+# Stand-alone and disposable by design: create one to stand the target up, delete it to tear
+# everything down (the ECR repository is force-deleted with its images). It is NOT composed by
+# the LambdaFunction app XRD - an app is onboarded once, a target is stood up at will. Request it
+# the same way as every other XR, a manifest in tenants/<app>/xr-requests/, in the app's own
+# app-<app>-cicd namespace: the bootstrap Job below mounts that namespace's `app-secrets` for
+# the AWS credentials, the same keys Glidepath's deploy-lambda step already requires.
+#
+# The one non-declarative piece: Lambda refuses to create an image-packaged function until an
+# image exists in the repository, and no provider can push one. So the Composition runs a
+# Kubernetes Job (aws-cli login + crane copy) that copies a public Lambda base image for the
+# chosen runtime into the new repository under the tag `bootstrap`, and renders the Function
+# only once that Job has succeeded. Glidepath replaces the image on the first real deploy; the
+# Function is composed WITHOUT the Update management policy so that deploy is never reverted.
+#
+# apiextensions.crossplane.io/v2, scope: Namespaced - matches every other XRD in this catalog.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: awslambdatargets.catalog.hangar.io
+  annotations:
+    terasky.backstage.io/add-to-catalog: "true"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda."
+    hangar.io/agent-summary: "Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda."
+spec:
+  group: catalog.hangar.io
+  names:
+    kind: AwsLambdaTarget
+    plural: awslambdatargets
+    singular: awslambdatarget
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                functionName:
+                  type: string
+                  description: >-
+                    Name of the Lambda function to create, and of its ECR repository. Defaults to
+                    this XR's own name. This is the value the app's cicd.yaml must carry in
+                    deploy.lambda.functionName (the XR's status repeats the whole deploy block to
+                    paste). Lambda names are unique per account and region.
+                  pattern: '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$'
+                region:
+                  type: string
+                  description: AWS region for every resource here. Must equal deploy.lambda.region in the app's cicd.yaml.
+                  pattern: '^[a-z]{2}(-[a-z]+)+-[0-9]$'
+                  default: us-east-1
+                architecture:
+                  type: string
+                  description: >-
+                    CPU architecture of the function: arm64 or x86_64. Must match the LambdaFunction
+                    app's own spec.architecture (Glidepath builds only that platform and deploy-lambda
+                    refuses a function it has no image for). The bootstrap image is copied for this
+                    platform only, since Lambda does not accept multi-architecture image indexes.
+                  enum: [arm64, x86_64]
+                  default: arm64
+                runtime:
+                  type: string
+                  description: >-
+                    Which public AWS Lambda base image seeds the repository before the first real
+                    deploy - nodejs22 (public.ecr.aws/lambda/nodejs:22), python3.13
+                    (lambda/python:3.13) or go (lambda/provided:al2023). Only the placeholder; the
+                    app's own Containerfile decides what actually runs after the first deploy.
+                    Match the LambdaFunction app's spec.runtime.
+                  enum: [nodejs22, python3.13, go]
+                  default: nodejs22
+                memorySize:
+                  type: integer
+                  description: Function memory in MB (Lambda allows 128 to 10240).
+                  minimum: 128
+                  maximum: 10240
+                  default: 256
+                timeout:
+                  type: integer
+                  description: Function timeout in seconds (Lambda allows 1 to 900).
+                  minimum: 1
+                  maximum: 900
+                  default: 10
+                functionUrl:
+                  type: boolean
+                  description: >-
+                    Create a public Lambda Function URL (auth type NONE, plus the resource policy
+                    that allows anonymous invocation) so the deployed function can be reached with
+                    curl. The URL is published in status.functionUrl. Set false for a function that
+                    is only ever invoked by another AWS service.
+                  default: true
+                credentialsSecret:
+                  type: string
+                  description: >-
+                    Name of a Secret in this XR's namespace holding the AWS credentials the bootstrap
+                    Job uses to push the placeholder image into ECR, under the keys
+                    aws-access-key-id and aws-secret-access-key - the same keys Glidepath's own
+                    deploy-lambda step reads from app-secrets. Defaults to app-secrets, which exists
+                    in every app-<app>-cicd namespace whose cicd.yaml lists those two secrets. These
+                    credentials are only used by that Job; the Crossplane-managed resources use the
+                    provider's own ClusterProviderConfig.
+                  minLength: 1
+                  default: app-secrets
+            status:
+              type: object
+              description: >-
+                Published by the Composition once the pieces exist - everything an app or an agent
+                needs to point a cicd.yaml at this target, without reading AWS.
+              properties:
+                functionName:
+                  type: string
+                  description: The function's name (deploy.lambda.functionName).
+                region:
+                  type: string
+                  description: The region (deploy.lambda.region).
+                architecture:
+                  type: string
+                  description: The function's architecture - the platform the app must build.
+                repositoryUrl:
+                  type: string
+                  description: The ECR repository URL deploy-lambda copies each build into.
+                functionUrl:
+                  type: string
+                  description: The public Function URL, when spec.functionUrl is true and the URL exists.
+                roleArn:
+                  type: string
+                  description: The execution role's ARN.
+                cicd:
+                  type: string
+                  description: The cicd.yaml deploy block, ready to paste, that targets this function.
+          required: ["spec"]

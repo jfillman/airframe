@@ -1,0 +1,31 @@
+# Sidecar meta for the AwsEcsTarget cloud target (AF-3/AF-6a conventions). Not a `components:`
+# entry, so no fromComponent outputs; the app-facing values are on the XR's own status.
+kind: AwsEcsTarget
+summary: >-
+  The minimum AWS infrastructure a container deploys into on ECS Fargate - cluster, task
+  definition, service, execution role and, by default, a small dedicated public network.
+  Disposable: delete the XR to remove all of it.
+# Not a component: nothing in a values.yaml references it, so it stays out of the chart's
+# fromComponent table and the contract's `components`; it is published under `targets` instead.
+component: false
+outputs: {}
+conditions:
+  - type: TargetReady
+    reasons:
+      - reason: AwsEcsTargetReady
+        status: "True"
+        meaning: The service exists on the cluster with its first task-definition revision - Glidepath can deploy to it now.
+      - reason: AwsEcsTargetProvisioning
+        status: "False"
+        meaning: The network, role, cluster or task definition has not been observed yet (just created, or the provider's credentials are not in place).
+      - reason: AwsEcsTargetServicePending
+        status: "False"
+        meaning: Everything up to the task definition exists; the service has not reported ready yet.
+verify:
+  - id: xr-ready
+    check: The AwsEcsTarget XR's TargetReady condition has reason AwsEcsTargetReady.
+  - id: service-stable
+    check: aws ecs describe-services --cluster {cluster} --services {service} reports runningCount == desiredCount.
+  - id: port-answers
+    check: An HTTP GET of http://<task public IP>:{containerPort}/ (the IP from aws ecs describe-tasks and describe-network-interfaces) returns a response.
+owner: human

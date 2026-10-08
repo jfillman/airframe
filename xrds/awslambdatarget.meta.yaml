@@ -1,0 +1,35 @@
+# Sidecar meta for the AwsLambdaTarget cloud target (AF-3/AF-6a conventions). Not a `components:`
+# entry - a target is requested as its own XR - so there are no fromComponent outputs; what an app
+# needs is published on the XR's own status (status.cicd is the deploy block to paste).
+kind: AwsLambdaTarget
+summary: >-
+  The minimum AWS infrastructure a container-image Lambda function deploys into - ECR repository,
+  execution role, the function itself seeded with a public base image, and a public Function URL.
+  Disposable: delete the XR to remove all of it.
+# Not a component: nothing in a values.yaml references it, so it stays out of the chart's
+# fromComponent table and the contract's `components`; it is published under `targets` instead.
+component: false
+outputs: {}
+conditions:
+  - type: TargetReady
+    reasons:
+      - reason: AwsLambdaTargetReady
+        status: "True"
+        meaning: The function exists in ECR-backed form and (when enabled) its Function URL is live - Glidepath can deploy to it now.
+      - reason: AwsLambdaTargetProvisioning
+        status: "False"
+        meaning: The ECR repository or execution role has not been observed yet (just created, or the provider's credentials are not in place).
+      - reason: AwsLambdaTargetBootstrapping
+        status: "False"
+        meaning: The bootstrap Job is copying the placeholder image into the repository (or waiting for the credentials Secret to exist - its pod stays Pending until then); the function is rendered once it succeeds.
+      - reason: AwsLambdaTargetBootstrapFailed
+        status: "False"
+        meaning: The bootstrap Job failed (bad credentials in the credentialsSecret, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.
+verify:
+  - id: xr-ready
+    check: The AwsLambdaTarget XR's TargetReady condition has reason AwsLambdaTargetReady.
+  - id: function-exists
+    check: aws lambda get-function --function-name {functionName} reports PackageType Image and an ECR image URI.
+  - id: url-answers
+    check: An HTTP GET of status.functionUrl returns a response from the function (any status code; the placeholder returns an error until the first deploy).
+owner: human

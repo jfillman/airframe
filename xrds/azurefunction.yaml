@@ -82,5 +82,28 @@ spec:
                     Name of the existing Container App hosting the function app. Defaults to the XR's own name.
                   minLength: 1
                   maxLength: 32
+                target:
+                  type: object
+                  description: >-
+                    Opt-in (2026-10-08): let this app own the Azure infrastructure it deploys into.
+                    With enabled: true the Composition composes an AzureContainerAppTarget child
+                    named <name>-target (xrds/azurecontainerapptarget.yaml) from this spec's own
+                    appName, resourceGroup and runtime - the same values the scaffolded cicd.yaml
+                    carries, so they can never drift - and proxies its TargetReady condition onto
+                    this XR. Note what that means for resourceGroup: the child CREATES and owns
+                    that resource group (and deletes it with this app), so it must not name a
+                    group that already exists for something else. Leave it off (the default) to
+                    stand a target up and down independently, as its own AzureContainerAppTarget
+                    XR in this app's xr-requests. Both need the Azure provider installed.
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Compose the AzureContainerAppTarget child.
+                      default: false
+                    location:
+                      type: string
+                      description: Azure region for the child's resource group, environment and app.
+                      pattern: '^[a-z0-9]+$'
+                      default: eastus
               required: ["devCluster", "resourceGroup"]
           required: ["spec"]

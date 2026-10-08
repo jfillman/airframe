@@ -6,6 +6,8 @@ exists.
 
     tools/airframe-capabilities components                 list every component type and its summary
     tools/airframe-capabilities component <TYPE>            one component's outputs, verify checks, owner
+    tools/airframe-capabilities targets                    list every cloud target type and its summary
+    tools/airframe-capabilities target <TYPE>               one cloud target's conditions, verify checks, owner
     tools/airframe-capabilities xrds                        list every XRD, kind, apiVersion, summary
     tools/airframe-capabilities xrd <KIND>                  one XRD's summary and description coverage
     tools/airframe-capabilities field <NAME>                one chart field's type/description/default
@@ -52,6 +54,18 @@ def main():
             print(f"error: no such component type {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', c['components'])}", file=sys.stderr)
             return 1
         print(json.dumps(c["components"][rest[0]], indent=2))
+        return 0
+
+    if cmd == "targets":
+        print(json.dumps({k: v["summary"] for k, v in c.get("targets", {}).items()}, indent=2))
+        return 0
+
+    if cmd == "target":
+        targets = c.get("targets", {})
+        if not rest or rest[0] not in targets:
+            print(f"error: no such cloud target type {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', targets)}", file=sys.stderr)
+            return 1
+        print(json.dumps(targets[rest[0]], indent=2))
         return 0
 
     if cmd == "xrds":

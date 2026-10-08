@@ -46,6 +46,9 @@ conditions plus catalog-specific custom conditions layered on top. Only
 | `Redis` | Attached | `environmentRef.name`\* *(auto-stamped)*, `size` (small\|medium\|large), `persistence` | Ready | Rendered from a `components:` block |
 | `SLO` | Attached | `environmentRef.name`\*, `service`\*, `objective`\* (0–100), `indicator`\* (availability\|latency) | Ready | Rendered from a `slos:` block; wraps Sloth |
 | `RolloutWatch` | Attached | `environmentRef.name`\*, `appName`\*, `cluster`\*, `env`\*, `notifications.slack` | rolloutPhase, lastDiagnosisRevision, lastDiagnosisJob, lastDiagnosisTime | Rendered unconditionally alongside any release with a `rollout:` |
+| `AwsLambdaTarget` | Cloud target | `functionName`, `region`, `architecture`, `runtime`, `memorySize`, `timeout`, `functionUrl`, `credentialsSecret` | TargetReady; status.functionUrl, repositoryUrl, roleArn, cicd | ECR Repository · IAM Role · bootstrap Job · Lambda Function (no Update) · FunctionURL + Permission |
+| `AwsEcsTarget` | Cloud target | `appName`, `env`, `region`, `architecture`, `cpu`, `memory`, `containerPort`, `desiredCount`, `network` (create \| existing) | TargetReady; status.cluster, service, taskDefinitionFamily, containerName, subnetIds, securityGroupIds, cicd | IAM Role · VPC/Subnet/IGW/RouteTable/Route/SG (create mode) · ECS Cluster · TaskDefinition + Service (no Update) |
+| `AzureContainerAppTarget` | Cloud target | `appName`, `resourceGroup`, `location`, `containerPort`, `bootstrapImage`, `size`, `minReplicas`, `maxReplicas`, `registry` | TargetReady; status.url, resourceGroup, environment, cicd | ResourceGroup · Container Apps Environment · ContainerApp (no Update) · optional registry Secret |
 
 \* required field
 
@@ -71,6 +74,7 @@ The tier isn't a UI grouping — it's the mechanism.
 | Tier | Members | Mechanism | Lifecycle |
 |---|---|---|---|
 | **Bootstrap** | 5 app stacks, ApplicationEnvironment *(TektonCICD is Bootstrap-adjacent)* | A commit into `xr-requests/`, reconciled by `provider-github` — no live API call, no K8s credential | Creates a new addressable git location — a repo, or a `<cluster>/<env>/values.yaml` |
+| **Cloud target** | AwsLambdaTarget, AwsEcsTarget, AzureContainerAppTarget | A stand-alone XR in the app's xr-requests (or, for the two function stacks, a child composed by the app XR with `spec.target.enabled`) | The cloud infrastructure a `deploy.target` deploy updates; disposable, lives only while the XR does |
 | **Attached** | SLO, Redis, RolloutWatch · SecretStore (auto) · *planned, unbuilt: OAuthServer, Database, Queue, mongodb, nginx* | A `components:`/`slos:` block inside an env's own `values.yaml` | Independent lifecycle, but only expressible inside an existing environment's file |
 | **Embedded** | config maps, secrets, HPA, PodDisruptionBudget, AnalysisTemplate, resource limits, volumes, networkPolicy | Plain fields on the same `values.yaml` — no XR at all | 1:1 with the single workload the release owns |
 

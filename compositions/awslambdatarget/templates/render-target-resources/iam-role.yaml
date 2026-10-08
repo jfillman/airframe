@@ -1,0 +1,39 @@
+# The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
+# AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
+# characters, hence the trunc.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $functionName := $spec.functionName | default $xrName >>
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-exec
+  annotations:
+    <<setResourceNameAnnotation "iam-role">>
+    crossplane.io/external-name: <<printf "%s-exec" (trunc 59 $functionName)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
+    assumeRolePolicy: |
+      {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+    tags:
+      hangar.io/target: <<$xrName>>
+      hangar.io/component: aws-lambda-target
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicyAttachment
+metadata:
+  name: <<$xrName>>-exec-logs
+  annotations:
+    <<setResourceNameAnnotation "iam-role-policy">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    policyArn: arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+    roleRef:
+      name: <<$xrName>>-exec

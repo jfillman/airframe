@@ -586,6 +586,35 @@ spec:
                   `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
                 commitMessage: "LambdaFunction scaffold: README.md"
             ---
+            # Opt-in (spec.target.enabled, 2026-10-08): composes an AwsLambdaTarget child - the ECR repository,
+            # execution role, bootstrap, function and public URL this app deploys into - from this XR's own
+            # functionName/region/architecture/runtime, the same values cicd-yaml.yaml scaffolds into the deploy
+            # block, so the three can never disagree. A normal child XR composed directly, like the TektonCICD
+            # child beside it, not an xr-requests commit: a target has no cross-cluster concern, its managed
+            # resources are cloud API calls from this same dev cluster. Unconditional on $clusterOk for the
+            # same reason the TektonCICD child is. Off by default: the standalone AwsLambdaTarget XR is the
+            # shape for infrastructure that should come and go independently of the app.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $target := $spec.target | default dict >>
+            <<- if $target.enabled >>
+            <<- $wantUrl := true >>
+            <<- if hasKey $target "functionUrl" >><<- $wantUrl = $target.functionUrl >><<- end >>
+            apiVersion: catalog.hangar.io/v1alpha1
+            kind: AwsLambdaTarget
+            metadata:
+              name: <<$xrName>>-target
+              annotations:
+                <<setResourceNameAnnotation "aws-lambda-target">>
+            spec:
+              functionName: <<$spec.functionName | default $xrName>>
+              region: <<$spec.region | default "us-east-1">>
+              architecture: <<$spec.architecture | default "arm64">>
+              runtime: <<$spec.runtime | default "nodejs22">>
+              functionUrl: <<$wantUrl>>
+            <<- end >>
+            ---
+            ---
             # Composes a TektonCICD child XR directly - identical mechanism to
             # nodejsapplication's own tekton-cicd-child.yaml (straight port, not a redesign -
             # see that file's own header, and xrds/tektoncicd.yaml's own header, for the full
@@ -654,6 +683,14 @@ spec:
             <<- $childConditions := index $childStatus "conditions" | default list >>
             <<- $devClusterCondition := dict >>
             <<- $cicdOnboardedCondition := dict >>
+            <<- $target := .observed.composite.resource.spec.target | default dict >>
+            <<- $targetRes := index $allObserved "aws-lambda-target" | default dict >>
+            <<- $targetCondition := dict >>
+            <<- range (dig "resource" "status" "conditions" list $targetRes) >>
+              <<- if eq .type "TargetReady" >>
+                <<- $targetCondition = . >>
+              <<- end >>
+            <<- end >>
             <<- range $childConditions >>
               <<- if eq .type "DevClusterReady" >>
                 <<- $devClusterCondition = . >>
@@ -693,6 +730,23 @@ spec:
                   Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
                   its own CicdOnboarded condition - resolves itself once it does.
                 target: CompositeAndClaim
+            <<- end >>
+            <<- if $target.enabled >>
+            <<- if $targetCondition >>
+              - type: TargetReady
+                status: <<$targetCondition.status | toJson>>
+                reason: <<$targetCondition.reason>>
+                message: <<$targetCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: TargetReady
+                status: "False"
+                reason: TargetPending
+                message: >-
+                  spec.target.enabled is set; waiting on the composed AwsLambdaTarget child (<<$xrName>>-target)
+                  to report its own TargetReady condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
             <<- end >>
             ---
         delims:

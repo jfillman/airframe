@@ -586,6 +586,134 @@
     }
   },
   "generated_by": "tools/gen_contract.py",
+  "targets": {
+    "awsecstarget": {
+      "component": false,
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The service exists on the cluster with its first task-definition revision - Glidepath can deploy to it now.",
+              "reason": "AwsEcsTargetReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The network, role, cluster or task definition has not been observed yet (just created, or the provider's credentials are not in place).",
+              "reason": "AwsEcsTargetProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "Everything up to the task definition exists; the service has not reported ready yet.",
+              "reason": "AwsEcsTargetServicePending",
+              "status": "False"
+            }
+          ],
+          "type": "TargetReady"
+        }
+      ],
+      "kind": "AwsEcsTarget",
+      "owner": "human",
+      "summary": "The minimum AWS infrastructure a container deploys into on ECS Fargate - cluster, task definition, service, execution role and, by default, a small dedicated public network. Disposable: delete the XR to remove all of it.",
+      "verify": [
+        {
+          "check": "The AwsEcsTarget XR's TargetReady condition has reason AwsEcsTargetReady.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "aws ecs describe-services --cluster {cluster} --services {service} reports runningCount == desiredCount.",
+          "id": "service-stable"
+        },
+        {
+          "check": "An HTTP GET of http://<task public IP>:{containerPort}/ (the IP from aws ecs describe-tasks and describe-network-interfaces) returns a response.",
+          "id": "port-answers"
+        }
+      ]
+    },
+    "awslambdatarget": {
+      "component": false,
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The function exists in ECR-backed form and (when enabled) its Function URL is live - Glidepath can deploy to it now.",
+              "reason": "AwsLambdaTargetReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The ECR repository or execution role has not been observed yet (just created, or the provider's credentials are not in place).",
+              "reason": "AwsLambdaTargetProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "The bootstrap Job is copying the placeholder image into the repository (or waiting for the credentials Secret to exist - its pod stays Pending until then); the function is rendered once it succeeds.",
+              "reason": "AwsLambdaTargetBootstrapping",
+              "status": "False"
+            },
+            {
+              "meaning": "The bootstrap Job failed (bad credentials in the credentialsSecret, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.",
+              "reason": "AwsLambdaTargetBootstrapFailed",
+              "status": "False"
+            }
+          ],
+          "type": "TargetReady"
+        }
+      ],
+      "kind": "AwsLambdaTarget",
+      "owner": "human",
+      "summary": "The minimum AWS infrastructure a container-image Lambda function deploys into - ECR repository, execution role, the function itself seeded with a public base image, and a public Function URL. Disposable: delete the XR to remove all of it.",
+      "verify": [
+        {
+          "check": "The AwsLambdaTarget XR's TargetReady condition has reason AwsLambdaTargetReady.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "aws lambda get-function --function-name {functionName} reports PackageType Image and an ECR image URI.",
+          "id": "function-exists"
+        },
+        {
+          "check": "An HTTP GET of status.functionUrl returns a response from the function (any status code; the placeholder returns an error until the first deploy).",
+          "id": "url-answers"
+        }
+      ]
+    },
+    "azurecontainerapptarget": {
+      "component": false,
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The Container App exists with an ingress FQDN - Glidepath can deploy to it now.",
+              "reason": "AzureContainerAppTargetReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The resource group, environment or app has not been observed yet (just created, or the provider's credentials are not in place). Environments take a few minutes.",
+              "reason": "AzureContainerAppTargetProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "TargetReady"
+        }
+      ],
+      "kind": "AzureContainerAppTarget",
+      "owner": "human",
+      "summary": "The minimum Azure infrastructure a container deploys into on Container Apps - a resource group, a Container Apps environment and the app with public ingress, seeded with a placeholder image. Disposable: delete the XR to remove all of it.",
+      "verify": [
+        {
+          "check": "The AzureContainerAppTarget XR's TargetReady condition has reason AzureContainerAppTargetReady.",
+          "id": "xr-ready"
+        },
+        {
+          "check": "az containerapp show --name {appName} --resource-group {resourceGroup} reports properties.runningStatus Running.",
+          "id": "app-running"
+        },
+        {
+          "check": "An HTTP GET of status.url returns a response (the Azure Functions placeholder serves its landing page).",
+          "id": "url-answers"
+        }
+      ]
+    }
+  },
   "xrds": {
     "ApplicationEnvironment": {
       "agentSummary": "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded.",
@@ -596,11 +724,38 @@
       "group": "catalog.hangar.io",
       "plural": "applicationenvironments"
     },
+    "AwsEcsTarget": {
+      "agentSummary": "Stand up the AWS infrastructure a container deploys into on ECS Fargate (cluster, task definition, service, execution role and a small public network) - disposable, for an app's deploy.target: aws-ecs.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 17,
+      "fieldsTotal": 18,
+      "file": "awsecstarget.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "awsecstargets"
+    },
+    "AwsLambdaTarget": {
+      "agentSummary": "Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 8,
+      "fieldsTotal": 9,
+      "file": "awslambdatarget.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "awslambdatargets"
+    },
+    "AzureContainerAppTarget": {
+      "agentSummary": "Stand up the Azure infrastructure a container deploys into on Container Apps (resource group, environment, app with public ingress) - disposable, for an app's deploy.target: azure-container-apps.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 14,
+      "fieldsTotal": 15,
+      "file": "azurecontainerapptarget.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "azurecontainerapptargets"
+    },
     "AzureFunction": {
       "agentSummary": "Onboard a new Azure Functions app (container image) - creates its source repo with an HTTP function and CI/CD that deploys to an existing Container App.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
-      "fieldsTotal": 7,
+      "fieldsDescribed": 9,
+      "fieldsTotal": 10,
       "file": "azurefunction.yaml",
       "group": "catalog.hangar.io",
       "plural": "azurefunctions"
@@ -635,8 +790,8 @@
     "LambdaFunction": {
       "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 7,
-      "fieldsTotal": 8,
+      "fieldsDescribed": 10,
+      "fieldsTotal": 11,
       "file": "lambdafunction.yaml",
       "group": "catalog.hangar.io",
       "plural": "lambdafunctions"

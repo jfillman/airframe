@@ -95,5 +95,28 @@ spec:
                     name is taken.
                   minLength: 1
                   maxLength: 64
+                target:
+                  type: object
+                  description: >-
+                    Opt-in (2026-10-08): let this app own the AWS infrastructure it deploys into.
+                    With enabled: true the Composition composes an AwsLambdaTarget child named
+                    <name>-target (xrds/awslambdatarget.yaml) from this spec's own functionName,
+                    region, architecture and runtime - the same values the scaffolded cicd.yaml
+                    carries, so they can never drift - and proxies its TargetReady condition onto
+                    this XR. The infrastructure then lives exactly as long as this app does. Leave
+                    it off (the default) to stand a target up and down independently, as its own
+                    AwsLambdaTarget XR in this app's xr-requests, which is the shape for a smoke
+                    app you only want to pay for while testing. Both need the AWS provider
+                    installed and the app's aws-access-key-id/aws-secret-access-key secrets in
+                    place (the child's bootstrap Job waits for them).
+                  properties:
+                    enabled:
+                      type: boolean
+                      description: Compose the AwsLambdaTarget child.
+                      default: false
+                    functionUrl:
+                      type: boolean
+                      description: Passed to the child's spec.functionUrl - a public Function URL for smoke tests.
+                      default: true
               required: ["devCluster"]
           required: ["spec"]

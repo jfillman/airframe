@@ -1,0 +1,44 @@
+# Shared inputs for this step (declared once at this unindented scope, persisting across the ---
+# separators for the rest of the step - the catalog's concatenated-template convention; this file
+# sorts first), then the resource group this XR owns.
+#
+# Every managed resource in this directory references the Azure ClusterProviderConfig named
+# `default` (gitops-cluster-dev/10-crds-operators/crossplane/provider-azure-config.yaml).
+#
+# The resource group is CREATED here (external-name = its name), which is what makes the target
+# disposable: deleting the XR deletes the group and Azure removes the environment and app with it.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $appName := $spec.appName | default $xrName >>
+<<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $appName) >>
+<<- $location := $spec.location | default "eastus" >>
+<<- $port := $spec.containerPort | default 80 >>
+<<- $bootstrapImage := $spec.bootstrapImage | default "mcr.microsoft.com/azure-functions/node:4-node20" >>
+<<- $size := $spec.size | default "small" >>
+<<- $cpu := 0.25 >>
+<<- $memory := "0.5Gi" >>
+<<- if eq $size "medium" >><<- $cpu = 0.5 >><<- $memory = "1Gi" >><<- end >>
+<<- if eq $size "large" >><<- $cpu = 1.0 >><<- $memory = "2Gi" >><<- end >>
+<<- $minReplicas := 1 >>
+<<- if hasKey $spec "minReplicas" >><<- $minReplicas = $spec.minReplicas >><<- end >>
+<<- $maxReplicas := $spec.maxReplicas | default 1 >>
+<<- $registry := $spec.registry | default dict >>
+<<- $withRegistry := and (hasKey $registry "username") (hasKey $registry "passwordSecretRef") >>
+<<- $tags := dict "hangar.io/target" $xrName "hangar.io/component" "azure-container-app-target" "hangar.io/app" $appName >>
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: <<$xrName>>-rg
+  annotations:
+    <<setResourceNameAnnotation "resource-group">>
+    crossplane.io/external-name: <<$resourceGroup>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>

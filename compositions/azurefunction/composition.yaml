@@ -534,6 +534,35 @@ spec:
                   The image is built for amd64 only: Microsoft's Functions base images are not published for arm64.
                 commitMessage: "AzureFunction scaffold: README.md"
             ---
+            # Opt-in (spec.target.enabled, 2026-10-08): composes an AzureContainerAppTarget child - the resource
+            # group, Container Apps environment and app with public ingress this function deploys into - from
+            # this XR's own appName/resourceGroup/runtime, the same values cicd-yaml.yaml scaffolds into the
+            # deploy block, so the three can never disagree. The child CREATES and owns spec.resourceGroup
+            # (see the XRD field description). A normal child XR composed directly, like the TektonCICD child
+            # beside it; unconditional on $clusterOk for the same reason. Off by default: the standalone
+            # AzureContainerAppTarget XR is the shape for infrastructure that comes and goes independently.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $target := $spec.target | default dict >>
+            <<- if $target.enabled >>
+            <<- $runtime := $spec.runtime | default "nodejs20" >>
+            <<- $bootstrapImage := "mcr.microsoft.com/azure-functions/node:4-node20" >>
+            <<- if eq $runtime "python3.12" >><<- $bootstrapImage = "mcr.microsoft.com/azure-functions/python:4-python3.12" >><<- end >>
+            apiVersion: catalog.hangar.io/v1alpha1
+            kind: AzureContainerAppTarget
+            metadata:
+              name: <<$xrName>>-target
+              annotations:
+                <<setResourceNameAnnotation "azure-container-app-target">>
+            spec:
+              appName: <<$spec.appName | default $xrName>>
+              resourceGroup: <<$spec.resourceGroup>>
+              location: <<$target.location | default "eastus">>
+              containerPort: 80
+              bootstrapImage: <<$bootstrapImage>>
+            <<- end >>
+            ---
+            ---
             # Composes a TektonCICD child XR directly - identical mechanism to
             # nodejsapplication's own tekton-cicd-child.yaml (straight port, not a redesign -
             # see that file's own header, and xrds/tektoncicd.yaml's own header, for the full
@@ -602,6 +631,14 @@ spec:
             <<- $childConditions := index $childStatus "conditions" | default list >>
             <<- $devClusterCondition := dict >>
             <<- $cicdOnboardedCondition := dict >>
+            <<- $target := .observed.composite.resource.spec.target | default dict >>
+            <<- $targetRes := index $allObserved "azure-container-app-target" | default dict >>
+            <<- $targetCondition := dict >>
+            <<- range (dig "resource" "status" "conditions" list $targetRes) >>
+              <<- if eq .type "TargetReady" >>
+                <<- $targetCondition = . >>
+              <<- end >>
+            <<- end >>
             <<- range $childConditions >>
               <<- if eq .type "DevClusterReady" >>
                 <<- $devClusterCondition = . >>
@@ -641,6 +678,23 @@ spec:
                   Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
                   its own CicdOnboarded condition - resolves itself once it does.
                 target: CompositeAndClaim
+            <<- end >>
+            <<- if $target.enabled >>
+            <<- if $targetCondition >>
+              - type: TargetReady
+                status: <<$targetCondition.status | toJson>>
+                reason: <<$targetCondition.reason>>
+                message: <<$targetCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: TargetReady
+                status: "False"
+                reason: TargetPending
+                message: >-
+                  spec.target.enabled is set; waiting on the composed AzureContainerAppTarget child (<<$xrName>>-target)
+                  to report its own TargetReady condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
             <<- end >>
             ---
         delims:

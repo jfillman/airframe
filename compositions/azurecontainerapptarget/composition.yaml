@@ -1,0 +1,247 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks below. Edit
+# templates/render-target-resources/*.yaml or templates/target-status/*.yaml instead, then run
+# ./build-composition.sh to regenerate this file.
+#
+# AzureContainerAppTarget: the minimum Azure infrastructure a container deploys into on Container
+# Apps (resource group, environment, app with public ingress) - see
+# xrds/azurecontainerapptarget.yaml's header. Two function-go-templating steps around
+# function-auto-ready, the same shape as every Bootstrap-tier Composition in this catalog.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: azurecontainerapptargets.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: AzureContainerAppTarget
+  mode: Pipeline
+  pipeline:
+    - step: render-target-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Shared inputs for this step (declared once at this unindented scope, persisting across the ---
+            # separators for the rest of the step - the catalog's concatenated-template convention; this file
+            # sorts first), then the resource group this XR owns.
+            #
+            # Every managed resource in this directory references the Azure ClusterProviderConfig named
+            # `default` (gitops-cluster-dev/10-crds-operators/crossplane/provider-azure-config.yaml).
+            #
+            # The resource group is CREATED here (external-name = its name), which is what makes the target
+            # disposable: deleting the XR deletes the group and Azure removes the environment and app with it.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $appName := $spec.appName | default $xrName >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $appName) >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $port := $spec.containerPort | default 80 >>
+            <<- $bootstrapImage := $spec.bootstrapImage | default "mcr.microsoft.com/azure-functions/node:4-node20" >>
+            <<- $size := $spec.size | default "small" >>
+            <<- $cpu := 0.25 >>
+            <<- $memory := "0.5Gi" >>
+            <<- if eq $size "medium" >><<- $cpu = 0.5 >><<- $memory = "1Gi" >><<- end >>
+            <<- if eq $size "large" >><<- $cpu = 1.0 >><<- $memory = "2Gi" >><<- end >>
+            <<- $minReplicas := 1 >>
+            <<- if hasKey $spec "minReplicas" >><<- $minReplicas = $spec.minReplicas >><<- end >>
+            <<- $maxReplicas := $spec.maxReplicas | default 1 >>
+            <<- $registry := $spec.registry | default dict >>
+            <<- $withRegistry := and (hasKey $registry "username") (hasKey $registry "passwordSecretRef") >>
+            <<- $tags := dict "hangar.io/target" $xrName "hangar.io/component" "azure-container-app-target" "hangar.io/app" $appName >>
+            apiVersion: azure.m.upbound.io/v1beta1
+            kind: ResourceGroup
+            metadata:
+              name: <<$xrName>>-rg
+              annotations:
+                <<setResourceNameAnnotation "resource-group">>
+                crossplane.io/external-name: <<$resourceGroup>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            # The Container Apps environment (Consumption, no custom VNet, no Log Analytics workspace - logs
+            # are not the point of a disposable smoke target; add logAnalyticsWorkspaceId here if they ever are).
+            # Environments take a few minutes to provision; the app below waits on it through its reference.
+            apiVersion: containerapp.azure.m.upbound.io/v1beta1
+            kind: Environment
+            metadata:
+              name: <<$xrName>>-env
+              annotations:
+                <<setResourceNameAnnotation "environment">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                resourceGroupNameRef:
+                  name: <<$xrName>>-rg
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            # The Container App Glidepath's deploy-azure-container-apps.yaml updates (`az containerapp update
+            # --image`): single-revision mode, external ingress on containerPort, one container running the
+            # placeholder image until the first real deploy. Composed WITHOUT the Update management policy for
+            # exactly that reason - Crossplane must never put the placeholder back.
+            #
+            # Private registry (spec.registry): the provider models a Container App secret with BOTH its name
+            # and its value as Kubernetes Secret references, so the secret's name ("registry-password", a
+            # constant) is composed into a tiny Secret of our own and the value comes straight from the Secret
+            # the XR names - the token never passes through this template or lands in git.
+            <<- if $withRegistry >>
+            apiVersion: v1
+            kind: Secret
+            metadata:
+              name: <<$xrName>>-registry-secret-name
+              annotations:
+                <<setResourceNameAnnotation "registry-secret-name">>
+                gotemplating.fn.crossplane.io/ready: "True"
+              labels:
+                <<- range $k, $v := $tags >>
+                <<$k>>: <<$v | quote>>
+                <<- end >>
+            type: Opaque
+            stringData:
+              name: registry-password
+            ---
+            <<- end >>
+            apiVersion: containerapp.azure.m.upbound.io/v1beta1
+            kind: ContainerApp
+            metadata:
+              name: <<$xrName>>-app
+              annotations:
+                <<setResourceNameAnnotation "container-app">>
+                crossplane.io/external-name: <<$appName>>
+            spec:
+              managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                resourceGroupNameRef:
+                  name: <<$xrName>>-rg
+                containerAppEnvironmentIdRef:
+                  name: <<$xrName>>-env
+                revisionMode: Single
+                template:
+                  minReplicas: <<$minReplicas | int>>
+                  maxReplicas: <<$maxReplicas | int>>
+                  container:
+                    - name: <<$appName>>
+                      image: <<$bootstrapImage>>
+                      cpu: <<$cpu>>
+                      memory: <<$memory>>
+                      env:
+                        - name: PORT
+                          value: <<$port | toString | quote>>
+                ingress:
+                  externalEnabled: true
+                  targetPort: <<$port | int>>
+                  transport: auto
+                  allowInsecureConnections: false
+                  trafficWeight:
+                    - latestRevision: true
+                      percentage: 100
+                <<- if $withRegistry >>
+                secret:
+                  - nameSecretRef:
+                      name: <<$xrName>>-registry-secret-name
+                      key: name
+                    valueSecretRef:
+                      name: <<$registry.passwordSecretRef.name>>
+                      key: <<$registry.passwordSecretRef.key>>
+                registry:
+                  - server: <<$registry.server | default "ghcr.io">>
+                    username: <<$registry.username | quote>>
+                    passwordSecretName: registry-password
+                <<- end >>
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: target-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # TargetReady (closed reason set, see xrds/azurecontainerapptarget.meta.yaml) plus the XR's own
+            # status: the names Glidepath's deploy.azureContainerApps block needs, the deploy block itself as
+            # text (status.cicd) and the public URL. The composite document carries no
+            # composition-resource-name annotation, so function-go-templating updates the composite's status.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $spec := $xr.spec >>
+            <<- $appName := $spec.appName | default $xrName >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $appName) >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $appObs := index $obs "container-app" | default dict >>
+            <<- $appReady := false >>
+            <<- range (dig "resource" "status" "conditions" list $appObs) >>
+              <<- if and (eq .type "Ready") (eq .status "True") >><<- $appReady = true >><<- end >>
+            <<- end >>
+            <<- $fqdn := dig "resource" "status" "atProvider" "ingress" "fqdn" "" $appObs >>
+            <<- if not $fqdn >><<- $fqdn = dig "resource" "status" "atProvider" "latestRevisionFqdn" "" $appObs >><<- end >>
+            <<- $reason := "AzureContainerAppTargetProvisioning" >>
+            <<- $status := "False" >>
+            <<- $message := printf "Waiting for resource group %s, its Container Apps environment and the app %s to be observed (environments take a few minutes; or the Azure provider has no credentials yet)." $resourceGroup $appName >>
+            <<- if and $appReady $fqdn >>
+              <<- $reason = "AzureContainerAppTargetReady" >>
+              <<- $status = "True" >>
+              <<- $message = printf "Container App %s in %s answers at https://%s; Glidepath can deploy to it (status.cicd has the deploy block)." $appName $resourceGroup $fqdn >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: TargetReady
+                status: <<$status | quote>>
+                reason: <<$reason>>
+                message: <<$message | quote>>
+                target: CompositeAndClaim
+            ---
+            apiVersion: <<$xr.apiVersion>>
+            kind: AzureContainerAppTarget
+            status:
+              appName: <<$appName>>
+              resourceGroup: <<$resourceGroup>>
+              location: <<$location>>
+              environment: <<$xrName>>-env
+              <<- if $fqdn >>
+              url: https://<<$fqdn>>
+              <<- end >>
+              cicd: |
+                deploy:
+                  target: azure-container-apps
+                  azureContainerApps:
+                    resourceGroup: <<$resourceGroup>>
+                    appName: <<$appName>>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

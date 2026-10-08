@@ -1,0 +1,8 @@
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: ContainerApp
+metadata: {name: smoke-az-fn-app, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: container-app}}
+status:
+  atProvider:
+    ingress: {fqdn: smoke-az-fn.wittyriver-12345678.eastus.azurecontainerapps.io}
+    latestRevisionFqdn: smoke-az-fn--abc123.wittyriver-12345678.eastus.azurecontainerapps.io
+  conditions: [{type: Ready, status: "True"}]

@@ -58,6 +58,7 @@
   <<- $appRepoUrl = $gitopsRepoUrl >>
 <<- end >>
 <<- $configMapGenerator := $spec.configMapGenerator | default false >>
+<<- $chart := $spec.chart | default dict >>
 <<- $allExtra := .extraResources | default dict >>
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
 <<- $items := index $entry "items" | default list >>

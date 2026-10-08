@@ -590,8 +590,8 @@
     "ApplicationEnvironment": {
       "agentSummary": "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 5,
-      "fieldsTotal": 6,
+      "fieldsDescribed": 10,
+      "fieldsTotal": 11,
       "file": "applicationenvironment.yaml",
       "group": "catalog.hangar.io",
       "plural": "applicationenvironments"

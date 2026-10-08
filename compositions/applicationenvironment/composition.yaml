@@ -198,6 +198,7 @@ spec:
               <<- $appRepoUrl = $gitopsRepoUrl >>
             <<- end >>
             <<- $configMapGenerator := $spec.configMapGenerator | default false >>
+            <<- $chart := $spec.chart | default dict >>
             <<- $allExtra := .extraResources | default dict >>
             <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
             <<- $items := index $entry "items" | default list >>
@@ -602,6 +603,14 @@ spec:
                   env: <<$env>>
                   <<- if $configMapGenerator >>
                   configMapGenerator: true
+                  <<- end >>
+                  <<- if $chart >>
+                  chart:
+                    <<- range $k := list "repoURL" "path" "chart" "targetRevision" >>
+                    <<- with index $chart $k >>
+                    <<$k>>: <<. | quote>>
+                    <<- end >>
+                    <<- end >>
                   <<- end >>
                 commitMessage: <<printf "Onboard %s %s: add tenants/%s/%s/identity.yaml" $appName $env $appName $env | toJson>>
             <<- end >>

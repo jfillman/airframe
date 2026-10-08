@@ -68,5 +68,13 @@ spec:
       <<- if $configMapGenerator >>
       configMapGenerator: true
       <<- end >>
+      <<- if $chart >>
+      chart:
+        <<- range $k := list "repoURL" "path" "chart" "targetRevision" >>
+        <<- with index $chart $k >>
+        <<$k>>: <<. | quote>>
+        <<- end >>
+        <<- end >>
+      <<- end >>
     commitMessage: <<printf "Onboard %s %s: add tenants/%s/%s/identity.yaml" $appName $env $appName $env | toJson>>
 <<- end >>

@@ -26,6 +26,7 @@
 - [docs/user/cloud-targets.md](docs/user/cloud-targets.md): stand up (and tear down) the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs - `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`.
 
 - [docs/admin/governance.md](docs/admin/governance.md): governance and security policy - who owns which decision, the enforcement ladder (XRD schema, pre-merge checks, compositions, management policies, identity, write path), what is enforced today versus convention, and how a policy change ships.
+- [docs/admin/cloud-credentials.md](docs/admin/cloud-credentials.md): the cloud identities behind the cloud targets - the Crossplane provider identity (`hangar-crossplane`) versus the Glidepath deployer (`glidepath-deployer`) in AWS and Azure: exact IAM policies and Azure roles, where each secret lives, who can read it, what each can and cannot do, rotation.
 
 ## Optional
 

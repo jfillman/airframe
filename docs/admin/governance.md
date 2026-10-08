@@ -126,7 +126,8 @@ Enforced by provider configuration and the secrets topology:
   system**, held in a `ClusterProviderConfig`'s Secret in `crossplane-system`, delivered by External
   Secrets from the platform's own Infisical project, never present in an XR, a composition or git.
   Scoping that credential (a GitHub App instead of a PAT, an AWS identity limited to the five services
-  the targets use) is a security-team decision and a one-file change.
+  the targets use) is a security-team decision and a one-file change. The identities in use, their exact policies and
+  who can read each key: [cloud-credentials.md](cloud-credentials.md).
 - Applications never hold a platform credential. They read their own secrets from their own
   Infisical project through their own store; the cloud credentials Glidepath deploys with are the
   app's own, listed in its `cicd.yaml`.

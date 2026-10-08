@@ -10,6 +10,7 @@ an application developer using an already-running catalog, see
 | Doc | Read this when... |
 |---|---|
 | [architecture.md](architecture.md) | You want the current-state system overview: every XRD's inputs/outputs, the composition graph, tiering, and the plumbing underneath. |
+| [governance.md](governance.md) | You are an architect or security reviewer asking where a policy is enforced, or a platform engineer turning one into catalog code: who owns which decision, the enforcement ladder from XRD schema to management policies, what is enforced today versus convention, and how a policy change ships. |
 
 The full design history and open decisions live in `hangar`'s own
 [`docs/service-catalog-design.md`](https://github.com/jfillman/hangar/blob/main/docs/service-catalog-design.md)

@@ -25,6 +25,8 @@
 - [docs/user/decommission-app.md](docs/user/decommission-app.md): tear down an app.
 - [docs/user/cloud-targets.md](docs/user/cloud-targets.md): stand up (and tear down) the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs - `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`.
 
+- [docs/admin/governance.md](docs/admin/governance.md): governance and security policy - who owns which decision, the enforcement ladder (XRD schema, pre-merge checks, compositions, management policies, identity, write path), what is enforced today versus convention, and how a policy change ships.
+
 ## Optional
 
 - [xrds/](xrds/): every XRD's real OpenAPI schema, if the contract bundle's summary isn't enough. `xrds/<type>.meta.yaml` is a component's sidecar output contract, the source `gen_contract.py` reads.

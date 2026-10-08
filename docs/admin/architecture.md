@@ -134,6 +134,16 @@ dependency-lock graph cluster-wide) plus a `function-auto-ready` step.
 8. `RolloutWatch` watches the live Rollout; on `Degraded` it dispatches a
    diagnosis Job, closing the AI-triage loop.
 
+## Where policy lives
+
+Everything above is also the enforcement map for governance and security: the XRD schema is what may
+be asked for, the composition is how it is built, management policies are what the platform may do to
+what it made, the provider configs are who acts, and the GitOps write path is who approves.
+Enterprise architects and security teams own those decisions; the platform team encodes them here,
+once, and every service inherits them. [governance.md](governance.md) walks the ladder layer by
+layer, lists what is enforced by machinery today versus still convention, and shows how a written
+policy becomes a change to an XRD or a composition.
+
 ## Not yet built — don't read these as live
 
 - `OAuthServer`, `Database`/postgresql, `Queue`/rabbitmq, mongodb, nginx — zero

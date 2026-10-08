@@ -108,6 +108,30 @@ long as the app. For Azure that means the app's `resourceGroup` is created and o
 so it must not be a group that exists for anything else. ECS has no app XRD, so an `AwsEcsTarget`
 is always stand-alone.
 
+## The policy baked into a target
+
+A target is where the platform's cloud policy is enforced, not where it is chosen. What a request
+gets, whatever fields it sets:
+
+- **Identity.** The Lambda execution role carries only `AWSLambdaBasicExecutionRole`; the ECS execution
+  role only `AmazonECSTaskExecutionRolePolicy` plus `logs:CreateLogGroup`. Everything is created with the
+  platform's own cloud credential from the provider's `ClusterProviderConfig`; the XR never holds one.
+- **Exposure.** An ECS security group opens exactly `containerPort`; a Lambda Function URL and its public
+  invoke permission exist only while `functionUrl` is true; a Container App's ingress is external on the
+  one target port.
+- **Provenance.** Placeholder images come from `public.ecr.aws/lambda/*` and `mcr.microsoft.com/azure-functions/*`
+  only; nothing but Glidepath deploys a built image.
+- **Ownership.** The function, the task definition and service and the Container App are composed
+  without the Update policy, so the pipeline's deploys are never reverted. Every cloud resource carries
+  `hangar.io/target`, `hangar.io/component`, `hangar.io/app` and `hangar.io/env` tags.
+- **Disposability.** The ECR repository is force-deleted with its images and the Azure resource group is
+  created and owned, so deleting the XR removes everything. That is the policy for a smoke target; a
+  persistent target is the same composition with those two settings flipped.
+
+Changing any of these is a change to the XRD or the composition, reviewed and released as a catalog
+version, never a field on one request: [docs/admin/governance.md](../admin/governance.md) says who owns
+which decision and how such a change ships.
+
 ## What a target does not do
 
 - No load balancer in front of an ECS service, no custom domain on a Container App, no Log

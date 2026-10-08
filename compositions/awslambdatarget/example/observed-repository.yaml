@@ -1,0 +1,16 @@
+# What Crossplane observes once the ECR Repository exists (second reconcile).
+apiVersion: ecr.aws.m.upbound.io/v1beta1
+kind: Repository
+metadata:
+  name: smoke-fn-repository
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: ecr-repository
+    crossplane.io/external-name: glidepath-smoke-fn
+status:
+  atProvider:
+    repositoryUrl: 158233516926.dkr.ecr.us-east-1.amazonaws.com/glidepath-smoke-fn
+    arn: arn:aws:ecr:us-east-1:158233516926:repository/glidepath-smoke-fn
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+    - {type: Synced, status: "True", reason: ReconcileSuccess}

@@ -1,0 +1,21 @@
+# The Container Apps environment (Consumption, no custom VNet, no Log Analytics workspace - logs
+# are not the point of a disposable smoke target; add logAnalyticsWorkspaceId here if they ever are).
+# Environments take a few minutes to provision; the app below waits on it through its reference.
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: Environment
+metadata:
+  name: <<$xrName>>-env
+  annotations:
+    <<setResourceNameAnnotation "environment">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    resourceGroupNameRef:
+      name: <<$xrName>>-rg
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>

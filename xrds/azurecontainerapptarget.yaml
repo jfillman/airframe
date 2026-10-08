@@ -1,0 +1,155 @@
+# Cloud-target XRD (2026-10-08): the minimum Azure infrastructure Glidepath's `deploy.target:
+# azure-container-apps` needs to exist before an app can deploy - deploy-azure-container-apps.yaml
+# only runs `az containerapp update --image` against an EXISTING Container App, so the resource
+# group, the Container Apps environment and the app itself (with external ingress on the port the
+# image listens on) have to be there first. This is also how an AzureFunction app is hosted: its
+# image is the Azure Functions base image, which serves HTTP triggers on port 80 inside a plain
+# Container App (the smoke app was verified that way).
+#
+# Stand-alone and disposable, requested as its own XR in tenants/<app>/xr-requests/. Not composed
+# by any app XRD. By default it creates its own resource group, so deleting the XR removes
+# everything Azure-side in one cascade. The Container App is composed WITHOUT the Update management
+# policy: Glidepath changes its image on every deploy and Crossplane must never revert that to
+# the placeholder.
+#
+# Private registry: Glidepath publishes to ghcr.io; if that package is private, the Container App
+# needs a registry credential. spec.registry wires one up from a Secret in this XR's namespace
+# (the token is never written into git or into this XR). Leave it unset for a public package.
+#
+# apiextensions.crossplane.io/v2, scope: Namespaced - matches every other XRD in this catalog.
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: azurecontainerapptargets.catalog.hangar.io
+  annotations:
+    terasky.backstage.io/add-to-catalog: "true"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "Stand up the Azure infrastructure a container deploys into on Container Apps (resource group, environment, app with public ingress) - disposable, for an app's deploy.target: azure-container-apps."
+    hangar.io/agent-summary: "Stand up the Azure infrastructure a container deploys into on Container Apps (resource group, environment, app with public ingress) - disposable, for an app's deploy.target: azure-container-apps."
+spec:
+  group: catalog.hangar.io
+  names:
+    kind: AzureContainerAppTarget
+    plural: azurecontainerapptargets
+    singular: azurecontainerapptarget
+  scope: Namespaced
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                appName:
+                  type: string
+                  description: >-
+                    Name of the Container App to create. Defaults to this XR's own name. This is the
+                    value the app's cicd.yaml must carry in deploy.azureContainerApps.appName. Azure
+                    allows 2 to 32 lowercase alphanumerics and hyphens, starting with a letter.
+                  pattern: '^[a-z][a-z0-9-]{1,31}$'
+                resourceGroup:
+                  type: string
+                  description: >-
+                    Name of the resource group this XR CREATES and owns (deploy.azureContainerApps.resourceGroup).
+                    Defaults to "<appName>-rg". Everything else lands inside it, so deleting the XR
+                    deletes it all. Do not name an existing group: the composed ResourceGroup would
+                    try to adopt it and, on deletion, remove it.
+                  pattern: '^[a-zA-Z0-9._()-]{1,90}$'
+                location:
+                  type: string
+                  description: Azure region for the resource group, the environment and the app, e.g. eastus.
+                  pattern: '^[a-z0-9]+$'
+                  default: eastus
+                containerPort:
+                  type: integer
+                  description: >-
+                    The port the image listens on; the ingress target port. 80 for the Azure Functions
+                    base images (the AzureFunction stack), whatever the app's Containerfile exposes
+                    otherwise.
+                  minimum: 1
+                  maximum: 65535
+                  default: 80
+                bootstrapImage:
+                  type: string
+                  description: >-
+                    The placeholder image the app runs until Glidepath's first deploy replaces it.
+                    Must be linux/amd64 (Container Apps is amd64-only) and start without arguments.
+                    The default is the Azure Functions Node base image, which serves its own landing
+                    page on port 80.
+                  minLength: 1
+                  default: mcr.microsoft.com/azure-functions/node:4-node20
+                size:
+                  type: string
+                  description: CPU and memory per replica, from Container Apps' allowed pairs - small 0.25 vCPU / 0.5Gi, medium 0.5 / 1Gi, large 1 / 2Gi.
+                  enum: [small, medium, large]
+                  default: small
+                minReplicas:
+                  type: integer
+                  description: Minimum replicas. 1 keeps the app warm for a smoke test; 0 lets it scale to zero between calls.
+                  minimum: 0
+                  maximum: 3
+                  default: 1
+                maxReplicas:
+                  type: integer
+                  description: Maximum replicas.
+                  minimum: 1
+                  maximum: 3
+                  default: 1
+                registry:
+                  type: object
+                  description: >-
+                    Credentials for a private image registry (the ghcr.io package Glidepath pushes
+                    to, when it is private). Leave unset for a public package.
+                  properties:
+                    server:
+                      type: string
+                      description: Registry host, e.g. ghcr.io.
+                      minLength: 1
+                      default: ghcr.io
+                    username:
+                      type: string
+                      description: Registry username (for ghcr.io, the GitHub user or org the token belongs to).
+                      minLength: 1
+                    passwordSecretRef:
+                      type: object
+                      description: A Secret in this XR's namespace holding the registry token/password.
+                      required: [name, key]
+                      properties:
+                        name:
+                          type: string
+                          description: The Secret's name.
+                          minLength: 1
+                        key:
+                          type: string
+                          description: The key inside the Secret that holds the token.
+                          minLength: 1
+                  x-kubernetes-validations:
+                    - rule: "has(self.username) == has(self.passwordSecretRef)"
+                      message: "registry.username and registry.passwordSecretRef must be set together"
+            status:
+              type: object
+              description: Published by the Composition - everything the app's cicd.yaml needs, and the URL to curl.
+              properties:
+                appName:
+                  type: string
+                  description: The Container App's name (deploy.azureContainerApps.appName).
+                resourceGroup:
+                  type: string
+                  description: The resource group (deploy.azureContainerApps.resourceGroup).
+                location:
+                  type: string
+                  description: The Azure region.
+                environment:
+                  type: string
+                  description: The Container Apps environment's name.
+                url:
+                  type: string
+                  description: The app's public https URL, once the ingress has an FQDN.
+                cicd:
+                  type: string
+                  description: The cicd.yaml deploy block, ready to paste, that targets this app.
+          required: ["spec"]

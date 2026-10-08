@@ -83,6 +83,13 @@ def component_contracts():
     return load_component_meta()
 
 
+def target_contracts():
+    """cloud target type -> {summary, conditions, verify, owner}, from the xrds/*.meta.yaml sidecars
+    marked `component: false` (AwsLambdaTarget, AwsEcsTarget, AzureContainerAppTarget): what an agent
+    needs to stand one up and tell whether it worked, without reading the XRD or the Composition."""
+    return {k: {kk: vv for kk, vv in v.items() if kk != "outputs"} for k, v in load_component_meta(targets=True).items()}
+
+
 def build_contract():
     return {
         "$schema": "airframe-contract/v1",
@@ -93,6 +100,7 @@ def build_contract():
         },
         "xrds": xrd_summaries(),
         "components": component_contracts(),
+        "targets": target_contracts(),
     }
 
 

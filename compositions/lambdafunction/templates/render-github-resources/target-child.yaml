@@ -1,0 +1,28 @@
+# Opt-in (spec.target.enabled, 2026-10-08): composes an AwsLambdaTarget child - the ECR repository,
+# execution role, bootstrap, function and public URL this app deploys into - from this XR's own
+# functionName/region/architecture/runtime, the same values cicd-yaml.yaml scaffolds into the deploy
+# block, so the three can never disagree. A normal child XR composed directly, like the TektonCICD
+# child beside it, not an xr-requests commit: a target has no cross-cluster concern, its managed
+# resources are cloud API calls from this same dev cluster. Unconditional on $clusterOk for the
+# same reason the TektonCICD child is. Off by default: the standalone AwsLambdaTarget XR is the
+# shape for infrastructure that should come and go independently of the app.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $target := $spec.target | default dict >>
+<<- if $target.enabled >>
+<<- $wantUrl := true >>
+<<- if hasKey $target "functionUrl" >><<- $wantUrl = $target.functionUrl >><<- end >>
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsLambdaTarget
+metadata:
+  name: <<$xrName>>-target
+  annotations:
+    <<setResourceNameAnnotation "aws-lambda-target">>
+spec:
+  functionName: <<$spec.functionName | default $xrName>>
+  region: <<$spec.region | default "us-east-1">>
+  architecture: <<$spec.architecture | default "arm64">>
+  runtime: <<$spec.runtime | default "nodejs22">>
+  functionUrl: <<$wantUrl>>
+<<- end >>
+---

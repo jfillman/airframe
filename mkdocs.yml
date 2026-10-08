@@ -10,6 +10,7 @@ nav:
       - 'Quickstart part 3: a message broker': user/quickstart-broker.md
       - Skyport demo system: user/skyport-demo.md
       - Decommissioning an app: user/decommission-app.md
+      - Cloud targets (Lambda, ECS, Container Apps): user/cloud-targets.md
   - Admin guide:
       - Overview: admin/README.md
       - Architecture: admin/architecture.md

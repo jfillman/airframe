@@ -1,0 +1,13 @@
+# The Lambda target for the smoke-fn app: deploy.lambda.functionName glidepath-smoke-fn in us-east-1,
+# arm64 (smoke-fn's cicd.yaml builds only arm64), nodejs22 placeholder. Requested in the app's own
+# namespace so the bootstrap Job can mount its app-secrets (aws-access-key-id / aws-secret-access-key).
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsLambdaTarget
+metadata:
+  name: smoke-fn
+  namespace: app-smoke-fn-cicd
+spec:
+  functionName: glidepath-smoke-fn
+  region: us-east-1
+  architecture: arm64
+  runtime: nodejs22

@@ -6,7 +6,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## Start here
 1. [`llms.txt`](llms.txt): the index - what to read first, in what order, for a cold start.
-2. `contract/airframe-contract.json` (AF-1b): every chart field, every XRD's shape and summary, every component's real outputs, in one generated file. Query it with `tools/airframe-capabilities <components|component|xrds|xrd|field|output> ...` instead of grepping source - that's the whole point of the bundle. Regenerate with `python3 tools/gen_contract.py` after changing any of its sources (never hand-edit it); CI's `--check` fails if it drifts.
+2. `contract/airframe-contract.json` (AF-1b): every chart field, every XRD's shape and summary, every component's real outputs, in one generated file. Query it with `tools/airframe-capabilities <components|component|targets|target|xrds|xrd|field|output> ...` instead of grepping source - that's the whole point of the bundle. Regenerate with `python3 tools/gen_contract.py` after changing any of its sources (never hand-edit it); CI's `--check` fails if it drifts.
 3. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
 4. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas, each carrying a `hangar.io/agent-summary` annotation (AF-1b). `xrds/<type>.meta.yaml` (redis, postgresql, rabbitmq, mongodb today, AF-3/SP-3) declares that component's real outputs - Secret/ConfigMap names and keys, or a literal - for `fromComponent` to resolve against.
 5. `docs/user/`: the Skyport quickstarts, worked end to end.
@@ -15,6 +15,11 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 ## The model in five lines
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
 - **Function XRDs** (`LambdaFunction`, `AzureFunction`): a repo, CI/CD and a handler for a container-image function that Glidepath deploys to an existing AWS Lambda function or Azure Container App. No chart, no Ground/Flight environments. *Not usable end to end yet*: Glidepath cannot push to ECR (Lambda needs it), and neither deploy target has run against a real account.
+- **Cloud targets** (`AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`): the minimum cloud infrastructure a
+  `deploy.target: aws-lambda | aws-ecs | azure-container-apps` deploy needs, stood up and torn down on request as a
+  stand-alone XR in the app's xr-requests (docs/user/cloud-targets.md). Each publishes `status.cicd`, the deploy block
+  to paste into the app's `cicd.yaml`, and a `TargetReady` condition with a closed reason set. `LambdaFunction` and
+  `AzureFunction` can compose their target themselves with `spec.target.enabled: true`.
 - **Ground** environment: `platform/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.

@@ -1,0 +1,18 @@
+# The same target in subnets and a security group that already exist (e.g. the account's default
+# VPC) - composes no network resources, so provider-aws-ec2 is not needed for this shape.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsEcsTarget
+metadata:
+  name: smoke-ecs
+  namespace: app-smoke-ecs-cicd
+spec:
+  appName: smoke-ecs
+  env: dev
+  region: us-east-1
+  architecture: x86_64
+  cpu: "512"
+  memory: "1024"
+  network:
+    mode: existing
+    subnetIds: [subnet-0123456789abcdef0]
+    securityGroupIds: [sg-0123456789abcdef0]

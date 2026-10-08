@@ -1,0 +1,12 @@
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: smoke-fn-exec
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: iam-role
+status:
+  atProvider:
+    arn: arn:aws:iam::158233516926:role/glidepath-smoke-fn-exec
+  conditions:
+    - {type: Ready, status: "True", reason: Available}

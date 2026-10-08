@@ -1,0 +1,25 @@
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: Function
+metadata:
+  name: smoke-fn-function
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: lambda-function
+status:
+  atProvider:
+    arn: arn:aws:lambda:us-east-1:158233516926:function:glidepath-smoke-fn
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+---
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: FunctionURL
+metadata:
+  name: smoke-fn-url
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: function-url
+status:
+  atProvider:
+    functionUrl: https://abc123.lambda-url.us-east-1.on.aws/
+  conditions:
+    - {type: Ready, status: "True", reason: Available}

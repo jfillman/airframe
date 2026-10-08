@@ -1,0 +1,71 @@
+# Shared inputs for this step (Go template variables declared at this unindented scope persist for
+# the rest of the step's execution across the --- separators - the same concatenated-template
+# convention every multi-file Composition in this catalog uses; this file sorts first), followed by
+# the task execution role.
+#
+# Every managed resource in this directory references the AWS ClusterProviderConfig named `default`
+# (gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml).
+#
+# The execution role is what Fargate uses to pull the image and ship logs: AWS's own
+# AmazonECSTaskExecutionRolePolicy plus logs:CreateLogGroup, because the task definition asks the
+# awslogs driver to create its log group on first use (awslogs-create-group) - that keeps a
+# CloudWatch Logs provider out of the picture entirely.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $appName := $spec.appName | default $xrName >>
+<<- $env := $spec.env | default "dev" >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $architecture := $spec.architecture | default "arm64" >>
+<<- $cpuArch := "ARM64" >>
+<<- if eq $architecture "x86_64" >><<- $cpuArch = "X86_64" >><<- end >>
+<<- $cpu := $spec.cpu | default "256" >>
+<<- $memory := $spec.memory | default "512" >>
+<<- $port := $spec.containerPort | default 8080 >>
+<<- $desired := 1 >>
+<<- if hasKey $spec "desiredCount" >><<- $desired = $spec.desiredCount >><<- end >>
+<<- $bootstrapImage := $spec.bootstrapImage | default "public.ecr.aws/nginx/nginx:stable-alpine" >>
+<<- $family := printf "%s-%s" $appName $env >>
+<<- $network := $spec.network | default dict >>
+<<- $networkMode := $network.mode | default "create" >>
+<<- $vpcCidr := $network.vpcCidr | default "10.42.0.0/16" >>
+<<- $subnetCidr := replace "/16" "/24" $vpcCidr >>
+<<- $az := $network.availabilityZone | default (printf "%sa" $region) >>
+<<- $tags := dict "hangar.io/target" $xrName "hangar.io/component" "aws-ecs-target" "hangar.io/app" $appName "hangar.io/env" $env >>
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-exec
+  annotations:
+    <<setResourceNameAnnotation "iam-role">>
+    crossplane.io/external-name: <<printf "%s-ecs-exec" (trunc 55 $family)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    description: <<printf "ECS task execution role for %s (Airframe AwsEcsTarget %s)" $family $xrName | toJson>>
+    assumeRolePolicy: |
+      {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ecs-tasks.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+    inlinePolicy:
+      - name: create-log-group
+        policy: |
+          {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["logs:CreateLogGroup"],"Resource":"*"}]}
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicyAttachment
+metadata:
+  name: <<$xrName>>-exec-policy
+  annotations:
+    <<setResourceNameAnnotation "iam-role-policy">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    policyArn: arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+    roleRef:
+      name: <<$xrName>>-exec

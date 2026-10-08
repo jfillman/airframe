@@ -1,0 +1,16 @@
+# Opt-in: the app composes its own AwsLambdaTarget child (spec.target.enabled) from these same
+# fields, so the function name, region, architecture and runtime it scaffolds into cicd.yaml are the
+# ones the infrastructure is built from.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: LambdaFunction
+metadata:
+  name: thumb-fn
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: python3.13
+  architecture: arm64
+  region: us-east-1
+  functionName: glidepath-thumb-fn
+  target:
+    enabled: true

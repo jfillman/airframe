@@ -1,0 +1,32 @@
+# The ECR repository deploy-lambda.yaml copies every build into. Named after the function: that
+# task finds the repository by reading the function's CURRENT image URI, so repository and function
+# are one unit here. forceDelete so deleting the XR removes a repository that holds images (the
+# bootstrap tag at least, every deployed build after that) - this target is disposable by design.
+#
+# Every managed resource in this directory references the AWS ClusterProviderConfig named
+# `default` (gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml) - the
+# cloud credential belongs to the provider, never to an XR.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $functionName := $spec.functionName | default $xrName >>
+<<- $region := $spec.region | default "us-east-1" >>
+apiVersion: ecr.aws.m.upbound.io/v1beta1
+kind: Repository
+metadata:
+  name: <<$xrName>>-repository
+  annotations:
+    <<setResourceNameAnnotation "ecr-repository">>
+    crossplane.io/external-name: <<$functionName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    imageTagMutability: MUTABLE
+    forceDelete: true
+    imageScanningConfiguration:
+      scanOnPush: false
+    tags:
+      hangar.io/target: <<$xrName>>
+      hangar.io/component: aws-lambda-target

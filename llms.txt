@@ -13,8 +13,9 @@
 
 ## Tools
 
+- `tools/render-pipeline XR.yaml compositions/<x>/composition.yaml [--required FIX ...] [--observed OBS ...]`: render any composition through the real functions offline, no cluster or Docker (see its header).
 - `tools/airframe-validate FILE...`: validate an environment values file against the strict schema, component output references, and dead-end convention rules. `--format json` for tooling.
-- `tools/airframe-capabilities <components|component|xrds|xrd|field|output> ...`: answer "what exists and what does it do" from the contract bundle alone.
+- `tools/airframe-capabilities <components|component|targets|target|xrds|xrd|field|output> ...`: answer "what exists and what does it do" from the contract bundle alone.
 - `tools/gen_airframe_schema.py`, `tools/gen_component_outputs.py`, `tools/gen_contract.py`: regenerate the generated files above after editing their sources. Each has a `--check` mode for CI.
 
 ## Docs
@@ -22,6 +23,7 @@
 - [docs/user/quickstart.md](docs/user/quickstart.md): onboard a new app end to end.
 - [docs/user/quickstart-flight-api.md](docs/user/quickstart-flight-api.md), [docs/user/quickstart-broker.md](docs/user/quickstart-broker.md): worked component examples (RabbitMQ publish/consume).
 - [docs/user/decommission-app.md](docs/user/decommission-app.md): tear down an app.
+- [docs/user/cloud-targets.md](docs/user/cloud-targets.md): stand up (and tear down) the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs - `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`.
 
 ## Optional
 

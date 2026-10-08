@@ -1,0 +1,388 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks below. Edit
+# templates/render-target-resources/*.yaml or templates/target-status/*.yaml instead, then run
+# ./build-composition.sh to regenerate this file.
+#
+# AwsLambdaTarget: the minimum AWS infrastructure a container-image Lambda function deploys into
+# (ECR repository, execution role, a bootstrap Job that seeds the repository, the function, a public
+# Function URL) - see xrds/awslambdatarget.yaml's header. Two function-go-templating steps around
+# function-auto-ready, the same shape as every Bootstrap-tier Composition in this catalog.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: awslambdatargets.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: AwsLambdaTarget
+  mode: Pipeline
+  pipeline:
+    - step: render-target-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Lambda will not create an image-packaged function until an image exists in the repository, and
+            # no Crossplane provider can push one. This Job seeds the repository with the public AWS Lambda base
+            # image for the chosen runtime, under the tag `bootstrap`, for the function's one architecture
+            # (Lambda rejects multi-architecture indexes, hence crane's --platform). Same two images and the
+            # same login dance as Glidepath's deploy-lambda.yaml, so it needs the same credentials: the
+            # aws-access-key-id / aws-secret-access-key keys of spec.credentialsSecret (app-secrets by default)
+            # in this XR's namespace.
+            #
+            # Rendered only once the Repository has been observed with its URL (one reconcile after creation).
+            # A Job's pod template is immutable, so a later change of spec.runtime or spec.architecture cannot
+            # be applied to it: delete the Job and the function and let the next reconcile recreate both, or
+            # recreate the XR. Never given a ttlSecondsAfterFinished - Crossplane would recreate a pruned Job on
+            # the next reconcile and re-run it. No activeDeadlineSeconds either: while the credentials Secret
+            # does not exist yet (an app whose secrets have not been planted in Infisical), the pod simply stays
+            # Pending on the missing volume and starts the moment the Secret appears - a deadline would turn
+            # that wait into a failure. Only a real error (bad credentials, no egress) consumes backoffLimit.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $architecture := $spec.architecture | default "arm64" >>
+            <<- $platform := "linux/arm64" >>
+            <<- if eq $architecture "x86_64" >><<- $platform = "linux/amd64" >><<- end >>
+            <<- $runtime := $spec.runtime | default "nodejs22" >>
+            <<- $bootstrapImage := "public.ecr.aws/lambda/nodejs:22" >>
+            <<- if eq $runtime "python3.13" >><<- $bootstrapImage = "public.ecr.aws/lambda/python:3.13" >><<- end >>
+            <<- if eq $runtime "go" >><<- $bootstrapImage = "public.ecr.aws/lambda/provided:al2023" >><<- end >>
+            <<- $credsSecret := $spec.credentialsSecret | default "app-secrets" >>
+            <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
+            <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
+            <<- if $repoUrl >>
+            <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
+            apiVersion: batch/v1
+            kind: Job
+            metadata:
+              name: <<$xrName>>-ecr-bootstrap
+              annotations:
+                <<setResourceNameAnnotation "bootstrap-job">>
+              labels:
+                hangar.io/target: <<$xrName>>
+                hangar.io/component: aws-lambda-target
+            spec:
+              backoffLimit: 3
+              template:
+                metadata:
+                  labels:
+                    app: aws-lambda-target-bootstrap
+                    hangar.io/target: <<$xrName>>
+                spec:
+                  restartPolicy: Never
+                  volumes:
+                    - name: aws-credentials
+                      secret:
+                        secretName: <<$credsSecret>>
+                        items:
+                          - key: aws-access-key-id
+                            path: aws-access-key-id
+                          - key: aws-secret-access-key
+                            path: aws-secret-access-key
+                    - name: work
+                      emptyDir: {}
+                  initContainers:
+                    - name: ecr-login
+                      image: public.ecr.aws/aws-cli/aws-cli:2.37.9
+                      volumeMounts:
+                        - name: aws-credentials
+                          mountPath: /var/run/secrets/aws
+                          readOnly: true
+                        - name: work
+                          mountPath: /work
+                      env:
+                        - name: AWS_DEFAULT_REGION
+                          value: <<$region>>
+                        - name: REGISTRY_HOST
+                          value: <<$registryHost>>
+                      command: ["bash", "-c"]
+                      args:
+                        - |
+                          set -euo pipefail
+                          export AWS_ACCESS_KEY_ID="$(cat /var/run/secrets/aws/aws-access-key-id)"
+                          export AWS_SECRET_ACCESS_KEY="$(cat /var/run/secrets/aws/aws-secret-access-key)"
+                          TOKEN="$(aws ecr get-login-password)"
+                          AUTH="$(printf 'AWS:%s' "${TOKEN}" | base64 -w0)"
+                          mkdir -p /work/docker
+                          printf '{"auths":{"%s":{"auth":"%s"}}}' "${REGISTRY_HOST}" "${AUTH}" > /work/docker/config.json
+                          echo "logged in to ${REGISTRY_HOST}"
+                      resources:
+                        requests: {cpu: 50m, memory: 64Mi}
+                        limits: {cpu: 500m, memory: 256Mi}
+                  containers:
+                    - name: copy-bootstrap-image
+                      image: gcr.io/go-containerregistry/crane@sha256:e78770b31258a3846f878036d9c1f63fbe4c871f9f56990bf77fd95c013e3c1b
+                      volumeMounts:
+                        - name: work
+                          mountPath: /work
+                      env:
+                        - name: DOCKER_CONFIG
+                          value: /work/docker
+                      args: ["copy", "--platform", "<<$platform>>", "<<$bootstrapImage>>", "<<$repoUrl>>:bootstrap"]
+                      resources:
+                        requests: {cpu: 50m, memory: 64Mi}
+                        limits: {cpu: 500m, memory: 256Mi}
+            <<- end >>
+            ---
+            # The ECR repository deploy-lambda.yaml copies every build into. Named after the function: that
+            # task finds the repository by reading the function's CURRENT image URI, so repository and function
+            # are one unit here. forceDelete so deleting the XR removes a repository that holds images (the
+            # bootstrap tag at least, every deployed build after that) - this target is disposable by design.
+            #
+            # Every managed resource in this directory references the AWS ClusterProviderConfig named
+            # `default` (gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml) - the
+            # cloud credential belongs to the provider, never to an XR.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $functionName := $spec.functionName | default $xrName >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            apiVersion: ecr.aws.m.upbound.io/v1beta1
+            kind: Repository
+            metadata:
+              name: <<$xrName>>-repository
+              annotations:
+                <<setResourceNameAnnotation "ecr-repository">>
+                crossplane.io/external-name: <<$functionName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                imageTagMutability: MUTABLE
+                forceDelete: true
+                imageScanningConfiguration:
+                  scanOnPush: false
+                tags:
+                  hangar.io/target: <<$xrName>>
+                  hangar.io/component: aws-lambda-target
+            ---
+            # A public Function URL (auth NONE) and the resource-policy statement that lets anyone invoke it
+            # through that URL - what a smoke test curls. Rendered once the Function has been observed, so the
+            # provider does not spend reconciles failing to resolve the reference. hasKey, not `default`: Sprig's
+            # default would turn an explicit `functionUrl: false` back into true.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $wantUrl := true >>
+            <<- if hasKey $spec "functionUrl" >><<- $wantUrl = $spec.functionUrl >><<- end >>
+            <<- $fnObs := index (.observed.resources | default dict) "lambda-function" | default dict >>
+            <<- if and $wantUrl $fnObs >>
+            apiVersion: lambda.aws.m.upbound.io/v1beta1
+            kind: FunctionURL
+            metadata:
+              name: <<$xrName>>-url
+              annotations:
+                <<setResourceNameAnnotation "function-url">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                authorizationType: NONE
+                functionNameRef:
+                  name: <<$xrName>>-function
+            ---
+            apiVersion: lambda.aws.m.upbound.io/v1beta1
+            kind: Permission
+            metadata:
+              name: <<$xrName>>-url-public
+              annotations:
+                <<setResourceNameAnnotation "function-url-permission">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                statementId: FunctionURLAllowPublicAccess
+                action: lambda:InvokeFunctionUrl
+                principal: "*"
+                functionUrlAuthType: NONE
+                functionNameRef:
+                  name: <<$xrName>>-function
+            <<- end >>
+            ---
+            # The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
+            # AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
+            # characters, hence the trunc.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $functionName := $spec.functionName | default $xrName >>
+            apiVersion: iam.aws.m.upbound.io/v1beta1
+            kind: Role
+            metadata:
+              name: <<$xrName>>-exec
+              annotations:
+                <<setResourceNameAnnotation "iam-role">>
+                crossplane.io/external-name: <<printf "%s-exec" (trunc 59 $functionName)>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
+                assumeRolePolicy: |
+                  {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+                tags:
+                  hangar.io/target: <<$xrName>>
+                  hangar.io/component: aws-lambda-target
+            ---
+            apiVersion: iam.aws.m.upbound.io/v1beta1
+            kind: RolePolicyAttachment
+            metadata:
+              name: <<$xrName>>-exec-logs
+              annotations:
+                <<setResourceNameAnnotation "iam-role-policy">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                policyArn: arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+                roleRef:
+                  name: <<$xrName>>-exec
+            ---
+            # The function itself, image-packaged, pointing at the bootstrap tag - rendered only once the
+            # bootstrap Job has succeeded, so the provider never has to retry a create that Lambda would refuse.
+            #
+            # managementPolicies WITHOUT Update: deploy-lambda.yaml changes this function's image on every
+            # deploy (`aws lambda update-function-code`). Under the default "*" policy Crossplane would revert
+            # it to the bootstrap image on its next reconcile - the same class of fight the catalog's
+            # RepositoryFile scaffolds had with developer edits. Observe/Create/Delete keeps the function
+            # owned (deleting the XR deletes it) without ever writing to it after creation.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $functionName := $spec.functionName | default $xrName >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $architecture := $spec.architecture | default "arm64" >>
+            <<- $memorySize := $spec.memorySize | default 256 >>
+            <<- $timeout := $spec.timeout | default 10 >>
+            <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
+            <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
+            <<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
+            <<- $jobSucceeded := dig "resource" "status" "succeeded" 0 $jobObs >>
+            <<- if and $repoUrl (ge (int $jobSucceeded) 1) >>
+            apiVersion: lambda.aws.m.upbound.io/v1beta1
+            kind: Function
+            metadata:
+              name: <<$xrName>>-function
+              annotations:
+                <<setResourceNameAnnotation "lambda-function">>
+                crossplane.io/external-name: <<$functionName>>
+            spec:
+              managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                description: <<printf "Deployed by Glidepath (deploy.target: aws-lambda); infrastructure by Airframe AwsLambdaTarget %s" $xrName | toJson>>
+                packageType: Image
+                imageUri: <<$repoUrl>>:bootstrap
+                architectures:
+                  - <<$architecture>>
+                memorySize: <<$memorySize | int>>
+                timeout: <<$timeout | int>>
+                roleRef:
+                  name: <<$xrName>>-exec
+                tags:
+                  hangar.io/target: <<$xrName>>
+                  hangar.io/component: aws-lambda-target
+            <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: target-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # TargetReady (a closed reason set, see xrds/awslambdatarget.meta.yaml) plus the XR's own status
+            # fields: everything an app or an agent needs to point a cicd.yaml at this target, including the
+            # deploy block itself as text (status.cicd), without reading AWS. The composite document below
+            # carries no composition-resource-name annotation, which is how function-go-templating knows it
+            # updates the composite's status rather than composing a resource.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $spec := $xr.spec >>
+            <<- $functionName := $spec.functionName | default $xrName >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $architecture := $spec.architecture | default "arm64" >>
+            <<- $wantUrl := true >>
+            <<- if hasKey $spec "functionUrl" >><<- $wantUrl = $spec.functionUrl >><<- end >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" (index $obs "ecr-repository" | default dict) >>
+            <<- $roleArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "iam-role" | default dict) >>
+            <<- $jobObs := index $obs "bootstrap-job" | default dict >>
+            <<- $jobSucceeded := int (dig "resource" "status" "succeeded" 0 $jobObs) >>
+            <<- $jobFailed := int (dig "resource" "status" "failed" 0 $jobObs) >>
+            <<- $fnObs := index $obs "lambda-function" | default dict >>
+            <<- $fnReady := false >>
+            <<- range (dig "resource" "status" "conditions" list $fnObs) >>
+              <<- if and (eq .type "Ready") (eq .status "True") >><<- $fnReady = true >><<- end >>
+            <<- end >>
+            <<- $functionUrl := dig "resource" "status" "atProvider" "functionUrl" "" (index $obs "function-url" | default dict) >>
+            <<- $reason := "AwsLambdaTargetProvisioning" >>
+            <<- $status := "False" >>
+            <<- $message := "Waiting for the ECR repository and execution role to be observed (just created, or the AWS provider has no credentials yet)." >>
+            <<- if and $fnReady (or (not $wantUrl) $functionUrl) >>
+              <<- $reason = "AwsLambdaTargetReady" >>
+              <<- $status = "True" >>
+              <<- $message = printf "Lambda function %s exists in %s with an ECR image; Glidepath can deploy to it (status.cicd has the deploy block)." $functionName $region >>
+            <<- else if and $jobObs (ge $jobFailed 1) (lt $jobSucceeded 1) >>
+              <<- $reason = "AwsLambdaTargetBootstrapFailed" >>
+              <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (credentials in the %s Secret, network egress); delete the Job to retry." $xrName $repoUrl ($spec.credentialsSecret | default "app-secrets") >>
+            <<- else if $repoUrl >>
+              <<- $reason = "AwsLambdaTargetBootstrapping" >>
+              <<- $message = printf "Copying the placeholder image into %s (Job %s-ecr-bootstrap); the function is created once that succeeds." $repoUrl $xrName >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: TargetReady
+                status: <<$status | quote>>
+                reason: <<$reason>>
+                message: <<$message | quote>>
+                target: CompositeAndClaim
+            ---
+            apiVersion: <<$xr.apiVersion>>
+            kind: AwsLambdaTarget
+            status:
+              functionName: <<$functionName>>
+              region: <<$region>>
+              architecture: <<$architecture>>
+              <<- if $repoUrl >>
+              repositoryUrl: <<$repoUrl>>
+              <<- end >>
+              <<- if $roleArn >>
+              roleArn: <<$roleArn>>
+              <<- end >>
+              <<- if $functionUrl >>
+              functionUrl: <<$functionUrl>>
+              <<- end >>
+              cicd: |
+                deploy:
+                  target: aws-lambda
+                  lambda:
+                    functionName: <<$functionName>>
+                    region: <<$region>>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

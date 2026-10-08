@@ -1,0 +1,14 @@
+# Opt-in: the app composes its own AzureContainerAppTarget child (spec.target.enabled); the child
+# creates and owns spec.resourceGroup.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureFunction
+metadata:
+  name: thumb-fn
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: python3.12
+  resourceGroup: glidepath-thumb-fn-rg
+  target:
+    enabled: true
+    location: westus2

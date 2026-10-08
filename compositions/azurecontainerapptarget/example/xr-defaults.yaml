@@ -1,0 +1,10 @@
+# The Container Apps target for the smoke-az-fn app: Container App smoke-az-fn in its own resource
+# group smoke-az-fn-rg, the Azure Functions Node base image as placeholder on port 80.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureContainerAppTarget
+metadata:
+  name: smoke-az-fn
+  namespace: app-smoke-az-fn-cicd
+spec:
+  appName: smoke-az-fn
+  location: eastus

@@ -1,0 +1,7 @@
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsLambdaTarget
+metadata: {name: thumb-fn-target, namespace: demo-apps, annotations: {crossplane.io/composition-resource-name: aws-lambda-target}}
+status:
+  conditions:
+    - {type: TargetReady, status: "True", reason: AwsLambdaTargetReady, message: "Lambda function glidepath-thumb-fn exists in us-east-1 with an ECR image; Glidepath can deploy to it (status.cicd has the deploy block)."}
+    - {type: Ready, status: "True"}

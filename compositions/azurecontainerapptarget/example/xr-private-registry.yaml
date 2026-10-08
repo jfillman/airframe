@@ -1,0 +1,19 @@
+# The same target pulling from a private ghcr.io package: the token lives in a Secret in this
+# namespace (key `token`), never in this file.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureContainerAppTarget
+metadata:
+  name: smoke-az-fn
+  namespace: app-smoke-az-fn-cicd
+spec:
+  appName: smoke-az-fn
+  resourceGroup: hangar-smoke
+  location: eastus
+  size: medium
+  minReplicas: 0
+  registry:
+    server: ghcr.io
+    username: jfillman
+    passwordSecretRef:
+      name: ghcr-pull-token
+      key: token

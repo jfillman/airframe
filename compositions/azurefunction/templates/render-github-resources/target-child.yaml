@@ -1,0 +1,28 @@
+# Opt-in (spec.target.enabled, 2026-10-08): composes an AzureContainerAppTarget child - the resource
+# group, Container Apps environment and app with public ingress this function deploys into - from
+# this XR's own appName/resourceGroup/runtime, the same values cicd-yaml.yaml scaffolds into the
+# deploy block, so the three can never disagree. The child CREATES and owns spec.resourceGroup
+# (see the XRD field description). A normal child XR composed directly, like the TektonCICD child
+# beside it; unconditional on $clusterOk for the same reason. Off by default: the standalone
+# AzureContainerAppTarget XR is the shape for infrastructure that comes and goes independently.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $target := $spec.target | default dict >>
+<<- if $target.enabled >>
+<<- $runtime := $spec.runtime | default "nodejs20" >>
+<<- $bootstrapImage := "mcr.microsoft.com/azure-functions/node:4-node20" >>
+<<- if eq $runtime "python3.12" >><<- $bootstrapImage = "mcr.microsoft.com/azure-functions/python:4-python3.12" >><<- end >>
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureContainerAppTarget
+metadata:
+  name: <<$xrName>>-target
+  annotations:
+    <<setResourceNameAnnotation "azure-container-app-target">>
+spec:
+  appName: <<$spec.appName | default $xrName>>
+  resourceGroup: <<$spec.resourceGroup>>
+  location: <<$target.location | default "eastus">>
+  containerPort: 80
+  bootstrapImage: <<$bootstrapImage>>
+<<- end >>
+---

@@ -85,7 +85,15 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 17 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 20 and all(xrds.values())))
+
+    # Q11: What cloud targets exist, and does each say how to tell it worked?
+    targets = ask("targets")
+    checks.append(("Q11 cloud target list", set(targets) == {"awslambdatarget", "awsecstarget", "azurecontainerapptarget"}))
+    lambda_target = ask("target", "awslambdatarget")
+    checks.append(("Q12 lambda target has a closed TargetReady reason set and verify checks",
+                   any(c.get("type") == "TargetReady" and c.get("reasons") for c in lambda_target.get("conditions", []))
+                   and bool(lambda_target.get("verify"))))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

@@ -1,0 +1,111 @@
+# The cluster, the first task-definition revision and the service.
+#
+# Task definition: Glidepath's deploy-ecs.yaml registers a NEW revision of this family on every
+# deploy, copying every field of the container definition and swapping only `image` - so the
+# container is named <appName> (the deploy.ecs.containerName the app's cicd.yaml must carry),
+# listens on containerPort, gets PORT in its environment, and logs to CloudWatch under
+# /ecs/<family> (the group is created on first use, see the role in 00-inputs-and-iam.yaml). No
+# command or entrypoint, because the real image would inherit it. containerDefinitions is a JSON
+# string field on the provider, hence the double toJson.
+#
+# Both the task definition and the service are composed WITHOUT the Update management policy:
+# deploy-ecs re-points the service at each new revision, and Crossplane must never revert that to
+# revision 1. trackLatest keeps the task-definition resource observing the newest ACTIVE revision
+# instead of the one it created.
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: Cluster
+metadata:
+  name: <<$xrName>>-cluster
+  annotations:
+    <<setResourceNameAnnotation "ecs-cluster">>
+    crossplane.io/external-name: <<$appName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+<<- $container := dict "name" $appName "image" $bootstrapImage "essential" true >>
+<<- $_ := set $container "portMappings" (list (dict "containerPort" (int $port) "protocol" "tcp")) >>
+<<- $_ := set $container "environment" (list (dict "name" "PORT" "value" (toString (int $port)))) >>
+<<- $_ := set $container "logConfiguration" (dict "logDriver" "awslogs" "options" (dict "awslogs-group" (printf "/ecs/%s" $family) "awslogs-region" $region "awslogs-stream-prefix" "ecs" "awslogs-create-group" "true")) >>
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: TaskDefinition
+metadata:
+  name: <<$xrName>>-taskdef
+  annotations:
+    <<setResourceNameAnnotation "task-definition">>
+spec:
+  managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    family: <<$family>>
+    cpu: <<$cpu | quote>>
+    memory: <<$memory | quote>>
+    networkMode: awsvpc
+    requiresCompatibilities:
+      - FARGATE
+    runtimePlatform:
+      cpuArchitecture: <<$cpuArch>>
+      operatingSystemFamily: LINUX
+    executionRoleArnRef:
+      name: <<$xrName>>-exec
+    trackLatest: true
+    containerDefinitions: <<list $container | toJson | toJson>>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: Service
+metadata:
+  name: <<$xrName>>-service
+  annotations:
+    <<setResourceNameAnnotation "ecs-service">>
+    crossplane.io/external-name: <<$family>>
+spec:
+  managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    clusterRef:
+      name: <<$xrName>>-cluster
+    taskDefinitionRef:
+      name: <<$xrName>>-taskdef
+    launchType: FARGATE
+    platformVersion: LATEST
+    desiredCount: <<$desired | int>>
+    waitForSteadyState: false
+    forceDelete: true
+    networkConfiguration:
+      assignPublicIp: true
+      <<- if eq $networkMode "create" >>
+      subnetRefs:
+        - name: <<$xrName>>-subnet
+      securityGroupRefs:
+        - name: <<$xrName>>-sg
+      <<- else >>
+      subnets:
+        <<- range $network.subnetIds >>
+        - <<. | quote>>
+        <<- end >>
+      securityGroups:
+        <<- range $network.securityGroupIds >>
+        - <<. | quote>>
+        <<- end >>
+      <<- end >>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>

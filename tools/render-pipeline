@@ -1,0 +1,119 @@
+#!/usr/bin/env python3
+"""Render a Composition pipeline (function-go-templating + function-auto-ready steps) against
+functions running locally, the way Crossplane's composer drives them: observed XR in, each step's
+input, requirements satisfied from fixture files on a second pass, desired state carried step to
+step. No Docker needed - `crossplane composition render` insists on a Docker daemon even with a
+Development runtime, which this machine does not run. Start the functions once:
+
+  container run -d --name fn-gotpl -p 127.0.0.1:9443:9443 ghcr.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443
+  container run -d --name fn-ready -p 127.0.0.1:9444:9443 ghcr.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443
+
+(pull from ghcr.io/crossplane-contrib, not xpkg.crossplane.io - the `container` CLI refuses that
+proxy's cross-domain token exchange). Then:
+
+  tools/render-pipeline XR.yaml compositions/<x>/composition.yaml [--required FIX.yaml ...] [--observed OBS.yaml ...] [--json]
+
+--observed files are composed resources as Crossplane would observe them; each needs the
+crossplane.io/composition-resource-name annotation naming its slot.
+"""
+import argparse, json, sys
+import grpc, yaml
+from crossplane.function import resource
+from crossplane.function.proto.v1 import run_function_pb2 as fnv1
+from crossplane.function.proto.v1 import run_function_pb2_grpc as grpcv1
+from google.protobuf import struct_pb2
+
+TARGETS = {"function-go-templating": "127.0.0.1:9443", "function-auto-ready": "127.0.0.1:9444"}
+
+
+def docs(path):
+    return [d for d in yaml.safe_load_all(open(path)) if d]
+
+
+def matches(sel, doc):
+    if sel.api_version != doc.get("apiVersion") or sel.kind != doc.get("kind"):
+        return False
+    which = sel.WhichOneof("match")
+    if which == "match_name":
+        return doc["metadata"]["name"] == sel.match_name
+    if which == "match_labels":
+        labels = doc["metadata"].get("labels", {})
+        return all(labels.get(k) == v for k, v in sel.match_labels.labels.items())
+    return True
+
+
+def run_step(target, xr, observed, desired, context, inp, fixtures):
+    extra = {}
+    rsp = None
+    for _ in range(4):
+        req = fnv1.RunFunctionRequest(
+            observed=fnv1.State(composite=fnv1.Resource(resource=resource.dict_to_struct(xr)), resources=observed),
+            desired=desired, context=context)
+        if inp is not None:
+            req.input.update(inp)
+        for k, v in extra.items():
+            for field in ("extra_resources", "required_resources"):
+                if hasattr(req, field):
+                    getattr(req, field)[k].CopyFrom(v)
+        with grpc.insecure_channel(target) as ch:
+            rsp = grpcv1.FunctionRunnerServiceStub(ch).RunFunction(req, timeout=30)
+        reqs = {}
+        for field in ("extra_resources", "resources"):
+            if hasattr(rsp.requirements, field):
+                reqs.update(dict(getattr(rsp.requirements, field)))
+        new_extra = {name: fnv1.Resources(items=[fnv1.Resource(resource=resource.dict_to_struct(d)) for d in fixtures if matches(sel, d)])
+                     for name, sel in reqs.items()}
+        if set(new_extra) == set(extra):
+            break
+        extra = new_extra
+    return rsp
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("xr"); ap.add_argument("composition")
+    ap.add_argument("--required", action="append", default=[])
+    ap.add_argument("--observed", action="append", default=[])
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    xr = docs(a.xr)[0]
+    comp = docs(a.composition)[0]
+    fixtures = [d for f in a.required for d in docs(f)]
+    observed = {}
+    for d in (d for f in a.observed for d in docs(f)):
+        observed[d["metadata"]["annotations"]["crossplane.io/composition-resource-name"]] = fnv1.Resource(resource=resource.dict_to_struct(d))
+    desired = fnv1.State(composite=fnv1.Resource(resource=resource.dict_to_struct({"apiVersion": xr["apiVersion"], "kind": xr["kind"]})))
+    context = struct_pb2.Struct()
+    conditions, results = [], []
+    for step in comp["spec"]["pipeline"]:
+        rsp = run_step(TARGETS[step["functionRef"]["name"]], xr, observed, desired, context, step.get("input"), fixtures)
+        desired = rsp.desired
+        conditions.extend(rsp.conditions)
+        results.extend(rsp.results)
+        if rsp.HasField("context"):
+            context = rsp.context
+        if any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results):
+            break
+    out = {
+        "resources": {n: {"kind": resource.struct_to_dict(r.resource).get("kind"), "ready": fnv1.Ready.Name(r.ready),
+                          "resource": resource.struct_to_dict(r.resource)} for n, r in desired.resources.items()},
+        "conditions": [{"type": c.type, "status": fnv1.Status.Name(c.status), "reason": c.reason, "message": c.message} for c in conditions],
+        "results": [{"severity": fnv1.Severity.Name(r.severity), "message": r.message} for r in results],
+        "composite_status": resource.struct_to_dict(desired.composite.resource).get("status"),
+    }
+    if a.json:
+        json.dump(out, sys.stdout, indent=2); return
+    for n, r in sorted(out["resources"].items()):
+        extra = ""
+        if r["kind"] == "Usage":
+            of = r["resource"]["spec"]["of"]; extra = f"  of={of['apiVersion']}/{of['kind']} {of['resourceRef']['name']}"
+        print(f"resource  {n:28} {r['kind']:16} ready={r['ready']}{extra}")
+    for c in out["conditions"]:
+        print(f"condition {c['type']:16} {c['status']:22} {c['reason']}")
+        print(f"          {c['message'][:150]}")
+    for r in out["results"]:
+        print(f"result    {r['severity']:16} {r['message'][:150]}")
+
+
+if __name__ == "__main__":
+    main()

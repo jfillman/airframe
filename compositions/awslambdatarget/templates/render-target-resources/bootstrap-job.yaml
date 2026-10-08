@@ -1,0 +1,102 @@
+# Lambda will not create an image-packaged function until an image exists in the repository, and
+# no Crossplane provider can push one. This Job seeds the repository with the public AWS Lambda base
+# image for the chosen runtime, under the tag `bootstrap`, for the function's one architecture
+# (Lambda rejects multi-architecture indexes, hence crane's --platform). Same two images and the
+# same login dance as Glidepath's deploy-lambda.yaml, so it needs the same credentials: the
+# aws-access-key-id / aws-secret-access-key keys of spec.credentialsSecret (app-secrets by default)
+# in this XR's namespace.
+#
+# Rendered only once the Repository has been observed with its URL (one reconcile after creation).
+# A Job's pod template is immutable, so a later change of spec.runtime or spec.architecture cannot
+# be applied to it: delete the Job and the function and let the next reconcile recreate both, or
+# recreate the XR. Never given a ttlSecondsAfterFinished - Crossplane would recreate a pruned Job on
+# the next reconcile and re-run it. No activeDeadlineSeconds either: while the credentials Secret
+# does not exist yet (an app whose secrets have not been planted in Infisical), the pod simply stays
+# Pending on the missing volume and starts the moment the Secret appears - a deadline would turn
+# that wait into a failure. Only a real error (bad credentials, no egress) consumes backoffLimit.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $architecture := $spec.architecture | default "arm64" >>
+<<- $platform := "linux/arm64" >>
+<<- if eq $architecture "x86_64" >><<- $platform = "linux/amd64" >><<- end >>
+<<- $runtime := $spec.runtime | default "nodejs22" >>
+<<- $bootstrapImage := "public.ecr.aws/lambda/nodejs:22" >>
+<<- if eq $runtime "python3.13" >><<- $bootstrapImage = "public.ecr.aws/lambda/python:3.13" >><<- end >>
+<<- if eq $runtime "go" >><<- $bootstrapImage = "public.ecr.aws/lambda/provided:al2023" >><<- end >>
+<<- $credsSecret := $spec.credentialsSecret | default "app-secrets" >>
+<<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
+<<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
+<<- if $repoUrl >>
+<<- $registryHost := index (splitList "/" $repoUrl) 0 >>
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: <<$xrName>>-ecr-bootstrap
+  annotations:
+    <<setResourceNameAnnotation "bootstrap-job">>
+  labels:
+    hangar.io/target: <<$xrName>>
+    hangar.io/component: aws-lambda-target
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: aws-lambda-target-bootstrap
+        hangar.io/target: <<$xrName>>
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: aws-credentials
+          secret:
+            secretName: <<$credsSecret>>
+            items:
+              - key: aws-access-key-id
+                path: aws-access-key-id
+              - key: aws-secret-access-key
+                path: aws-secret-access-key
+        - name: work
+          emptyDir: {}
+      initContainers:
+        - name: ecr-login
+          image: public.ecr.aws/aws-cli/aws-cli:2.37.9
+          volumeMounts:
+            - name: aws-credentials
+              mountPath: /var/run/secrets/aws
+              readOnly: true
+            - name: work
+              mountPath: /work
+          env:
+            - name: AWS_DEFAULT_REGION
+              value: <<$region>>
+            - name: REGISTRY_HOST
+              value: <<$registryHost>>
+          command: ["bash", "-c"]
+          args:
+            - |
+              set -euo pipefail
+              export AWS_ACCESS_KEY_ID="$(cat /var/run/secrets/aws/aws-access-key-id)"
+              export AWS_SECRET_ACCESS_KEY="$(cat /var/run/secrets/aws/aws-secret-access-key)"
+              TOKEN="$(aws ecr get-login-password)"
+              AUTH="$(printf 'AWS:%s' "${TOKEN}" | base64 -w0)"
+              mkdir -p /work/docker
+              printf '{"auths":{"%s":{"auth":"%s"}}}' "${REGISTRY_HOST}" "${AUTH}" > /work/docker/config.json
+              echo "logged in to ${REGISTRY_HOST}"
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+      containers:
+        - name: copy-bootstrap-image
+          image: gcr.io/go-containerregistry/crane@sha256:e78770b31258a3846f878036d9c1f63fbe4c871f9f56990bf77fd95c013e3c1b
+          volumeMounts:
+            - name: work
+              mountPath: /work
+          env:
+            - name: DOCKER_CONFIG
+              value: /work/docker
+          args: ["copy", "--platform", "<<$platform>>", "<<$bootstrapImage>>", "<<$repoUrl>>:bootstrap"]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+<<- end >>

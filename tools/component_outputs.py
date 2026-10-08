@@ -24,10 +24,15 @@ GENERATED_PATH = ROOT / "charts" / "airframe-application" / "files" / "component
 VALID_OUTPUT_KINDS = {"literal", "secretKeyRef", "configMapKeyRef"}
 
 
-def load_all():
+def load_all(targets=False):
+    """Components only by default. A sidecar with `component: false` (a cloud target: its XR is
+    requested on its own, nothing in a values.yaml references it) is skipped here and published by
+    contract.py under `targets`; targets=True returns those instead."""
     out = {}
     for f in XRDS.glob("*.meta.yaml"):
         d = yaml.safe_load(f.read_text())
+        if bool(d.get("component", True)) == targets:
+            continue
         kind = d["kind"].lower()
         for name, spec in d.get("outputs", {}).items():
             if spec.get("kind") not in VALID_OUTPUT_KINDS:

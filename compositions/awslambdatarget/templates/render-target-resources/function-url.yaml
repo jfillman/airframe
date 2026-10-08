@@ -1,0 +1,46 @@
+# A public Function URL (auth NONE) and the resource-policy statement that lets anyone invoke it
+# through that URL - what a smoke test curls. Rendered once the Function has been observed, so the
+# provider does not spend reconciles failing to resolve the reference. hasKey, not `default`: Sprig's
+# default would turn an explicit `functionUrl: false` back into true.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $wantUrl := true >>
+<<- if hasKey $spec "functionUrl" >><<- $wantUrl = $spec.functionUrl >><<- end >>
+<<- $fnObs := index (.observed.resources | default dict) "lambda-function" | default dict >>
+<<- if and $wantUrl $fnObs >>
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: FunctionURL
+metadata:
+  name: <<$xrName>>-url
+  annotations:
+    <<setResourceNameAnnotation "function-url">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    authorizationType: NONE
+    functionNameRef:
+      name: <<$xrName>>-function
+---
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: Permission
+metadata:
+  name: <<$xrName>>-url-public
+  annotations:
+    <<setResourceNameAnnotation "function-url-permission">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    statementId: FunctionURLAllowPublicAccess
+    action: lambda:InvokeFunctionUrl
+    principal: "*"
+    functionUrlAuthType: NONE
+    functionNameRef:
+      name: <<$xrName>>-function
+<<- end >>

@@ -1,0 +1,80 @@
+# The Container App Glidepath's deploy-azure-container-apps.yaml updates (`az containerapp update
+# --image`): single-revision mode, external ingress on containerPort, one container running the
+# placeholder image until the first real deploy. Composed WITHOUT the Update management policy for
+# exactly that reason - Crossplane must never put the placeholder back.
+#
+# Private registry (spec.registry): the provider models a Container App secret with BOTH its name
+# and its value as Kubernetes Secret references, so the secret's name ("registry-password", a
+# constant) is composed into a tiny Secret of our own and the value comes straight from the Secret
+# the XR names - the token never passes through this template or lands in git.
+<<- if $withRegistry >>
+apiVersion: v1
+kind: Secret
+metadata:
+  name: <<$xrName>>-registry-secret-name
+  annotations:
+    <<setResourceNameAnnotation "registry-secret-name">>
+    gotemplating.fn.crossplane.io/ready: "True"
+  labels:
+    <<- range $k, $v := $tags >>
+    <<$k>>: <<$v | quote>>
+    <<- end >>
+type: Opaque
+stringData:
+  name: registry-password
+---
+<<- end >>
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: ContainerApp
+metadata:
+  name: <<$xrName>>-app
+  annotations:
+    <<setResourceNameAnnotation "container-app">>
+    crossplane.io/external-name: <<$appName>>
+spec:
+  managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    resourceGroupNameRef:
+      name: <<$xrName>>-rg
+    containerAppEnvironmentIdRef:
+      name: <<$xrName>>-env
+    revisionMode: Single
+    template:
+      minReplicas: <<$minReplicas | int>>
+      maxReplicas: <<$maxReplicas | int>>
+      container:
+        - name: <<$appName>>
+          image: <<$bootstrapImage>>
+          cpu: <<$cpu>>
+          memory: <<$memory>>
+          env:
+            - name: PORT
+              value: <<$port | toString | quote>>
+    ingress:
+      externalEnabled: true
+      targetPort: <<$port | int>>
+      transport: auto
+      allowInsecureConnections: false
+      trafficWeight:
+        - latestRevision: true
+          percentage: 100
+    <<- if $withRegistry >>
+    secret:
+      - nameSecretRef:
+          name: <<$xrName>>-registry-secret-name
+          key: name
+        valueSecretRef:
+          name: <<$registry.passwordSecretRef.name>>
+          key: <<$registry.passwordSecretRef.key>>
+    registry:
+      - server: <<$registry.server | default "ghcr.io">>
+        username: <<$registry.username | quote>>
+        passwordSecretName: registry-password
+    <<- end >>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>

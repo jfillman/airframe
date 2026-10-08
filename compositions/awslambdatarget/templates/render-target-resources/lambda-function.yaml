@@ -1,0 +1,47 @@
+# The function itself, image-packaged, pointing at the bootstrap tag - rendered only once the
+# bootstrap Job has succeeded, so the provider never has to retry a create that Lambda would refuse.
+#
+# managementPolicies WITHOUT Update: deploy-lambda.yaml changes this function's image on every
+# deploy (`aws lambda update-function-code`). Under the default "*" policy Crossplane would revert
+# it to the bootstrap image on its next reconcile - the same class of fight the catalog's
+# RepositoryFile scaffolds had with developer edits. Observe/Create/Delete keeps the function
+# owned (deleting the XR deletes it) without ever writing to it after creation.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $functionName := $spec.functionName | default $xrName >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $architecture := $spec.architecture | default "arm64" >>
+<<- $memorySize := $spec.memorySize | default 256 >>
+<<- $timeout := $spec.timeout | default 10 >>
+<<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
+<<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
+<<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
+<<- $jobSucceeded := dig "resource" "status" "succeeded" 0 $jobObs >>
+<<- if and $repoUrl (ge (int $jobSucceeded) 1) >>
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: Function
+metadata:
+  name: <<$xrName>>-function
+  annotations:
+    <<setResourceNameAnnotation "lambda-function">>
+    crossplane.io/external-name: <<$functionName>>
+spec:
+  managementPolicies: ["Observe", "Create", "Delete", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    description: <<printf "Deployed by Glidepath (deploy.target: aws-lambda); infrastructure by Airframe AwsLambdaTarget %s" $xrName | toJson>>
+    packageType: Image
+    imageUri: <<$repoUrl>>:bootstrap
+    architectures:
+      - <<$architecture>>
+    memorySize: <<$memorySize | int>>
+    timeout: <<$timeout | int>>
+    roleRef:
+      name: <<$xrName>>-exec
+    tags:
+      hangar.io/target: <<$xrName>>
+      hangar.io/component: aws-lambda-target
+<<- end >>

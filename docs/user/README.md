@@ -39,3 +39,4 @@ See [quickstart.md](quickstart.md#01--ground--flight) for the full comparison.
 This guide also exists as a fully illustrated, interactive walkthrough with worked
 diagrams — same content, richer format:
 **[Airframe Quickstart](html/quickstart.html)**
+- [Cloud targets](cloud-targets.md): stand up the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs, on demand.

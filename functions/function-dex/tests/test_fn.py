@@ -23,17 +23,33 @@ from function import fn
 
 
 class FakeDexServicer(dexgrpc.DexServicer):
-    """A minimal, real gRPC server for CreateClient - not a mock of fn.py's own call, a real
-    server the real generated stub talks to over a real (loopback) socket."""
+    """A minimal, real gRPC server for CreateClient/GetClient - not a mock of fn.py's own call,
+    a real server the real generated stub talks to over a real (loopback) socket.
+
+    Mirrors real Dex's semantics (server/apiserver/clients.go), which an earlier version of
+    this fake got wrong by overwriting the stored client on every CreateClient: a known id
+    answers already_exists=true with NO client and leaves the stored secret untouched, and
+    GetClient returns the stored client, secret included."""
 
     def __init__(self):
         self.created = {}
+        self.get_client_error = None  # (grpc.StatusCode, detail) to make GetClient fail
 
     def CreateClient(self, request, context):  # noqa: N802 - gRPC's own method name.
         c = request.client
-        already = c.id in self.created
-        self.created[c.id] = c
-        return dexpb.CreateClientResp(already_exists=already, client=c)
+        if c.id in self.created:
+            return dexpb.CreateClientResp(already_exists=True)
+        self.created[c.id] = dexpb.Client()
+        self.created[c.id].CopyFrom(c)
+        return dexpb.CreateClientResp(client=c)
+
+    def GetClient(self, request, context):  # noqa: N802 - gRPC's own method name.
+        if self.get_client_error:
+            context.abort(*self.get_client_error)
+        c = self.created.get(request.id)
+        if c is None:
+            context.abort(grpc.StatusCode.NOT_FOUND, f"client {request.id} not found")
+        return dexpb.GetClientResp(client=c)
 
 
 class FakeDexServer:
@@ -63,6 +79,40 @@ def xr(mode, **spec_extra):
         "metadata": {"name": "my-dex", "namespace": "app-x-dev", "labels": {"hangar.io/app": "x"}},
         "spec": spec,
     })
+
+
+def secret_data(string_values):
+    """An observed oauth-credentials Secret's `data` block from plain values (base64, like the API server stores them)."""
+    return {"data": {k: base64.b64encode(v.encode()).decode() for k, v in string_values.items()}}
+
+
+def rendered_secret(rsp):
+    return resource.struct_to_dict(rsp.desired.resources["oauth-credentials"].resource)["stringData"]
+
+
+def warnings_of(rsp):
+    return [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING]
+
+
+async def run_attach(server, observed=None, address=None):
+    """One attach reconcile against the fake server (or an explicit address), optionally with an
+    observed oauth-credentials Secret (a dict with a `data` block, see secret_data)."""
+    resources = {}
+    if observed is not None:
+        resources["oauth-credentials"] = fnv1.Resource(resource=resource.dict_to_struct(observed))
+    req = fnv1.RunFunctionRequest(
+        observed=fnv1.State(
+            composite=fnv1.Resource(resource=xr("attach", serverRef={"name": "srv", "namespace": "srv-ns"})),
+            resources=resources,
+        ),
+    )
+    target = address or server.address
+    orig = fn.dex_grpc_address
+    fn.dex_grpc_address = lambda ref: target  # noqa: ARG005 - point at the fake instead of the DNS-derived address
+    try:
+        return await asyncio.wait_for(fn.FunctionRunner().RunFunction(req, None), timeout=10)
+    finally:
+        fn.dex_grpc_address = orig
 
 
 class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
@@ -170,41 +220,85 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
 
     async def test_attach_mode_calling_create_client_twice_is_idempotent(self):
         async with FakeDexServer() as server:
-            req = fnv1.RunFunctionRequest(
-                observed=fnv1.State(
-                    composite=fnv1.Resource(resource=xr(
-                        "attach", serverRef={"name": "srv", "namespace": "srv-ns"},
-                    )),
-                ),
-            )
-            orig = fn.dex_grpc_address
-            fn.dex_grpc_address = lambda ref: server.address  # noqa: ARG005
-            try:
-                r1 = await fn.FunctionRunner().RunFunction(req, None)
-                r2 = await fn.FunctionRunner().RunFunction(req, None)
-            finally:
-                fn.dex_grpc_address = orig
+            r1 = await run_attach(server)
+            s1 = rendered_secret(r1)
+            # Second reconcile sees the Secret it wrote: confirmed, same secret, no rotation.
+            r2 = await run_attach(server, observed=secret_data(s1))
             self.assertEqual(r1.conditions[0].reason, "DexAttachReady")
             self.assertEqual(r2.conditions[0].reason, "DexAttachReady")
+            self.assertEqual(rendered_secret(r2)["client-secret"], s1["client-secret"])
             self.assertEqual(len(server.servicer.created), 1)  # one client, registered twice
+            self.assertEqual(server.servicer.created["my-dex"].secret, s1["client-secret"])
+            self.assertFalse(warnings_of(r2))
+
+    async def test_attach_mode_adopts_the_servers_secret_when_the_secret_is_gone_but_the_client_remains(self):
+        # The C1 scenario: the XR (or just its Secret) is deleted and recreated while the client
+        # stays registered. Real Dex answers already_exists and keeps its secret; before this fix
+        # the function wrote a fresh secret the server would never accept and reported Ready.
+        async with FakeDexServer() as server:
+            r1 = await run_attach(server)
+            original = rendered_secret(r1)["client-secret"]
+            r2 = await run_attach(server)  # no observed Secret this time
+            self.assertEqual(r2.conditions[0].reason, "DexAttachReady")
+            self.assertEqual(r2.conditions[0].status, fnv1.STATUS_CONDITION_TRUE)
+            self.assertEqual(rendered_secret(r2)["client-secret"], original)
+            self.assertEqual(server.servicer.created["my-dex"].secret, original)
+            self.assertIn("adopted", r2.conditions[0].message)
+            self.assertTrue(any("adopted" in w for w in warnings_of(r2)))
+
+    async def test_attach_mode_converges_a_drifted_secret_back_to_the_server(self):
+        async with FakeDexServer() as server:
+            server.servicer.created["my-dex"] = dexpb.Client(id="my-dex", secret="server-held", name="my-dex")
+            rsp = await run_attach(server, observed=secret_data({"client-id": "my-dex", "client-secret": "stale"}))
+            self.assertEqual(rsp.conditions[0].reason, "DexAttachReady")
+            self.assertEqual(rendered_secret(rsp)["client-secret"], "server-held")
+            self.assertTrue(any("adopted" in w for w in warnings_of(rsp)))
+
+    async def test_attach_mode_confirms_a_matching_secret_without_a_warning(self):
+        async with FakeDexServer() as server:
+            server.servicer.created["my-dex"] = dexpb.Client(id="my-dex", secret="same", name="my-dex")
+            rsp = await run_attach(server, observed=secret_data({"client-id": "my-dex", "client-secret": "same"}))
+            self.assertEqual(rsp.conditions[0].reason, "DexAttachReady")
+            self.assertEqual(rendered_secret(rsp)["client-secret"], "same")
+            self.assertFalse(warnings_of(rsp))
+
+    async def test_attach_mode_fails_closed_when_the_existing_client_has_no_secret(self):
+        async with FakeDexServer() as server:
+            server.servicer.created["my-dex"] = dexpb.Client(id="my-dex", public=True, name="someone-elses")
+            rsp = await run_attach(server)
+            self.assertEqual(rsp.conditions[0].reason, "DexAttachFailed")
+            self.assertEqual(rsp.conditions[0].status, fnv1.STATUS_CONDITION_FALSE)
+            self.assertNotIn("oauth-credentials", rsp.desired.resources)
+
+    async def test_attach_mode_fails_closed_when_getclient_fails_after_already_exists(self):
+        async with FakeDexServer() as server:
+            server.servicer.created["my-dex"] = dexpb.Client(id="my-dex", secret="server-held", name="my-dex")
+            server.servicer.get_client_error = (grpc.StatusCode.INTERNAL, "storage down")
+            rsp = await run_attach(server)
+            self.assertEqual(rsp.conditions[0].reason, "DexAttachFailed")
+            self.assertIn("storage down", rsp.conditions[0].message)
+            self.assertNotIn("oauth-credentials", rsp.desired.resources)
 
     async def test_attach_mode_reports_failure_when_the_server_is_unreachable(self):
-        req = fnv1.RunFunctionRequest(
-            observed=fnv1.State(
-                composite=fnv1.Resource(resource=xr(
-                    "attach", serverRef={"name": "nope", "namespace": "nowhere"},
-                )),
-            ),
-        )
-        orig = fn.dex_grpc_address
-        fn.dex_grpc_address = lambda ref: "127.0.0.1:1"  # nothing listens here
-        try:
-            rsp = await asyncio.wait_for(fn.FunctionRunner().RunFunction(req, None), timeout=10)
-        finally:
-            fn.dex_grpc_address = orig
+        rsp = await run_attach(None, address="127.0.0.1:1")  # nothing listens here
         self.assertEqual(rsp.conditions[0].reason, "DexAttachFailed")
         self.assertEqual(rsp.conditions[0].status, fnv1.STATUS_CONDITION_FALSE)
         self.assertNotIn("oauth-credentials", rsp.desired.resources)
+
+    async def test_attach_mode_keeps_the_observed_secret_declared_when_the_server_is_unreachable(self):
+        # A transient admin-API failure must not prune the credentials an app is using: the
+        # observed Secret is re-declared byte-for-byte (the WHOLE object - Crossplane applies
+        # with server-side apply), only the condition goes False.
+        observed = secret_data({
+            "client-id": "my-dex", "client-secret": "in-use", "issuer": "http://srv/dex",
+            "token-url": "http://srv/dex/token", "jwks-url": "http://srv/dex/keys",
+        })
+        rsp = await run_attach(None, address="127.0.0.1:1", observed=observed)
+        self.assertEqual(rsp.conditions[0].reason, "DexAttachFailed")
+        kept = resource.struct_to_dict(rsp.desired.resources["oauth-credentials"].resource)
+        self.assertEqual(kept["data"], observed["data"])
+        self.assertEqual(kept["metadata"]["name"], "my-dex-oauth-credentials")
+        self.assertEqual(rsp.desired.resources["oauth-credentials"].ready, fnv1.READY_TRUE)
 
 
 if __name__ == "__main__":

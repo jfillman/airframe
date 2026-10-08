@@ -226,12 +226,12 @@
         {
           "reasons": [
             {
-              "meaning": "(attach mode) function-dex-client confirmed the client is registered on the server (CreateClient succeeded or already_exists).",
+              "meaning": "(attach mode) the client is registered on the server and {name}-oauth-credentials carries the secret the server actually holds - created fresh, confirmed unchanged, or adopted from the server when the Secret had been lost or drifted (the message says which; adoption also raises a Warning event).",
               "reason": "DexAttachReady",
               "status": "True"
             },
             {
-              "meaning": "(attach mode) the live CreateClient call to the Dex server's gRPC Admin API failed (server unreachable, or a real error).",
+              "meaning": "(attach mode) the live CreateClient/GetClient call to the Dex server's gRPC Admin API failed (server unreachable, or a real error), or the client exists on the server without a secret this XR can use. A previously observed Secret is kept as it was, never pruned.",
               "reason": "DexAttachFailed",
               "status": "False"
             },

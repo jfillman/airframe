@@ -14,10 +14,15 @@ Single-step Composition pipeline for the `Dex` XRD (`xrds/dex.yaml`), both modes
           FNV-64 hash of the client ID, not a stable interface to build on - see
           hangar's project_sp4_oauth_dex_investigation.md), so registration goes through
           Dex's real gRPC Admin API (api/v2, CreateClient) instead. CreateClient is
-          idempotent by Dex's own design (CreateClientResp.already_exists), so this function
-          calls it on every reconcile with the same (id, secret) pair - the secret itself is
-          generated once and reused thereafter, the same stable-secret pattern
-          compositions/mongodb/templates/password.yaml already established for this catalog.
+          idempotent on the client ID only (real Dex answers already_exists for a known id and
+          leaves the stored secret untouched - it never adopts the one we send), so this function
+          calls it every reconcile and, on already_exists, reads the server's client back with
+          GetClient and lets the SERVER's secret win: the composed Secret converges on what the
+          server actually holds. The secret is generated only when the server has no client yet,
+          the same generate-once-then-reuse pattern compositions/mongodb/templates/password.yaml
+          established for this catalog, with the server rather than the Secret as the source of
+          truth after that. A transient admin-API failure keeps the previously observed Secret
+          declared (never pruned), so an app's credentials do not vanish while the server restarts.
 
 NOTE ON SDK ERGONOMICS: follows the same patterns as ../function-rollout-watcher/function/fn.py
 (this repo's other custom function) - see that file's own header for the SDK-version caveat.
@@ -272,30 +277,75 @@ def server_component_ready(req):
     )
 
 
-def reused_or_generated_secret(req, xr_name):
-    """The stable-secret pattern: reuse the observed Secret's own client-secret if it
-    already exists, generate fresh only the first time - same reasoning as
-    compositions/mongodb/templates/password.yaml (re-generating on every reconcile would
-    rotate a real credential on every sync)."""
+def observed_credentials(req):
+    """The composed `oauth-credentials` Secret's `data` as observed this reconcile (base64
+    values, every key), or None when there is no such Secret: the XR is brand new, or the
+    Secret was removed (XR recreated, namespace rebuilt, deleted by hand) while the client may
+    well still be registered on the server - the case the attach branch must not get wrong."""
     existing = req.observed.resources.get("oauth-credentials")
-    existing_b64 = safe_get(existing.resource, "data", "client-secret") if existing else None
-    if existing_b64:
-        return base64.b64decode(existing_b64).decode()
-    return pysecrets.token_urlsafe(32)
+    if existing is None:
+        return None
+    try:
+        data = resource.struct_to_dict(existing.resource).get("data")
+    except (ValueError, TypeError):
+        return None
+    if not isinstance(data, dict) or not data:
+        return None
+    return {k: v for k, v in data.items() if isinstance(v, str)}
+
+
+def observed_client_secret(data):
+    """Decoded client-secret from observed_credentials(), or None."""
+    b64 = (data or {}).get("client-secret")
+    if not b64:
+        return None
+    return base64.b64decode(b64).decode()
 
 
 async def create_dex_client(grpc_address, client_id, client_secret, name):
-    """The one live side effect in this function: register (or confirm) a confidential
-    OAuth2 client on the shared Dex server via its real Admin gRPC API. Idempotent by
-    Dex's own design (CreateClientResp.already_exists) - calling this every reconcile with
-    the same (id, secret) is always a no-op after the first success, so no separate
-    GetClient check is needed."""
+    """Register a confidential OAuth2 client on the shared Dex server via its real Admin gRPC
+    API. NOT idempotent on (id, secret), only on id: real Dex (server/apiserver/clients.go)
+    answers `already_exists: true` for a known id and leaves the stored client - secret
+    included - exactly as it was, and UpdateClient cannot change a secret either. The caller
+    treats already_exists as "the server's secret wins" and reads it back with get_dex_client,
+    never as confirmation that the secret it just sent is the one in use."""
     async with grpc.aio.insecure_channel(grpc_address) as channel:
         stub = dexgrpc.DexStub(channel)
         req = dexpb.CreateClientReq(
             client=dexpb.Client(id=client_id, secret=client_secret, public=False, name=name),
         )
         return await stub.CreateClient(req, timeout=DEX_CALL_TIMEOUT_SECONDS)
+
+
+async def get_dex_client(grpc_address, client_id):
+    """Read a registered client back, secret included - Dex's GetClient returns the stored
+    secret - so the composed Secret can converge on the server's truth instead of the other
+    way round."""
+    async with grpc.aio.insecure_channel(grpc_address) as channel:
+        stub = dexgrpc.DexStub(channel)
+        return await stub.GetClient(dexpb.GetClientReq(id=client_id), timeout=DEX_CALL_TIMEOUT_SECONDS)
+
+
+def credentials_secret(xr_name, xr_namespace, labels, *, data=None, string_data=None):
+    """The composed Secret manifest. `string_data` renders fresh values; `data` re-declares an
+    observed Secret byte-for-byte (used to keep it alive through a transient server failure -
+    Crossplane prunes any composed resource a function stops declaring, and applies with
+    server-side apply, so it must be the WHOLE object, never a sparse identity)."""
+    manifest = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {
+            "name": f"{xr_name}-oauth-credentials",
+            "namespace": xr_namespace,
+            "labels": labels,
+        },
+        "type": "Opaque",
+    }
+    if data is not None:
+        manifest["data"] = data
+    else:
+        manifest["stringData"] = string_data
+    return manifest
 
 
 class FunctionRunner(grpcv1.FunctionRunnerService):
@@ -336,54 +386,88 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         if mode == "attach":
             server_ref = safe_get(spec, "serverRef", default={}) or {}
             client_id = safe_get(spec, "clientId") or xr_name
-            client_secret = reused_or_generated_secret(req, xr_name)
+            grpc_address = dex_grpc_address(server_ref)
+            observed = observed_credentials(req)
+            observed_secret = observed_client_secret(observed)
+            client_secret = observed_secret or pysecrets.token_urlsafe(32)
+            outcome = "created"
 
-            try:
-                dex_resp = await create_dex_client(
-                    dex_grpc_address(server_ref), client_id, client_secret, xr_name,
-                )
-                log.info(
-                    "registered dex client", xr=xr_name, client_id=client_id,
-                    already_exists=dex_resp.already_exists,
-                )
-            except grpc.RpcError as e:
+            def fail(reason, message):
+                # Fail closed on the CONDITION, but never prune a Secret an app is already
+                # using: re-declare the observed one unchanged. Without this, a Dex restart
+                # (or a 5 s timeout) deleted every attacher's credentials for a reconcile,
+                # and the next pass - seeing no Secret - generated a new secret the server
+                # would then refuse to adopt: the exact mismatch this branch now guards against.
                 response.set_conditions(rsp, resource.Condition(
-                    typ="ComponentReady", status="False", reason="DexAttachFailed",
-                    message=f"CreateClient to the Dex server's gRPC Admin API failed: {e.details() if hasattr(e, 'details') else e}",
+                    typ="ComponentReady", status="False", reason=reason, message=message,
                 ))
-                response.warning(rsp, f"failed to register Dex client {client_id}: {e}")
-                log.info("dex createclient failed", xr=xr_name, error=str(e))
+                response.warning(rsp, message)
+                if observed is not None:
+                    rsp.desired.resources["oauth-credentials"].resource.update(
+                        credentials_secret(xr_name, xr_namespace, labels, data=observed),
+                    )
+                    rsp.desired.resources["oauth-credentials"].ready = fnv1.READY_TRUE
+                log.info("dex attach not ready", xr=xr_name, reason=reason, message=message)
                 return rsp
 
+            try:
+                dex_resp = await create_dex_client(grpc_address, client_id, client_secret, xr_name)
+                if dex_resp.already_exists:
+                    # The server kept whatever secret it already had for this id; the one we
+                    # sent is only right if it came from a Secret this function wrote earlier
+                    # and nothing has drifted since. Read the server's and let it win.
+                    got = await get_dex_client(grpc_address, client_id)
+                    server_secret = got.client.secret
+                    if not server_secret:
+                        return fail(
+                            "DexAttachFailed",
+                            f"Client {client_id} exists on the Dex server without a secret (a public "
+                            "client, or one registered by something other than this XR) - refusing "
+                            "to render credentials. Delete that client on the server or set "
+                            "spec.clientId to an unused id.",
+                        )
+                    if server_secret == client_secret:
+                        outcome = "confirmed"
+                    else:
+                        outcome = "adopted"
+                        client_secret = server_secret
+            except grpc.RpcError as e:
+                detail = e.details() if hasattr(e, "details") else str(e)
+                return fail(
+                    "DexAttachFailed",
+                    f"The Dex server's gRPC Admin API call failed for client {client_id}: {detail}",
+                )
+
             issuer = dex_issuer(server_ref)
-            secret_manifest = {
-                "apiVersion": "v1",
-                "kind": "Secret",
-                "metadata": {
-                    "name": f"{xr_name}-oauth-credentials",
-                    "namespace": xr_namespace,
-                    "labels": labels,
-                },
-                "type": "Opaque",
-                "stringData": {
+            rsp.desired.resources["oauth-credentials"].resource.update(
+                credentials_secret(xr_name, xr_namespace, labels, string_data={
                     "client-id": client_id,
                     "client-secret": client_secret,
                     "issuer": issuer,
                     "token-url": f"{issuer}/token",
                     "jwks-url": f"{issuer}/keys",
-                },
-            }
-            rsp.desired.resources["oauth-credentials"].resource.update(secret_manifest)
+                }),
+            )
             # Explicit ready=True: a plain Secret has no status.conditions for Crossplane's
             # default readiness auto-detection - same gotcha function-rollout-watcher's own
             # ServiceAccount hit (see that file's build_diagnosis_service_account docstring).
             rsp.desired.resources["oauth-credentials"].ready = fnv1.READY_TRUE
+            if outcome == "created":
+                message = f"Registered client {client_id} on the Dex server with a newly generated secret."
+            elif outcome == "confirmed":
+                message = f"The Dex server holds client {client_id} with the secret in this XR's Secret."
+            else:
+                message = (
+                    f"The Dex server already held client {client_id} with a different secret; adopted "
+                    "the server's secret into this XR's Secret (not rotated). A deleted or recreated "
+                    "Secret is the usual cause - nothing to do unless that was not expected."
+                )
+                response.warning(rsp, message)
             response.set_conditions(rsp, resource.Condition(
-                typ="ComponentReady", status="True", reason="DexAttachReady",
-                message="The Dex server confirmed the client is registered.",
+                typ="ComponentReady", status="True", reason="DexAttachReady", message=message,
             ))
-            response.normal(rsp, f"Dex client {client_id} registered")
-            log.info("dex attach ready", xr=xr_name, client_id=client_id)
+            response.normal(rsp, f"Dex client {client_id} {outcome}")
+            log.info("dex attach ready", xr=xr_name, client_id=client_id, outcome=outcome)
             return rsp
 
         response.fatal(rsp, f"unknown Dex mode {mode!r}; must be 'server' or 'attach'")

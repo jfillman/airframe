@@ -15,10 +15,11 @@ crossplane render xr-staging.yaml ../composition.yaml functions.yaml -x -r \
 # doesn't distinguish those cases, see 00-cluster-gate.yaml)
 crossplane render xr-staging.yaml ../composition.yaml functions.yaml -x -r
 
-# App-kind resolution: none of the four app-kind lookups found (00-app-kind-gate.yaml)
-# falls back to kind: NodeJSApplication on the composed app-usage Usage - exercised by
-# either command above already, since neither passes an app-kind fixture. Add one of
-# the four *-app-exists.yaml fixtures to prove that stack's own branch instead:
+# App-kind resolution: with no app-kind fixture, none of the five lookups resolve, so no
+# app-usage Usage is composed and the status step reports AppResolved: False / AppNotFound
+# (00-app-kind-gate.yaml, status/status.yaml) - exercised by either command above already.
+# Add one of the *-app-exists.yaml fixtures to prove that stack's own branch instead
+# (a composed Usage of that kind, AppResolved: True):
 crossplane render xr-staging.yaml ../composition.yaml functions.yaml -x -r \
   --required-resources cluster-registry-ready.yaml \
   --required-resources springboot-app-exists.yaml   # or pythonapp-exists.yaml / goapp-exists.yaml
@@ -41,7 +42,7 @@ flipped `crossplaneReady` to `"true"`.
 These fixtures only exercise the Composition's template logic (rendered
 `RepositoryFile` shapes including the delete-excluding `managementPolicies` on
 `cluster-identity-yaml`, the
-extra-resources gate branching, the `ClusterReady`/`WorkloadDeployed` status patch) —
+extra-resources gate branching, the `ClusterReady`/`AppResolved` status patch) —
 they never call the real GitHub API or fetch a real cluster resource.
 `crossplane render` treats every `provider-github` managed resource as spec-only
 output, and `--required-resources` is a local file standing in for what Crossplane's

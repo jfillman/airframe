@@ -8,7 +8,7 @@
 # the target cluster isn't a registered, crossplaneReady upper-env cluster, this
 # resource simply isn't rendered at all - the status step reports ClusterReady: False
 # instead, same "structural backstop, refuse rather than partially succeed" instinct
-# already used for the WorkloadDeployed condition below.
+# already used for the ClusterReady condition (status/status.yaml).
 #
 # rollout: null - the initial bootstrap scaffold only, not an ongoing default. This
 # platform's CICD pipeline (and a developer directly) is expected to edit this file's

@@ -43,7 +43,7 @@ cat > "$OUT" <<HEADER
 # pattern, copied directly): render-github-resources composes the real
 # provider-github managed resources (RepositoryFile - see
 # idp/docs/service-catalog-design.md Item 3), status patches the XR's own status
-# afterward with exactly one of ClusterReady: False / WorkloadDeployed: False (see
+# afterward with ClusterReady and AppResolved, each True or False for a stated reason (see
 # that template's own header for the mechanism and why). Both share the ONE
 # already-installed function-go-templating Function via source: Inline - registering
 # a second Function package pointing at the same reference corrupted Crossplane's

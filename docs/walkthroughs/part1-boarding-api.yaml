@@ -71,9 +71,10 @@ steps:
         -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
       grep -q "Synced=True" <<<"$c"
       grep -q "Ready=True" <<<"$c"
-      # WorkloadDeployed is a bootstrap-time-only condition (see compositions/applicationenvironment/
-      # templates/status/status.yaml) - it never auto-clears, so it is deliberately NOT checked here.
-      # The real, live signal is the Rollout's own status.
+      # The XR reports ClusterReady and AppResolved (compositions/applicationenvironment/templates/
+      # status/status.yaml); whether the workload is up is the target cluster's Rollout, checked below.
+      grep -q "ClusterReady=True" <<<"$c"
+      grep -q "AppResolved=True" <<<"$c"
       desired="$(kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.spec.replicas}')"
       available="$(kubectl --context kind-prod get rollout boarding-api -n app-boarding-api-staging -o jsonpath='{.status.availableReplicas}')"
       [ "$available" = "$desired" ]

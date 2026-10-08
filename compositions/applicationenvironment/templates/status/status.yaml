@@ -1,21 +1,40 @@
-# Reports exactly one of two mutually-exclusive custom conditions, never both, never
-# neither - renamed from workload-status (singular concern) now that there are two:
-# whether the target cluster passed the registry gate (§0 of
-# service-catalog-design.md), and, only if it did, whether a real workload image
-# exists yet (unchanged from the original WorkloadDeployed mechanism). Reporting
-# WorkloadDeployed when the cluster gate failed would be misleading - nothing was
-# created, so "no image yet" isn't the actual reason there's no deployment.
+# Two custom conditions, both always present, each true or false for a stated reason
+# (2026-10-08, review findings C5 and C6):
 #
-# Redeclares the same ExtraResources requirement 00-cluster-gate.yaml (the
-# render-github-resources step) already declares, rather than assuming this step can
-# see that step's now-out-of-scope template variables - each pipeline step is a
-# separate function-go-templating invocation with its own template execution.
-# function-go-templating's own docs confirm extraResources ARE cached in the pipeline
-# context and passed to later steps, so this doesn't trigger a second live fetch -
-# but redeclaring keeps this step self-contained and correct even if the pipeline
-# ever gets reordered, matching this catalog's general "repetition over cross-file
-# coupling" convention (compositions/applicationenvironment/templates/render-github-
-# resources/*.yaml each redeclare $xrName/$spec too).
+#   ClusterReady   whether spec.cluster passed the registry gate (§0 of
+#                  service-catalog-design.md). True once the registry entry is
+#                  type: upper with crossplaneReady: "true"; False (ClusterNotEligible)
+#                  until then. Used to be reported only when False, which left "gate
+#                  passed" indistinguishable from "gate never evaluated".
+#   AppResolved    whether spec.appName names a real app XR (NodeJSApplication,
+#                  SpringBootApplication, PythonApplication, GoApplication or
+#                  InfraService) in this namespace - the lookup 00-app-kind-gate.yaml
+#                  makes to aim the deletion-protecting Usage. False with reason
+#                  AppLookupPending on the very first pass (the requirement has not
+#                  been fetched yet), False with reason AppNotFound when none of the
+#                  five kinds exist by that name (a typo, or an env requested before
+#                  its app), True once one does - or once a Usage was composed on an
+#                  earlier pass, which proves it did resolve (the gate keeps that Usage
+#                  through a transient empty lookup, so this mirrors it).
+#
+# WorkloadDeployed is gone. It was computed from "values.yaml was seeded with
+# rollout: null" and never from the live Rollout - which runs on ANOTHER cluster, so
+# this Composition cannot observe it - and therefore stayed False forever: every live
+# env reported WorkloadDeployed=False while its app was serving traffic, and the
+# architecture doc claimed the opposite. A condition that can only ever be False
+# misleads every reader, human or agent. Whether a workload is deployed is the target
+# cluster's Rollout and Argo CD Application status, read there (Tower does, the
+# walkthroughs do); it is not this XR's to report.
+#
+# Redeclares the ExtraResources requirements 00-cluster-gate.yaml and
+# 00-app-kind-gate.yaml (the render-github-resources step) already declare, rather than
+# assuming this step can see that step's now-out-of-scope template variables - each
+# pipeline step is a separate function-go-templating invocation with its own template
+# execution. function-go-templating's own docs confirm extraResources ARE cached in the
+# pipeline context and passed to later steps, so this doesn't trigger a second live
+# fetch - but redeclaring keeps this step self-contained and correct even if the
+# pipeline ever gets reordered, matching this catalog's general "repetition over
+# cross-file coupling" convention.
 #
 # Ready itself stays real (whatever detect-ready, the pipeline step before this one,
 # computes from whichever - if any - composed resources actually exist). Direct
@@ -24,8 +43,9 @@
 # tries to set them directly via ClaimConditions - confirmed live during that build.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $spec := .observed.composite.resource.spec >>
-<<- $env := $spec.env >>
+<<- $appName := $spec.appName >>
 <<- $cluster := $spec.cluster >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $allExtra := .extraResources | default dict >>
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
 <<- $items := index $entry "items" | default list >>
@@ -38,6 +58,23 @@
     <<- $clusterOk = true >>
   <<- end >>
 <<- end >>
+<<- $appKind := "" >>
+<<- $kindsByKey := dict "app-kind-nodejs-hangar" "NodeJSApplication" "app-kind-springboot-hangar" "SpringBootApplication" "app-kind-python-hangar" "PythonApplication" "app-kind-go-hangar" "GoApplication" "app-kind-infra-hangar" "InfraService" >>
+<<- $lookupSeen := false >>
+<<- range $key, $kind := $kindsByKey >>
+  <<- if hasKey $allExtra $key >>
+    <<- $lookupSeen = true >>
+    <<- if and (eq $appKind "") (gt (len (index (index $allExtra $key) "items" | default list)) 0) >>
+      <<- $appKind = $kind >>
+    <<- end >>
+  <<- end >>
+<<- end >>
+<<- $appFound := ne $appKind "" >>
+<<- $obsUsage := index (.observed.resources | default dict) "app-usage" | default dict >>
+<<- $obsUsageKind := dig "resource" "spec" "of" "kind" "" $obsUsage >>
+<<- if and (not $appFound) (ne $obsUsageKind "") >>
+  <<- $appKind = $obsUsageKind >>
+<<- end >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ExtraResources
 requirements:
@@ -46,11 +83,45 @@ requirements:
     kind: ConfigMap
     namespace: crossplane-system
     matchName: <<$cluster>>
+  app-kind-nodejs-hangar:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: NodeJSApplication
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
+  app-kind-springboot-hangar:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: SpringBootApplication
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
+  app-kind-python-hangar:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: PythonApplication
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
+  app-kind-go-hangar:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: GoApplication
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
+  app-kind-infra-hangar:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: InfraService
+    namespace: <<$xrNamespace>>
+    matchName: <<$appName>>
 ---
-<<- if not $clusterOk >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ClaimConditions
 conditions:
+<<- if $clusterOk >>
+  - type: ClusterReady
+    status: "True"
+    reason: ClusterEligible
+    message: >-
+      <<$cluster>> is a registered upper-env cluster with crossplaneReady: "true" -
+      <<$xrName>>'s values.yaml, tenant identity and SecretStore requests are
+      rendered against it.
+    target: CompositeAndClaim
+<<- else >>
   - type: ClusterReady
     status: "False"
     reason: ClusterNotEligible
@@ -63,18 +134,33 @@ conditions:
       been created. Resolves itself once the registry entry is correct - no XR
       edit needed.
     target: CompositeAndClaim
-<<- else >>
-apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
-kind: ClaimConditions
-conditions:
-  - type: WorkloadDeployed
-    status: "False"
-    reason: NoImageYet
+<<- end >>
+<<- if ne $appKind "" >>
+  - type: AppResolved
+    status: "True"
+    reason: AppResolved
     message: >-
-      <<$xrName>>'s <<$env>> values.yaml and tenant identity are provisioned, but
-      rollout is null - there's no real container image to deploy yet
-      (platform-cicd-on-kind-dev migration hasn't landed, and no developer PR has
-      set rollout.image). This condition does not auto-clear once one does; it
-      reflects the state at bootstrap time only.
+      spec.appName (<<$appName>>) is the <<$appKind>> in <<$xrNamespace>>; its
+      deletion is blocked by this environment's Usage while this XR exists.
+    target: CompositeAndClaim
+<<- else if not $lookupSeen >>
+  - type: AppResolved
+    status: "False"
+    reason: AppLookupPending
+    message: >-
+      spec.appName (<<$appName>>) hasn't been looked up yet - the app-kind
+      requirement is fetched on the next reconcile (about a minute). Resolves
+      itself; no XR edit needed.
+    target: CompositeAndClaim
+<<- else >>
+  - type: AppResolved
+    status: "False"
+    reason: AppNotFound
+    message: >-
+      spec.appName (<<$appName>>) doesn't name a NodeJSApplication,
+      SpringBootApplication, PythonApplication, GoApplication or InfraService in
+      <<$xrNamespace>>. Check the spelling against the app's own xr-request, or
+      create the app first - this environment's deletion-protecting Usage isn't
+      rendered until it resolves, and the lookup is retried every reconcile.
     target: CompositeAndClaim
 <<- end >>

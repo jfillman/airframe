@@ -8,7 +8,7 @@
 # needed for the gate itself). Standard two-pass behavior: the reconcile that first
 # adds this requirement won't see data yet (.extraResources empty) - $clusterOk stays
 # false, same "not found yet, retry next reconcile" shape already used for
-# WorkloadDeployed/CicdOnboarded, not a new failure mode.
+# AppResolved/CicdOnboarded, not a new failure mode.
 #
 # $clusterOk/$appName/$env/$cluster/$xrName/$gitopsRepoUrl/$appRepoUrl/$tenantsRepo/
 # $configMapGenerator are all declared once here, not redeclared per file below - Go

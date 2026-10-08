@@ -142,6 +142,29 @@ spec:
                     repo is gitops-<appName>. `infra` for an env of an InfraService (a shared component such
                     as a broker), whose deploy repo is gitops-infra-<appName>. Without it an infra service's
                     values.yaml is written to gitops-<appName>, which doesn't exist.
+                chart:
+                  type: object
+                  description: >-
+                    The chart this environment renders, when it is not the cluster's default (glidepath ADR-0023):
+                    written into tenants/<appName>/<env>/identity.yaml's chart block, which the tenant-onboarding
+                    ApplicationSet reads, falling back to cluster-defaults.yaml for each field left out. Set by
+                    Glidepath's flight-chart-sync PR on this request file, from the app's cicd.yaml. Lives here,
+                    not as a direct edit of identity.yaml, because this Composition owns that file and its
+                    reconcile reverted the direct edit (2026-10-08, gate-api staging).
+                  properties:
+                    repoURL:
+                      type: string
+                      description: Git or Helm repository of the chart. A different repo inherits no other field from the cluster default.
+                    path:
+                      type: string
+                      description: Chart directory in a Git repository (replaces the default's chart).
+                    chart:
+                      type: string
+                      description: Chart name in a Helm repository (replaces the default's path).
+                    targetRevision:
+                      type: string
+                      description: Git ref or chart version to render.
+                  additionalProperties: false
                 configMapGenerator:
                   type: boolean
                   default: false

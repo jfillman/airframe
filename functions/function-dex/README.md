@@ -27,11 +27,28 @@ enough. Dex has no such CRD to render for "register a client":
   ConfigMap, which Crossplane's per-XR composition model doesn't do cleanly.
 
 Dex's real, documented, stable interface for dynamic client registration is its gRPC Admin
-API (`CreateClient`/`GetClient`/`DeleteClient`, `api/v2/api.proto`) - and `CreateClient` is
-idempotent by Dex's own design (`CreateClientResp.already_exists`), so this function calls it
-on every reconcile with the same `(id, secret)` pair; the secret itself is generated once and
-reused thereafter (`reused_or_generated_secret` - the same stable-secret pattern
-`compositions/mongodb/templates/password.yaml` already established for this catalog).
+API (`CreateClient`/`GetClient`/`DeleteClient`, `api/v2/api.proto`). `CreateClient` is idempotent
+on the client **id** only: real Dex (`server/apiserver/clients.go`) answers `already_exists: true`
+for a known id and leaves the stored client, secret included, untouched; `UpdateClient` cannot
+change a secret either. So the function calls `CreateClient` every reconcile and, whenever the
+server says the client already exists, reads it back with `GetClient` and lets the **server's**
+secret win: the composed `<xr>-oauth-credentials` Secret converges on what the server holds.
+A secret is generated only when the server has no client yet (the generate-once pattern
+`compositions/mongodb/templates/password.yaml` established); after that the server, not the
+Secret, is the source of truth. Three outcomes, all `ComponentReady=True/DexAttachReady`, told
+apart by the condition message: *created* (new client, new secret), *confirmed* (server and
+Secret agree) and *adopted* (they differed, the Secret now carries the server's value, plus a
+Warning event). Before v0.1.5 the function wrote whatever secret it had generated and reported
+Ready even on `already_exists`, so recreating an attach XR, or just deleting its Secret, left the
+app with credentials the server rejected while every condition said healthy.
+
+Fail-closed cases keep the condition `False/DexAttachFailed` and, when a Secret was already
+observed, re-declare it byte-for-byte rather than letting Crossplane prune it: the admin API
+unreachable, `GetClient` failing after `already_exists`, or the existing client having no secret
+(a public client, or one registered by something other than this XR - delete it on the server
+or pick another `spec.clientId`). Not handled, by design of Crossplane rather than this function:
+deleting an attach XR never calls `DeleteClient` (functions do not run on deletion), so
+registrations outlive their XRs on the server until cleaned up by hand.
 
 ## Testing philosophy
 

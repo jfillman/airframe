@@ -1,0 +1,14 @@
+# The fleet's cluster records, normally the hub cluster repo's clusters.yaml passed as a value file (the format is
+# documented in apron's docs/clusters-file.md; Glidepath reads the same file). This chart reads the shared fields and
+# each record's `airframe:` section, and ignores everything else - so an install without Glidepath needs only those.
+#
+# - name: kind-prod
+#   zone: upper                      # lower | upper (glidepath ADR-0024)
+#   roles: [workloads]               # control-plane | workloads | platform-services
+#   tenantsRepo: gitops-cluster-kind-prod-tenants
+#   aliases: []                      # other names this cluster also answers to (one ConfigMap each)
+#   airframe: { crossplaneReady: true }   # cicdReady, crossplaneReady, infisicalHost
+clusters: []
+
+# Where the Compositions look the records up (ExtraResources matchName in crossplane-system).
+namespace: crossplane-system

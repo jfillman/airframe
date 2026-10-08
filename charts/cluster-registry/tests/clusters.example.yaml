@@ -1,0 +1,12 @@
+clusters:
+  - name: kind-dev
+    zone: lower
+    roles: [control-plane, workloads]
+    tenantsRepo: gitops-cluster-dev-tenants
+    aliases: [kiac-dev]
+    airframe: { cicdReady: true, infisicalHost: true }
+  - name: kind-prod
+    zone: upper
+    roles: [workloads, platform-services]
+    airframe: { crossplaneReady: true }
+    glidepath: { relaySecretName: cluster-kind-prod-relay-token }

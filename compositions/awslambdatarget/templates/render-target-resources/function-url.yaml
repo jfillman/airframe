@@ -31,6 +31,12 @@ metadata:
   name: <<$xrName>>-url-public
   annotations:
     <<setResourceNameAnnotation "function-url-permission">>
+    # The statement id IS the external name for a Lambda permission (the provider's id is
+    # <function>/<statementId>). Without it the first create succeeds but the next observe looks
+    # for an empty statement, reports "does not exist", and every poll retries AddPermission and
+    # gets a 409; the resource sits in Creating forever and the composite never turns Ready. Seen
+    # live on the first smoke-fn target, 2026-10-08.
+    crossplane.io/external-name: FunctionURLAllowPublicAccess
 spec:
   providerConfigRef:
     kind: ClusterProviderConfig

@@ -104,11 +104,12 @@ spec:
             # security group that opens containerPort to the internet. Deleting the XR removes all of it.
             # network.mode: existing renders nothing here; service.yaml uses the ids from spec instead.
             #
-            # No egress rule is composed: AWS creates an allow-all egress rule on every new security group and
-            # this provider does not manage inline rules, so that default stays (needed for the image pull).
-            # If a task ever fails to pull with the security group as the cause, add a
-            # SecurityGroupRule of type egress here - creating one while the default exists would fail as a
-            # duplicate, which is why it is not done preemptively.
+            # An allow-all egress rule IS composed, on purpose: AWS gives every new security group an allow-all
+            # egress rule, but the Upbound provider (upjet over terraform-provider-aws) revokes it unconditionally
+            # right after creating the group ("so users don't unknowingly have/use it"), leaving the group with no
+            # egress at all. Without the rule below a Fargate task cannot reach ECR or CloudWatch Logs and never
+            # starts (CannotPullContainerError). Both rules are SecurityGroupRule objects, not inline blocks, so
+            # the provider never fights the group over them.
             <<- if eq $networkMode "create" >>
             apiVersion: ec2.aws.m.upbound.io/v1beta1
             kind: VPC
@@ -270,6 +271,28 @@ spec:
                 cidrBlocks:
                   - 0.0.0.0/0
                 description: <<printf "%s containerPort" $family | toJson>>
+                securityGroupIdRef:
+                  name: <<$xrName>>-sg
+            ---
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: SecurityGroupRule
+            metadata:
+              name: <<$xrName>>-sg-egress
+              annotations:
+                <<setResourceNameAnnotation "security-group-egress">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                type: egress
+                protocol: "-1"
+                fromPort: 0
+                toPort: 0
+                cidrBlocks:
+                  - 0.0.0.0/0
+                description: <<printf "%s outbound (image pull, logs, the app's own calls)" $family | toJson>>
                 securityGroupIdRef:
                   name: <<$xrName>>-sg
             <<- end >>

@@ -61,3 +61,6 @@ and quote what you saw. *(planned: `airframe.verify` runs each component's verif
 
 ## Errors
 If a chart guard or a check blocks you and you believe it is wrong, say so in the PR. Do not work around it.
+Guards, schema limits and management policies are policy set by enterprise architects and the security team and
+encoded in `xrds/` and `compositions/` by the platform team (`docs/admin/governance.md`). A change to a rule is a PR
+against those files for its owner to review, never a workaround in a values file or an XR.

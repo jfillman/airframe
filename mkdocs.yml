@@ -14,6 +14,7 @@ nav:
   - Admin guide:
       - Overview: admin/README.md
       - Architecture: admin/architecture.md
+      - Governance and security policy: admin/governance.md
 
 plugins:
   - techdocs-core

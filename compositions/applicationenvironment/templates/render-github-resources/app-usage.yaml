@@ -48,13 +48,21 @@
 # automatically - same implicit placement every RepositoryFile composed elsewhere in
 # this template already relies on, no explicit metadata.namespace needed anywhere).
 #
-# Deliberately UNCONDITIONAL - not wrapped in the $clusterOk gate every other resource
-# in this directory is (see 00-cluster-gate.yaml). "This env references this app"
-# (spec.appName) is true from XR creation regardless of whether the target cluster
-# passed the registry gate - gating this on $clusterOk would let an
-# ApplicationEnvironment targeting an unready/unregistered cluster exist with zero
-# deletion protection on its parent app, reopening exactly the bug this resource
-# exists to close.
+# Deliberately NOT wrapped in the $clusterOk gate every other resource in this directory
+# is (see 00-cluster-gate.yaml). "This env references this app" (spec.appName) is true
+# from XR creation regardless of whether the target cluster passed the registry gate -
+# gating this on $clusterOk would let an ApplicationEnvironment targeting an
+# unready/unregistered cluster exist with zero deletion protection on its parent app,
+# reopening exactly the bug this resource exists to close.
+#
+# It IS gated on $renderUsage from 00-app-kind-gate.yaml (2026-10-08, review finding
+# C6): the Usage renders once spec.appName has resolved to a real app kind, and keeps
+# rendering with the kind and group read back from the observed Usage even if a later
+# lookup comes back empty, so a transient flap never drops protection. Only an app that
+# has never resolved gets no Usage - and then there is nothing to protect; the status
+# step says so (AppResolved: False / AppNotFound) instead of the old silent
+# "Unready resources: app-usage" from a Usage aimed at a NodeJSApplication that was
+# never there.
 #
 # replayDeletion: true - defensive backstop for the race between this Usage's own
 # creation and the Usage controller labeling NodeJSApplication crossplane.io/in-use
@@ -63,6 +71,7 @@
 # replays the deletion attempt automatically once the last blocking Usage is actually
 # gone, instead of leaving it needing a manual re-delete.
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+<<- if $renderUsage >>
 apiVersion: protection.crossplane.io/v1beta1
 kind: Usage
 metadata:
@@ -87,3 +96,4 @@ spec:
       name: <<$xrName>>
   reason: <<printf "ApplicationEnvironment %s references %s %s via spec.appName - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md §0)" $xrName $appKind $appName | toJson>>
   replayDeletion: true
+<<- end >>

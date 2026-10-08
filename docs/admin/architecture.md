@@ -40,7 +40,7 @@ conditions plus catalog-specific custom conditions layered on top. Only
 | `GoApplication` | Bootstrap | `devCluster`\*, `goVersion` (1.22–1.24), port, visibility *(module path derived, not typed)* | DevClusterReady, CicdOnboarded, Ready | → TektonCICD (direct) · → SecretStore *shared* |
 | `PythonApplication` | Bootstrap | `devCluster`\*, `pythonVersion` (3.11–3.13), `packageManager` (pip\|poetry\|uv), port, visibility | DevClusterReady, CicdOnboarded, Ready | → TektonCICD (direct) · → SecretStore *shared* |
 | `InfraService` | Bootstrap | `devCluster`\*, description, visibility — NodeJSApplication minus src-repo/boilerplate, for shared infra with no app code | DevClusterReady, CicdOnboarded, Ready | → TektonCICD `type: infra` · → SecretStore *shared* |
-| `ApplicationEnvironment` | Bootstrap | `appName`\*, `cluster`\* (live-gated: `type: upper`, `crossplaneReady`), `env`\*, `configMapGenerator`, `chart` (non-default chart for this env, written into identity.yaml; set by Glidepath flight-chart-sync, ADR-0023) | ClusterReady, WorkloadDeployed, Ready | → SecretStore *per-env* · `Usage` blocks parent deletion |
+| `ApplicationEnvironment` | Bootstrap | `appName`\*, `cluster`\* (live-gated: `type: upper`, `crossplaneReady`), `env`\*, `configMapGenerator`, `chart` (non-default chart for this env, written into identity.yaml; set by Glidepath flight-chart-sync, ADR-0023) | ClusterReady, AppResolved, Ready | → SecretStore *per-env* · `Usage` blocks parent deletion |
 | `TektonCICD` | Bootstrap-adjacent | `appName`\*, `type` (app\|infra), `registerPipelinesAsCode`, `gitopsRepoUrl`\*, `appRepoUrl`\*, `devCluster`\* | DevClusterReady, CicdOnboarded | Composed only — never developer-created directly |
 | `SecretStore` | Attached *(auto)* | `appRef.name`\*, `cluster`\*, `environmentSlug` (default `shared`) | Ready | Requested only, via xr-requests |
 | `Redis` | Attached | `environmentRef.name`\* *(auto-stamped)*, `size` (small\|medium\|large), `persistence` | Ready | Rendered from a `components:` block |
@@ -120,8 +120,13 @@ dependency-lock graph cluster-wide) plus a `function-auto-ready` step.
    entry and creates the namespace/`Application`/`AppProject` on its own.
 7. A real CI/CD pipeline run eventually produces a PR setting `rollout.image`;
    once merged, `airframe-application` renders the real `Rollout`/Service and
-   any `components:`/`slos:` blocks. `WorkloadDeployed` flips `True` once
-   observed.
+   any `components:`/`slos:` blocks. Whether that workload is up is the target
+   cluster's Rollout and Argo CD `Application` status, read there (Tower, the
+   walkthroughs); the `ApplicationEnvironment` XR on the dev cluster cannot observe it
+   and no longer pretends to (the old `WorkloadDeployed` condition was computed from
+   the bootstrap seed and stayed `False` forever). Its own conditions are
+   `ClusterReady` (the registry gate) and `AppResolved` (`spec.appName` names a real
+   app XR; `AppNotFound` is the typo/ordering signal).
 8. `RolloutWatch` watches the live Rollout; on `Degraded` it dispatches a
    diagnosis Job, closing the AI-triage loop.
 

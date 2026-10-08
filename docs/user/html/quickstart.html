@@ -631,8 +631,9 @@ pipelines:
 NAME                             SYNCED   READY   COMPOSITION                              AGE
 boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m</pre>
         <p class="prose"><code>kubectl describe</code> shows <code>ClusterReady: True</code> and
-          <code>WorkloadDeployed: False</code>. The bootstrap file is <code>rollout: null</code>:
-          a namespace, no workload.</p>
+          <code>AppResolved: True</code>. The bootstrap file is <code>rollout: null</code>:
+          a namespace, no workload. Whether a workload is running is read on the target
+          cluster (the Rollout, or Tower), not from this XR.</p>
       </div>
 
       <div class="step">
@@ -668,8 +669,8 @@ boarding-api-prod-staging   True     True    applicationenvironments.catalog.han
           <code>gitops-boarding-api</code> setting <code>rollout.image</code> for
           <code>staging</code>. Merge it as a <b>signed</b> commit — GitHub's merge button
           produces an unsigned one (see Glidepath's <code>docs/admin/commit-signing.md</code>,
-          "Merge strategy matters"). The prod cluster's ArgoCD syncs it, and
-          <code>WorkloadDeployed</code> flips to <code>True</code> once a real Rollout exists.</p>
+          "Merge strategy matters"). The prod cluster's ArgoCD syncs it, and the
+          Rollout comes up on the target cluster (<code>kubectl get rollout</code>, or Tower).</p>
       </div>
     </div>
   </section>

@@ -27,9 +27,11 @@
 # No spec.rollout / image seed: this platform's CICD control plane isn't running on
 # kind-dev yet (same gap NodeJSApplication already reports via CicdOnboarded), so
 # there's no real image to deploy at XR-creation time. The Composition bootstraps
-# values.yaml with rollout: null and reports a WorkloadDeployed: False condition
-# rather than rendering a Rollout that would sit in permanent ImagePullBackOff - see
-# compositions/applicationenvironment/templates/workload-status/status.yaml.
+# values.yaml with rollout: null (the chart renders no workload for it) - see
+# compositions/applicationenvironment/templates/status/status.yaml for the conditions this
+# XR does report (ClusterReady, AppResolved); whether a workload is up is the target
+# cluster's Rollout, which this XR cannot observe - rather than rendering a Rollout that
+# would sit in permanent ImagePullBackOff.
 #
 # Naming convention (not CEL-enforced, matching NodeJSApplication's precedent of not
 # enforcing any naming relationship between an XR and what it creates): name this XR
@@ -70,25 +72,28 @@ spec:
                 appName:
                   type: string
                   description: >-
-                    Names the owning NodeJSApplication (or future
-                    SpringBootApplication) this env belongs to - labeling/audit
-                    only, no live existence check. Same convention SLO's own
-                    environmentRef already uses for the app/env link; unlike that
-                    field, spec.cluster below IS a real, live-checked gate - see
-                    its own description for why the two aren't treated the same
-                    way. If the named app's gitops-<appName> repo doesn't
-                    actually exist yet, the RepositoryFile below simply fails to
-                    reconcile - visible via kubectl describe, same failure
-                    surface as every other provider-github resource in this
-                    catalog. Also drives a real protection.crossplane.io Usage
-                    this env's own Composition composes (spec.of = this named
-                    NodeJSApplication, spec.by = this env) - blocks that app's
-                    deletion while this env still exists, closing the
-                    AppProject/Application deletion-ordering bug
-                    (idp/docs/service-catalog-design.md §0). Still no live
-                    existence check at XR-admission time: if the named app
-                    doesn't actually exist, the Usage simply never matches
-                    anything (harmless no-op).
+                    Names the owning app XR this env belongs to - a NodeJSApplication,
+                    SpringBootApplication, PythonApplication, GoApplication or
+                    InfraService in this same namespace. Resolved live on every
+                    reconcile (a Crossplane extra-resources lookup, one per kind,
+                    in compositions/applicationenvironment/templates/
+                    render-github-resources/00-app-kind-gate.yaml) and reported as
+                    the AppResolved condition: True once it names a real app,
+                    False/AppNotFound when it does not (a typo, or an env requested
+                    before its app exists - retried every reconcile, no edit needed
+                    once the app appears). It also drives a real
+                    protection.crossplane.io Usage this env's own Composition
+                    composes (spec.of = the resolved app, spec.by = this env) -
+                    blocks that app's deletion while this env still exists, closing
+                    the AppProject/Application deletion-ordering bug
+                    (idp/docs/service-catalog-design.md §0). The Usage is rendered
+                    only once the name resolves (there is nothing to protect
+                    before), and kept as observed through a transient empty lookup
+                    so protection never flaps off. Unlike spec.cluster, an
+                    unresolved appName does not block the RepositoryFile writes:
+                    they target the app's gitops-<appName> repo and fail loudly on
+                    their own (visible via kubectl describe) if that repo doesn't
+                    exist either.
                   minLength: 1
                 cluster:
                   type: string

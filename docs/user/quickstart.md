@@ -338,9 +338,9 @@ NAME                             SYNCED   READY   COMPOSITION                   
 boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m
 ```
 
-`kubectl describe` shows `ClusterReady: True` and `WorkloadDeployed: False`. The
-bootstrap file is `rollout: null`: a namespace, no workload. `WorkloadDeployed`
-stays `False` until one exists.
+`kubectl describe` shows `ClusterReady: True` and `AppResolved: True`. The
+bootstrap file is `rollout: null`: a namespace, no workload. Whether a workload is
+running is read on the target cluster (the Rollout, or Tower), not from this XR.
 
 ### Step 3 — configure it in Tower's App Configuration tab
 
@@ -371,7 +371,7 @@ Push to `main`. After `build`, `test` and `deploy` to dev, the `release` stage
 opens a PR against `gitops-boarding-api` setting `rollout.image` for `staging`.
 Merge it — as a **signed** commit; GitHub's merge button produces an unsigned one,
 see Glidepath's `docs/admin/commit-signing.md` ("Merge strategy matters"). The prod cluster's
-ArgoCD syncs it and `WorkloadDeployed` flips to `True` once a real Rollout exists.
+ArgoCD syncs it and the Rollout comes up on the target cluster (`kubectl get rollout`, or Tower).
 
 ## 08 — Add a Redis cache
 

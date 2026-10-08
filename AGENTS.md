@@ -50,6 +50,9 @@ and quote what you saw. *(planned: `airframe.verify` runs each component's verif
   gives a closed-set `reason` (e.g. `RedisReady`, `PostgreSQLDegraded`, `RabbitMQAttachProvisioning`) with a
   stable meaning, listed in that component's `xrds/<type>.meta.yaml` under `conditions`. Prefer this over
   the generic `Ready` condition when diagnosing why a component isn't up.
+- An `ApplicationEnvironment` reports `ClusterReady` (the cluster-registry gate) and `AppResolved`
+  (`spec.appName` names a real app XR; `AppNotFound` means a typo or an env requested before its app).
+  It reports nothing about the workload: that is the target cluster's Rollout, read there or in Tower.
 
 ## Errors
 If a chart guard or a check blocks you and you believe it is wrong, say so in the PR. Do not work around it.

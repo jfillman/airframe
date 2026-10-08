@@ -21,11 +21,24 @@
 # stuck at Ready: False until this fix; checkout-api-kind-prod-prod (a real
 # NodeJSApplication) unaffected throughout, its Usage already Ready: True.
 #
-# Four separate ExtraResources requirements, not one - Crossplane requirements are
-# typed per GVK, no "try kind A, fall back to kind B, ..." primitive exists. Defaults
-# to NodeJSApplication if none resolve yet - same "not found yet, retry next
-# reconcile" two-pass shape every other gate in this Composition already has, and
-# preserves this Composition's prior behavior for the common case.
+# Five separate ExtraResources requirements, not one - Crossplane requirements are
+# typed per GVK, no "try kind A, fall back to kind B, ..." primitive exists.
+#
+# No default kind any more (2026-10-08, review finding C6). The old "default to
+# NodeJSApplication if none resolve" fallback turned a misspelled or not-yet-created
+# appName into a Usage pointing at a resource that does not exist - the same silent
+# "Unready resources: app-usage" dead end the hardcoded kind had, now just for the
+# typo case, with no hint anywhere about the real cause. Now:
+#   - resolved: $appKind is the kind that exists, $appFound is true, the Usage renders.
+#   - not resolved, but a Usage was composed on an earlier pass: the Usage is kept
+#     exactly as observed (kind and group read back from it). A transient empty lookup
+#     - the same class of flap that once deleted real files behind the $clusterOk gate -
+#     must never drop the parent app's deletion protection.
+#   - not resolved, nothing observed: no Usage at all, and the status step (status/
+#     status.yaml, which repeats this lookup) reports AppResolved: False with the reason
+#     AppNotFound, naming the namespace and the five kinds it looked for.
+# Deletion protection is therefore only ever "missing" for an env whose app has never
+# existed, which is exactly the case where there is nothing to protect.
 #
 # $appName/$xrNamespace redeclared locally rather than reused from 00-cluster-gate.yaml
 # - matches this catalog's existing per-file redeclaration convention (see
@@ -34,9 +47,9 @@
 # app-usage.yaml, which is all that actually matters) independent of
 # 00-cluster-gate.yaml's.
 #
-# Phase C: the old catalog.hangar.io group is retired, so only catalog.hangar.io is looked up (five
-# ExtraResources requirements, one per app kind). $appGroup is still threaded into app-usage.yaml's
-# of.apiVersion.
+# Phase C: the old catalog.idp.io group is retired, so only catalog.hangar.io is looked up.
+# $appGroup is still threaded into app-usage.yaml's of.apiVersion, and for a kept Usage it
+# comes from the observed object, so a Usage created under an older group keeps matching.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $appName := $spec.appName >>
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
@@ -51,24 +64,30 @@
 <<- $goHangarItems := index $goHangarEntry "items" | default list >>
 <<- $infraHangarEntry := index $allExtra "app-kind-infra-hangar" | default dict >>
 <<- $infraHangarItems := index $infraHangarEntry "items" | default list >>
-<<- $appKind := "NodeJSApplication" >>
+<<- $appKind := "" >>
 <<- $appGroup := "catalog.hangar.io" >>
 <<- if gt (len $nodejsHangarItems) 0 >>
   <<- $appKind = "NodeJSApplication" >>
-  <<- $appGroup = "catalog.hangar.io" >>
 <<- else if gt (len $springbootHangarItems) 0 >>
   <<- $appKind = "SpringBootApplication" >>
-  <<- $appGroup = "catalog.hangar.io" >>
 <<- else if gt (len $pythonHangarItems) 0 >>
   <<- $appKind = "PythonApplication" >>
-  <<- $appGroup = "catalog.hangar.io" >>
 <<- else if gt (len $goHangarItems) 0 >>
   <<- $appKind = "GoApplication" >>
-  <<- $appGroup = "catalog.hangar.io" >>
 <<- else if gt (len $infraHangarItems) 0 >>
   <<- $appKind = "InfraService" >>
-  <<- $appGroup = "catalog.hangar.io" >>
 <<- end >>
+<<- $appFound := ne $appKind "" >>
+<<- $obsUsage := index (.observed.resources | default dict) "app-usage" | default dict >>
+<<- $obsUsageKind := dig "resource" "spec" "of" "kind" "" $obsUsage >>
+<<- $obsUsageApi := dig "resource" "spec" "of" "apiVersion" "" $obsUsage >>
+<<- if and (not $appFound) (ne $obsUsageKind "") >>
+  <<- $appKind = $obsUsageKind >>
+  <<- if ne $obsUsageApi "" >>
+    <<- $appGroup = regexReplaceAll "/[^/]+$" $obsUsageApi "" >>
+  <<- end >>
+<<- end >>
+<<- $renderUsage := ne $appKind "" >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ExtraResources
 requirements:

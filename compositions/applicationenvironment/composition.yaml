@@ -7,7 +7,7 @@
 # pattern, copied directly): render-github-resources composes the real
 # provider-github managed resources (RepositoryFile - see
 # idp/docs/service-catalog-design.md Item 3), status patches the XR's own status
-# afterward with exactly one of ClusterReady: False / WorkloadDeployed: False (see
+# afterward with ClusterReady and AppResolved, each True or False for a stated reason (see
 # that template's own header for the mechanism and why). Both share the ONE
 # already-installed function-go-templating Function via source: Inline - registering
 # a second Function package pointing at the same reference corrupted Crossplane's
@@ -61,11 +61,24 @@ spec:
             # stuck at Ready: False until this fix; checkout-api-kind-prod-prod (a real
             # NodeJSApplication) unaffected throughout, its Usage already Ready: True.
             #
-            # Four separate ExtraResources requirements, not one - Crossplane requirements are
-            # typed per GVK, no "try kind A, fall back to kind B, ..." primitive exists. Defaults
-            # to NodeJSApplication if none resolve yet - same "not found yet, retry next
-            # reconcile" two-pass shape every other gate in this Composition already has, and
-            # preserves this Composition's prior behavior for the common case.
+            # Five separate ExtraResources requirements, not one - Crossplane requirements are
+            # typed per GVK, no "try kind A, fall back to kind B, ..." primitive exists.
+            #
+            # No default kind any more (2026-10-08, review finding C6). The old "default to
+            # NodeJSApplication if none resolve" fallback turned a misspelled or not-yet-created
+            # appName into a Usage pointing at a resource that does not exist - the same silent
+            # "Unready resources: app-usage" dead end the hardcoded kind had, now just for the
+            # typo case, with no hint anywhere about the real cause. Now:
+            #   - resolved: $appKind is the kind that exists, $appFound is true, the Usage renders.
+            #   - not resolved, but a Usage was composed on an earlier pass: the Usage is kept
+            #     exactly as observed (kind and group read back from it). A transient empty lookup
+            #     - the same class of flap that once deleted real files behind the $clusterOk gate -
+            #     must never drop the parent app's deletion protection.
+            #   - not resolved, nothing observed: no Usage at all, and the status step (status/
+            #     status.yaml, which repeats this lookup) reports AppResolved: False with the reason
+            #     AppNotFound, naming the namespace and the five kinds it looked for.
+            # Deletion protection is therefore only ever "missing" for an env whose app has never
+            # existed, which is exactly the case where there is nothing to protect.
             #
             # $appName/$xrNamespace redeclared locally rather than reused from 00-cluster-gate.yaml
             # - matches this catalog's existing per-file redeclaration convention (see
@@ -74,9 +87,9 @@ spec:
             # app-usage.yaml, which is all that actually matters) independent of
             # 00-cluster-gate.yaml's.
             #
-            # Phase C: the old catalog.hangar.io group is retired, so only catalog.hangar.io is looked up (five
-            # ExtraResources requirements, one per app kind). $appGroup is still threaded into app-usage.yaml's
-            # of.apiVersion.
+            # Phase C: the old catalog.idp.io group is retired, so only catalog.hangar.io is looked up.
+            # $appGroup is still threaded into app-usage.yaml's of.apiVersion, and for a kept Usage it
+            # comes from the observed object, so a Usage created under an older group keeps matching.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $appName := $spec.appName >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
@@ -91,24 +104,30 @@ spec:
             <<- $goHangarItems := index $goHangarEntry "items" | default list >>
             <<- $infraHangarEntry := index $allExtra "app-kind-infra-hangar" | default dict >>
             <<- $infraHangarItems := index $infraHangarEntry "items" | default list >>
-            <<- $appKind := "NodeJSApplication" >>
+            <<- $appKind := "" >>
             <<- $appGroup := "catalog.hangar.io" >>
             <<- if gt (len $nodejsHangarItems) 0 >>
               <<- $appKind = "NodeJSApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- else if gt (len $springbootHangarItems) 0 >>
               <<- $appKind = "SpringBootApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- else if gt (len $pythonHangarItems) 0 >>
               <<- $appKind = "PythonApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- else if gt (len $goHangarItems) 0 >>
               <<- $appKind = "GoApplication" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- else if gt (len $infraHangarItems) 0 >>
               <<- $appKind = "InfraService" >>
-              <<- $appGroup = "catalog.hangar.io" >>
             <<- end >>
+            <<- $appFound := ne $appKind "" >>
+            <<- $obsUsage := index (.observed.resources | default dict) "app-usage" | default dict >>
+            <<- $obsUsageKind := dig "resource" "spec" "of" "kind" "" $obsUsage >>
+            <<- $obsUsageApi := dig "resource" "spec" "of" "apiVersion" "" $obsUsage >>
+            <<- if and (not $appFound) (ne $obsUsageKind "") >>
+              <<- $appKind = $obsUsageKind >>
+              <<- if ne $obsUsageApi "" >>
+                <<- $appGroup = regexReplaceAll "/[^/]+$" $obsUsageApi "" >>
+              <<- end >>
+            <<- end >>
+            <<- $renderUsage := ne $appKind "" >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:
@@ -148,7 +167,7 @@ spec:
             # needed for the gate itself). Standard two-pass behavior: the reconcile that first
             # adds this requirement won't see data yet (.extraResources empty) - $clusterOk stays
             # false, same "not found yet, retry next reconcile" shape already used for
-            # WorkloadDeployed/CicdOnboarded, not a new failure mode.
+            # AppResolved/CicdOnboarded, not a new failure mode.
             #
             # $clusterOk/$appName/$env/$cluster/$xrName/$gitopsRepoUrl/$appRepoUrl/$tenantsRepo/
             # $configMapGenerator are all declared once here, not redeclared per file below - Go
@@ -272,13 +291,21 @@ spec:
             # automatically - same implicit placement every RepositoryFile composed elsewhere in
             # this template already relies on, no explicit metadata.namespace needed anywhere).
             #
-            # Deliberately UNCONDITIONAL - not wrapped in the $clusterOk gate every other resource
-            # in this directory is (see 00-cluster-gate.yaml). "This env references this app"
-            # (spec.appName) is true from XR creation regardless of whether the target cluster
-            # passed the registry gate - gating this on $clusterOk would let an
-            # ApplicationEnvironment targeting an unready/unregistered cluster exist with zero
-            # deletion protection on its parent app, reopening exactly the bug this resource
-            # exists to close.
+            # Deliberately NOT wrapped in the $clusterOk gate every other resource in this directory
+            # is (see 00-cluster-gate.yaml). "This env references this app" (spec.appName) is true
+            # from XR creation regardless of whether the target cluster passed the registry gate -
+            # gating this on $clusterOk would let an ApplicationEnvironment targeting an
+            # unready/unregistered cluster exist with zero deletion protection on its parent app,
+            # reopening exactly the bug this resource exists to close.
+            #
+            # It IS gated on $renderUsage from 00-app-kind-gate.yaml (2026-10-08, review finding
+            # C6): the Usage renders once spec.appName has resolved to a real app kind, and keeps
+            # rendering with the kind and group read back from the observed Usage even if a later
+            # lookup comes back empty, so a transient flap never drops protection. Only an app that
+            # has never resolved gets no Usage - and then there is nothing to protect; the status
+            # step says so (AppResolved: False / AppNotFound) instead of the old silent
+            # "Unready resources: app-usage" from a Usage aimed at a NodeJSApplication that was
+            # never there.
             #
             # replayDeletion: true - defensive backstop for the race between this Usage's own
             # creation and the Usage controller labeling NodeJSApplication crossplane.io/in-use
@@ -287,6 +314,7 @@ spec:
             # replays the deletion attempt automatically once the last blocking Usage is actually
             # gone, instead of leaving it needing a manual re-delete.
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+            <<- if $renderUsage >>
             apiVersion: protection.crossplane.io/v1beta1
             kind: Usage
             metadata:
@@ -311,6 +339,7 @@ spec:
                   name: <<$xrName>>
               reason: <<printf "ApplicationEnvironment %s references %s %s via spec.appName - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md §0)" $xrName $appKind $appName | toJson>>
               replayDeletion: true
+            <<- end >>
             ---
             # Seeds this app's tenants/<appName>/identity.yaml on the TARGET cluster's own
             # gitops-cluster-<cluster>-tenants repo - needed because NodeJSApplication only ever
@@ -625,7 +654,7 @@ spec:
             # the target cluster isn't a registered, crossplaneReady upper-env cluster, this
             # resource simply isn't rendered at all - the status step reports ClusterReady: False
             # instead, same "structural backstop, refuse rather than partially succeed" instinct
-            # already used for the WorkloadDeployed condition below.
+            # already used for the ClusterReady condition (status/status.yaml).
             #
             # rollout: null - the initial bootstrap scaffold only, not an ongoing default. This
             # platform's CICD pipeline (and a developer directly) is expected to edit this file's
@@ -728,24 +757,43 @@ spec:
         source: Inline
         inline:
           template: |
-            # Reports exactly one of two mutually-exclusive custom conditions, never both, never
-            # neither - renamed from workload-status (singular concern) now that there are two:
-            # whether the target cluster passed the registry gate (§0 of
-            # service-catalog-design.md), and, only if it did, whether a real workload image
-            # exists yet (unchanged from the original WorkloadDeployed mechanism). Reporting
-            # WorkloadDeployed when the cluster gate failed would be misleading - nothing was
-            # created, so "no image yet" isn't the actual reason there's no deployment.
+            # Two custom conditions, both always present, each true or false for a stated reason
+            # (2026-10-08, review findings C5 and C6):
             #
-            # Redeclares the same ExtraResources requirement 00-cluster-gate.yaml (the
-            # render-github-resources step) already declares, rather than assuming this step can
-            # see that step's now-out-of-scope template variables - each pipeline step is a
-            # separate function-go-templating invocation with its own template execution.
-            # function-go-templating's own docs confirm extraResources ARE cached in the pipeline
-            # context and passed to later steps, so this doesn't trigger a second live fetch -
-            # but redeclaring keeps this step self-contained and correct even if the pipeline
-            # ever gets reordered, matching this catalog's general "repetition over cross-file
-            # coupling" convention (compositions/applicationenvironment/templates/render-github-
-            # resources/*.yaml each redeclare $xrName/$spec too).
+            #   ClusterReady   whether spec.cluster passed the registry gate (§0 of
+            #                  service-catalog-design.md). True once the registry entry is
+            #                  type: upper with crossplaneReady: "true"; False (ClusterNotEligible)
+            #                  until then. Used to be reported only when False, which left "gate
+            #                  passed" indistinguishable from "gate never evaluated".
+            #   AppResolved    whether spec.appName names a real app XR (NodeJSApplication,
+            #                  SpringBootApplication, PythonApplication, GoApplication or
+            #                  InfraService) in this namespace - the lookup 00-app-kind-gate.yaml
+            #                  makes to aim the deletion-protecting Usage. False with reason
+            #                  AppLookupPending on the very first pass (the requirement has not
+            #                  been fetched yet), False with reason AppNotFound when none of the
+            #                  five kinds exist by that name (a typo, or an env requested before
+            #                  its app), True once one does - or once a Usage was composed on an
+            #                  earlier pass, which proves it did resolve (the gate keeps that Usage
+            #                  through a transient empty lookup, so this mirrors it).
+            #
+            # WorkloadDeployed is gone. It was computed from "values.yaml was seeded with
+            # rollout: null" and never from the live Rollout - which runs on ANOTHER cluster, so
+            # this Composition cannot observe it - and therefore stayed False forever: every live
+            # env reported WorkloadDeployed=False while its app was serving traffic, and the
+            # architecture doc claimed the opposite. A condition that can only ever be False
+            # misleads every reader, human or agent. Whether a workload is deployed is the target
+            # cluster's Rollout and Argo CD Application status, read there (Tower does, the
+            # walkthroughs do); it is not this XR's to report.
+            #
+            # Redeclares the ExtraResources requirements 00-cluster-gate.yaml and
+            # 00-app-kind-gate.yaml (the render-github-resources step) already declare, rather than
+            # assuming this step can see that step's now-out-of-scope template variables - each
+            # pipeline step is a separate function-go-templating invocation with its own template
+            # execution. function-go-templating's own docs confirm extraResources ARE cached in the
+            # pipeline context and passed to later steps, so this doesn't trigger a second live
+            # fetch - but redeclaring keeps this step self-contained and correct even if the
+            # pipeline ever gets reordered, matching this catalog's general "repetition over
+            # cross-file coupling" convention.
             #
             # Ready itself stays real (whatever detect-ready, the pipeline step before this one,
             # computes from whichever - if any - composed resources actually exist). Direct
@@ -754,8 +802,9 @@ spec:
             # tries to set them directly via ClaimConditions - confirmed live during that build.
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $spec := .observed.composite.resource.spec >>
-            <<- $env := $spec.env >>
+            <<- $appName := $spec.appName >>
             <<- $cluster := $spec.cluster >>
+            <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $allExtra := .extraResources | default dict >>
             <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
             <<- $items := index $entry "items" | default list >>
@@ -768,6 +817,23 @@ spec:
                 <<- $clusterOk = true >>
               <<- end >>
             <<- end >>
+            <<- $appKind := "" >>
+            <<- $kindsByKey := dict "app-kind-nodejs-hangar" "NodeJSApplication" "app-kind-springboot-hangar" "SpringBootApplication" "app-kind-python-hangar" "PythonApplication" "app-kind-go-hangar" "GoApplication" "app-kind-infra-hangar" "InfraService" >>
+            <<- $lookupSeen := false >>
+            <<- range $key, $kind := $kindsByKey >>
+              <<- if hasKey $allExtra $key >>
+                <<- $lookupSeen = true >>
+                <<- if and (eq $appKind "") (gt (len (index (index $allExtra $key) "items" | default list)) 0) >>
+                  <<- $appKind = $kind >>
+                <<- end >>
+              <<- end >>
+            <<- end >>
+            <<- $appFound := ne $appKind "" >>
+            <<- $obsUsage := index (.observed.resources | default dict) "app-usage" | default dict >>
+            <<- $obsUsageKind := dig "resource" "spec" "of" "kind" "" $obsUsage >>
+            <<- if and (not $appFound) (ne $obsUsageKind "") >>
+              <<- $appKind = $obsUsageKind >>
+            <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:
@@ -776,11 +842,45 @@ spec:
                 kind: ConfigMap
                 namespace: crossplane-system
                 matchName: <<$cluster>>
+              app-kind-nodejs-hangar:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: NodeJSApplication
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
+              app-kind-springboot-hangar:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: SpringBootApplication
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
+              app-kind-python-hangar:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: PythonApplication
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
+              app-kind-go-hangar:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: GoApplication
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
+              app-kind-infra-hangar:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: InfraService
+                namespace: <<$xrNamespace>>
+                matchName: <<$appName>>
             ---
-            <<- if not $clusterOk >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ClaimConditions
             conditions:
+            <<- if $clusterOk >>
+              - type: ClusterReady
+                status: "True"
+                reason: ClusterEligible
+                message: >-
+                  <<$cluster>> is a registered upper-env cluster with crossplaneReady: "true" -
+                  <<$xrName>>'s values.yaml, tenant identity and SecretStore requests are
+                  rendered against it.
+                target: CompositeAndClaim
+            <<- else >>
               - type: ClusterReady
                 status: "False"
                 reason: ClusterNotEligible
@@ -793,19 +893,34 @@ spec:
                   been created. Resolves itself once the registry entry is correct - no XR
                   edit needed.
                 target: CompositeAndClaim
-            <<- else >>
-            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
-            kind: ClaimConditions
-            conditions:
-              - type: WorkloadDeployed
-                status: "False"
-                reason: NoImageYet
+            <<- end >>
+            <<- if ne $appKind "" >>
+              - type: AppResolved
+                status: "True"
+                reason: AppResolved
                 message: >-
-                  <<$xrName>>'s <<$env>> values.yaml and tenant identity are provisioned, but
-                  rollout is null - there's no real container image to deploy yet
-                  (platform-cicd-on-kind-dev migration hasn't landed, and no developer PR has
-                  set rollout.image). This condition does not auto-clear once one does; it
-                  reflects the state at bootstrap time only.
+                  spec.appName (<<$appName>>) is the <<$appKind>> in <<$xrNamespace>>; its
+                  deletion is blocked by this environment's Usage while this XR exists.
+                target: CompositeAndClaim
+            <<- else if not $lookupSeen >>
+              - type: AppResolved
+                status: "False"
+                reason: AppLookupPending
+                message: >-
+                  spec.appName (<<$appName>>) hasn't been looked up yet - the app-kind
+                  requirement is fetched on the next reconcile (about a minute). Resolves
+                  itself; no XR edit needed.
+                target: CompositeAndClaim
+            <<- else >>
+              - type: AppResolved
+                status: "False"
+                reason: AppNotFound
+                message: >-
+                  spec.appName (<<$appName>>) doesn't name a NodeJSApplication,
+                  SpringBootApplication, PythonApplication, GoApplication or InfraService in
+                  <<$xrNamespace>>. Check the spelling against the app's own xr-request, or
+                  create the app first - this environment's deletion-protecting Usage isn't
+                  rendered until it resolves, and the lookup is retried every reconcile.
                 target: CompositeAndClaim
             <<- end >>
             ---

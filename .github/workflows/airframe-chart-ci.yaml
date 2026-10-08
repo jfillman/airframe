@@ -27,6 +27,8 @@ jobs:
       - run: helm lint charts/airframe-application
         # the chart warns on the empty default name; only real failures matter
       - run: charts/airframe-application/tests/run.sh
+      - run: helm lint charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml
+      - run: helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -q 'name: kiac-dev'
       - run: python3 tools/gen_airframe_schema.py --check --coverage
       - run: python3 tools/gen_component_outputs.py --check
       - run: python3 tools/gen_contract.py --check

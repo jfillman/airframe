@@ -1,0 +1,57 @@
+{{- /*
+One ConfigMap per cluster (and per alias), the shape every Airframe Composition's cluster gate reads:
+  type             dev for the control-plane cluster (Bootstrap-tier XRs and the CI/CD control plane live there),
+                   upper for any other cluster. Derived from roles, so the fleet file says it once.
+  cicdReady        airframe.cicdReady         (dev clusters: the CI/CD control plane is running)
+  crossplaneReady  airframe.crossplaneReady   (upper clusters: Crossplane can compose onto it)
+  infisicalHost    airframe.infisicalHost
+  tenantsRepo      tenantsRepo
+  zone, roles      the taxonomy, for gates that move from `type` to `zone` (glidepath ADR-0024)
+*/ -}}
+{{- $seen := dict }}
+{{- range .Values.clusters }}
+{{- if not .name }}{{ fail "clusters: every record needs a name" }}{{ end }}
+{{- $zone := .zone | default "upper" }}
+{{- if not (has $zone (list "lower" "upper")) }}{{ fail (printf "clusters: '%s' has zone '%v', expected lower or upper" .name $zone) }}{{ end }}
+{{- $roles := .roles | default (list "workloads") }}
+{{- range $roles }}
+{{- if not (has . (list "control-plane" "workloads" "platform-services")) }}{{ fail (printf "clusters: unknown role '%v'" .) }}{{ end }}
+{{- end }}
+{{- $type := ternary "dev" "upper" (has "control-plane" $roles) }}
+{{- if and (eq $type "dev") (ne $zone "lower") }}{{ fail (printf "clusters: '%s' runs the control plane, so its zone must be lower" .name) }}{{ end }}
+{{- $a := .airframe | default dict }}
+{{- $rec := . }}
+{{- range prepend (.aliases | default list) .name }}
+{{- if hasKey $seen . }}{{ fail (printf "clusters: name '%s' is used twice" .) }}{{ end }}
+{{- $_ := set $seen . true }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ . }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    platform.io/cluster-registry: "true"
+    hangar.io/cluster-registry: "true"
+  {{- if ne . $rec.name }}
+  annotations:
+    hangar.io/alias-of: {{ $rec.name }}
+  {{- end }}
+data:
+  type: {{ $type }}
+  {{- if $a.cicdReady }}
+  cicdReady: "true"
+  {{- end }}
+  {{- if $a.crossplaneReady }}
+  crossplaneReady: "true"
+  {{- end }}
+  {{- if $a.infisicalHost }}
+  infisicalHost: "true"
+  {{- end }}
+  {{- with $rec.tenantsRepo }}
+  tenantsRepo: {{ . }}
+  {{- end }}
+  zone: {{ $zone }}
+  roles: {{ $roles | join "," | quote }}
+{{- end }}
+{{- end }}

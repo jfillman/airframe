@@ -116,7 +116,7 @@ gets, whatever fields it sets:
 - **Identity.** The Lambda execution role carries only `AWSLambdaBasicExecutionRole`; the ECS execution
   role only `AmazonECSTaskExecutionRolePolicy` plus `logs:CreateLogGroup`. Everything is created with the
   platform's own cloud credential from the provider's `ClusterProviderConfig`; the XR never holds one.
-- **Exposure.** An ECS security group opens exactly `containerPort`; a Lambda Function URL and its public
+- **Exposure.** An ECS security group opens exactly `containerPort` inbound and everything outbound; a Lambda Function URL and its public
   invoke permission exist only while `functionUrl` is true; a Container App's ingress is external on the
   one target port.
 - **Provenance.** Placeholder images come from `public.ecr.aws/lambda/*` and `mcr.microsoft.com/azure-functions/*`

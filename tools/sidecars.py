@@ -1,4 +1,4 @@
-"""The XRD sidecar contract: xrds/<kind>.meta.yaml (AF-3, review A3).
+r"""The XRD sidecar contract: xrds/<kind>.meta.yaml (AF-3, review A3).
 
 Why sidecars: the agent-facing contract (what a kind produces, what its conditions mean, how to check
 that an XR really works) was meant to live on the XRD as x-hangar-* extension keys, but every XRD is
@@ -22,6 +22,13 @@ A sidecar:
     conditions:                      # closed reason sets for this kind's custom conditions
       - type: ComponentReady
         reasons: [{reason: PostgreSQLReady, status: "True", meaning: ...}]
+    knownFailures:                   # messages a condition carries for a known external cause (review C8)
+      - id: CNPGWebhookUnavailable   # stable id an agent can branch on
+        condition: Synced            # the condition whose message is matched
+        match: 'failed calling webhook "[a-z]+\.cnpg\.io"'
+        example: <a real message>    # validated: match must find it
+        meaning: ...
+        hint: ...
     verify:                          # executable checks; `check` is the human sentence, `run` the machine form
       - id: reachable
         check: ...
@@ -113,6 +120,16 @@ def validate(d, f):
     for c in d.get("conditions") or []:
         if not c.get("type") or not c.get("reasons"):
             _err(f, "conditions entries need type and reasons")
+    for k in d.get("knownFailures") or []:
+        for field in ("id", "condition", "match", "example", "meaning", "hint"):
+            if not k.get(field):
+                _err(f, f"knownFailures entry {k.get('id')!r} needs {field}")
+        try:
+            rx = re.compile(k["match"])
+        except re.error as e:
+            _err(f, f"knownFailures {k['id']}: match is not a valid regex: {e}")
+        if not rx.search(k["example"]):
+            _err(f, f"knownFailures {k['id']}: match does not match its own example message")
     ids = set()
     for v in d.get("verify") or []:
         if not v.get("id") or not v.get("check"):

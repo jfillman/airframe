@@ -60,6 +60,13 @@ can reach it through NetworkPolicy.
   gives a closed-set `reason` (e.g. `RedisReady`, `PostgreSQLDegraded`, `RabbitMQAttachProvisioning`) with a
   stable meaning, listed in that component's `xrds/<type>.meta.yaml` under `conditions`. Prefer this over
   the generic `Ready` condition when diagnosing why a component isn't up.
+- `Synced=False` means Crossplane could not reconcile the XR at all, and the pipeline's own conditions
+  (`ComponentReady` and friends) then keep their last value: Crossplane returns on the first failed apply,
+  before it writes the status the pipeline computed. The common cause is an operator's admission webhook
+  not answering (`failed calling webhook ...` in the message); every PostgreSQL or RabbitMQ XR reports it
+  at once and the data is unaffected. Each sidecar's `knownFailures` names these causes with a stable id
+  and a hint (`CNPGWebhookUnavailable`, `RabbitMQTopologyWebhookUnavailable`), and `airframe-verify`'s
+  first step classifies the message for you. Check the operator, not the component.
 - An `ApplicationEnvironment` reports `ClusterReady` (the cluster-registry gate) and `AppResolved`
   (`spec.appName` names a real app XR; `AppNotFound` means a typo or an env requested before its app).
   It reports nothing about the workload: that is the target cluster's Rollout, read there or in Tower.

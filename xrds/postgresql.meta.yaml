@@ -58,6 +58,27 @@ conditions:
       - reason: PostgreSQLProvisioning
         status: "False"
         meaning: The Cluster has not been observed yet (just created).
+# Known failures (review C8). Crossplane applies every composed resource in one pass and returns on the first
+# apply error, before it writes the status the pipeline computed - so an operator outage cannot be reported
+# through ComponentReady (it keeps its last value). It lands in Synced=False's message instead, and these
+# patterns let airframe-verify (and any agent) name it instead of reading it as "the component is broken".
+knownFailures:
+  - id: CNPGWebhookUnavailable
+    condition: Synced
+    match: 'failed calling webhook "[a-z]+\.cnpg\.io"'
+    example: >-
+      cannot compose resources: cannot apply composed resource "cluster": Internal error occurred: failed calling
+      webhook "mcluster.cnpg.io": failed to call webhook: Post
+      "https://cnpg-webhook-service.cnpg-system.svc:443/mutate-postgresql-cnpg-io-v1-cluster?timeout=10s": dial tcp
+      10.108.177.11:443: connect: connection refused
+    meaning: >-
+      The CloudNativePG operator's admission webhook did not answer, so Crossplane could not apply the Cluster.
+      The database itself is unaffected; ComponentReady keeps its last value. Every PostgreSQL XR on the cluster
+      reports this at once.
+    hint: >-
+      Check the operator, not the database: kubectl -n cnpg-system get pods,endpointslices. It runs two replicas so a
+      leader exit does not drop the webhook; if both are down, look for leader-election losses in their logs. The XR
+      re-syncs on its own once the webhook answers.
 verify:
   - id: xr-ready
     check: The PostgreSQL XR's ComponentReady condition has reason PostgreSQLReady.

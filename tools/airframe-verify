@@ -19,6 +19,10 @@ What it touches, all read-only:
   aws / az CLI           read-only verbs only (get-/describe-/list-, show/list), enforced by the sidecar
                          validator; uses whatever credentials the shell already has
 
+Every run starts with an implicit `xr-synced` step. Synced=False is classified against the kind's
+`knownFailures` (e.g. CNPGWebhookUnavailable) and a few catalog-wide causes, so an operator outage is named
+as such instead of reading as a broken component (review C8).
+
 Exit 0 when nothing failed, 1 when a step failed, 2 for usage errors or an XR that cannot be read.
 """
 import argparse
@@ -328,6 +332,31 @@ RUNNERS = {"condition": run_condition, "xrField": run_xr_field, "secretKeys": ru
            "oauthClientCredentials": run_oauth, "cloudCli": run_cloud}
 
 
+GENERIC_FAILURES = [
+    {"id": "AdmissionWebhookUnavailable", "condition": "Synced", "match": r"failed calling webhook",
+     "meaning": "An admission webhook that one of the composed resources passes through did not answer; Crossplane could not apply it.",
+     "hint": "Find the webhook's Service in the message and check the operator behind it. The XR re-syncs once it answers."},
+]
+
+
+def check_synced(sc, xr):
+    """Implicit first step for every kind: Synced=False means Crossplane could not reconcile the XR at all, and
+    the pipeline's own conditions (ComponentReady etc.) may be stale. Known causes are named (sidecar
+    knownFailures, then a few catalog-wide ones) so a webhook outage reads as such, not as a broken component."""
+    res = {"id": "xr-synced", "kind": "condition", "check": "The XR is Synced: Crossplane reconciled it with the current spec."}
+    c = next((c for c in (xr.get("status") or {}).get("conditions") or [] if c["type"] == "Synced"), None)
+    if c is None:
+        return {**res, "status": "fail", "detail": "the XR has no Synced condition yet"}
+    if c.get("status") == "True":
+        return {**res, "status": "pass", "detail": "Synced=True"}
+    msg = c.get("message") or ""
+    for k in (sc.get("knownFailures") or []) + GENERIC_FAILURES:
+        if k["condition"] == "Synced" and re.search(k["match"], msg):
+            return {**res, "status": "fail", "knownFailure": k["id"],
+                    "detail": f"Synced=False, known failure {k['id']}: {k['meaning']} Hint: {k['hint']}"}
+    return {**res, "status": "fail", "detail": f"Synced=False ({c.get('reason')}): {msg[:300]}"}
+
+
 def find_kind(contract, name):
     every = {**contract["components"], **contract.get("targets", {}), **contract.get("kinds", {})}
     for key, sc in every.items():
@@ -346,6 +375,8 @@ def verify(sc, xrd, ns, name, context, only=None):
 
     ctx = {"kube": kube, "r": r}
     results = []
+    if not only or "xr-synced" in only:
+        results.append(check_synced(sc, xr))
     for step in sc.get("verify") or []:
         if only and step["id"] not in only:
             continue

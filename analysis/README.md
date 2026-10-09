@@ -1,7 +1,9 @@
 # Analysis catalog
 
-ClusterAnalysisTemplates for Argo Rollouts canary analysis, one copy per cluster. A cluster's `idp-service-catalog`
-Application installs them (its include list names `analysis/*.yaml`); an app uses one from its values with
+ClusterAnalysisTemplates for Argo Rollouts canary analysis, one copy per cluster. Each cluster installs them with its
+own `analysis-catalog` Application (`20-service-catalog/analysis-catalog/application.yaml` in the cluster's gitops repo,
+`path: analysis`), pinned separately from `idp-service-catalog` so a new template does not drag a composition bump along:
+bump that Application's `targetRevision` when the catalog gains a template. An app uses one from its values with
 `clusterScope: true` (Tower's Release tab lists the templates a cluster has and warns about a reference it lacks).
 
 | Template | Passes while | Data it needs |

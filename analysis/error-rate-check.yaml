@@ -1,6 +1,6 @@
 # The share of 5xx responses stays under max-error-rate (default 0.05).
 #
-# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's analysis-catalog Application,
 # referenced from an app's values with `clusterScope: true`:
 #
 #   rollout:

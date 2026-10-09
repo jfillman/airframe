@@ -30,12 +30,46 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-devcluster-gate.yaml): every application composition's
+            # templates/render-github-resources/00-devcluster-gate.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: none (this file defines $xrName, $spec, $devCluster, $clusterOk, $tenantsRepo for the files after it). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Real Crossplane extra-resources lookup against the cluster registry
             # (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
-            # identical mechanism to nodejsapplication's own 00-devcluster-gate.yaml (straight
-            # port, not a redesign). Still needed here even though CI/CD onboarding itself now
-            # lives in TektonCICD - secretstore-xr.yaml (this same pipeline step) needs its own
-            # $clusterOk/$tenantsRepo.
+            # same mechanism/pattern as applicationenvironment's own 00-cluster-gate.yaml, adapted
+            # here now that spec.devCluster is real and required (2026-08-18): this XRD used to be
+            # permanently centralized on a hardcoded "kind-dev" (see this Composition's own git
+            # history), correct only as long as exactly one dev cluster ever existed. The fleet now
+            # supports multiple - an app is pinned to exactly one via spec.devCluster, and THIS
+            # gate is what validates that choice live rather than trusting the string blindly.
+            #
+            # type: dev + cicdReady: "true" (not type: upper + crossplaneReady, which
+            # ApplicationEnvironment's own gate checks) - a dev cluster is defined by running
+            # platform-cicd's control plane, and cicdReady is exactly the field that flips true
+            # once that's GitOps-managed and live-verified on a given cluster (see kind-dev.yaml's
+            # own history).
+            #
+            # $clusterOk/$xrName/$devCluster/$tenantsRepo are declared once here, not redeclared
+            # per file below - Go template variables declared at this (unindented) scope persist
+            # for the rest of THIS pipeline step's execution across the --- separators (same
+            # concatenated-template convention 00-cluster-gate.yaml's own header documents).
+            # cicd-onboarding-status/status.yaml is a SEPARATE pipeline step (its own template
+            # execution scope) and redeclares this same lookup itself, same as
+            # applicationenvironment/templates/status/status.yaml does for its own gate.
+            #
+            # $tenantsRepo now comes from the registry entry's own data.tenantsRepo, not a
+            # hardcoded "gitops-cluster-dev-tenants" literal - kind-dev's tenants repo is a legacy
+            # name that breaks the gitops-cluster-<cluster>-tenants convention every upper cluster
+            # uses (renaming the real, live repo was out of scope - too disruptive to already-wired
+            # ArgoCD Applications). Recorded as registry data instead so a future second dev
+            # cluster can follow the clean convention without another hardcoded exception here.
+            #
+            # Deliberately ONE YAML document in this file, not two - see 00-cluster-gate.yaml's own
+            # header for why (computing everything up front via template actions with no literal
+            # output, before the ExtraResources document itself, avoids an untested "does
+            # function-go-templating tolerate a blank rendered document" question entirely).
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $devCluster := $spec.devCluster >>
@@ -63,6 +97,10 @@ spec:
                 kind: ConfigMap
                 namespace: crossplane-system
                 matchName: <<$devCluster>>
+            ---
+            # Per-composition inputs for the shared partials in compositions/_shared/render-github-resources/
+            # (00-devcluster-gate, secretstore-xr, tekton-cicd-child are symlinks there). Variables only; no output.
+            <<- $hasGitopsRepo := false >>
             ---
             # Commits a minimal, real cicd.yaml into the function's own src repo: build, then deploy to the
             # existing Lambda function (deploy.target: aws-lambda). Same mechanism as goapplication's copy.
@@ -150,9 +188,41 @@ spec:
                       enabled: true # build/deploy results show in Backstage and Tower
                 commitMessage: "LambdaFunction scaffold: cicd.yaml (build + deploy-to-Lambda starter)"
             ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/secretstore-xr.yaml): every application composition's
+            # templates/render-github-resources/secretstore-xr.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: none. Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Commits a "shared"-mode SecretStore XR manifest into
-            # tenants/<app-name>/xr-requests/secretstore.yaml - identical mechanism to
-            # nodejsapplication's own secretstore-xr.yaml (straight port, not a redesign).
+            # tenants/<app-name>/xr-requests/secretstore.yaml - picked up by this app's own
+            # devCluster's xr-requests ApplicationSet (gitops-cluster-dev/02-argocd-apps/
+            # xr-requests/, for kind-dev), the SAME mechanism every other Bootstrap XR
+            # already goes through, applied directly (no Helm release needed) into
+            # app-<app-name>-cicd on that cluster.
+            #
+            # Real, deliberate correction of the original design (idp/docs/
+            # service-catalog-design.md Item 8's second multi-cluster revision): secrets
+            # infrastructure used to be an emergent side effect of airframe-application's own
+            # chart rendering an always-on SecretStore XR the first time some env actually
+            # got deployed - meant "when does this exist" wasn't discoverable from the
+            # Bootstrap XRD list at all, and tied provisioning to "someone happened to ship
+            # a real release" rather than to onboarding itself. This is the fix: the SAME
+            # unconditional, idempotent commit pattern cicd-identity-yaml.yaml already uses in
+            # this same step - overwriteOnCreate:
+            # true, deterministic content, no existence-check needed (a NodeJSApplication is
+            # created exactly once per app, so there's no "N siblings" ownership question
+            # here at all, unlike ApplicationEnvironment's own copy of this same idea).
+            #
+            # spec.devCluster, not a hardcoded "kind-dev" (2026-08-18): this is the app's OWN
+            # dev-cluster secrets store, always exactly one, matching xrds/secretstore.yaml's
+            # own "one shared environment for the dev cluster" scope (no per-env store on a
+            # dev cluster - see that XRD's header for why). Which dev cluster is no longer a
+            # Bootstrap-tier-wide constant - spec.devCluster is real and required (the fleet
+            # now supports multiple dev clusters, an app pinned to exactly one) - $clusterOk/
+            # $tenantsRepo come from 00-devcluster-gate.yaml (same pipeline step), which also
+            # validates spec.devCluster live against the cluster registry before this
+            # resource renders at all.
             # managementPolicies (no "Delete") - added 2026-09-16 after a live $clusterOk/
             # devcluster-gate-flap deletion of this exact resource's ApplicationEnvironment-tier
             # sibling (secretstore-xrs.yaml) caused real Infisical project/secret loss
@@ -615,13 +685,28 @@ spec:
             <<- end >>
             ---
             ---
-            # Composes a TektonCICD child XR directly - identical mechanism to
-            # nodejsapplication's own tekton-cicd-child.yaml (straight port, not a redesign -
-            # see that file's own header, and xrds/tektoncicd.yaml's own header, for the full
-            # reasoning).
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/tekton-cicd-child.yaml): every application composition's
+            # templates/render-github-resources/tekton-cicd-child.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: $hasGitopsRepo (false for the function kinds, which deploy to a cloud target and have no gitops repo). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
+            # Composes a TektonCICD child XR directly - not a GitOps xr-requests commit like
+            # SecretStore's own sibling template (secretstore-xr.yaml) uses. TektonCICD only
+            # calls the GitHub API (provider-github, cluster-agnostic, reconciled centrally,
+            # same as every other resource this pipeline step already composes), so it has
+            # none of SecretStore's cross-cluster-credential blocker - see
+            # xrds/tektoncicd.yaml's own header for the full reasoning.
             #
             # Unconditional - not locally gated on $clusterOk. TektonCICD's own internal
-            # devcluster gate now owns that decision.
+            # devcluster gate (compositions/tektoncicd/templates/render-tektoncicd-resources/
+            # 00-devcluster-gate.yaml) now owns that decision; gating here too would just
+            # move the duplication this extraction removes to a different file.
+            #
+            # gitopsRepoUrl/appRepoUrl computed the same way gitops-repo.yaml/src-repo.yaml's
+            # own literals do ($platformOwner "jfillman" - a ProviderConfig-wide credential
+            # setting, not a per-app field, same reasoning xrds/nodejsapplication.yaml's own
+            # header gives for not exposing owner as a spec field).
             # apiVersion is STICKY to whatever group this app's child already has (Tier 2 domain rename, memory
             # project_tier2_domain_rename_plan.md): an existing child keeps the apiVersion it was created with,
             # a brand-new one (nothing observed yet) is created under catalog.hangar.io.
@@ -652,8 +737,17 @@ spec:
                 <<setResourceNameAnnotation "tektoncicd">>
             spec:
               appName: <<$xrName>>
+              <<- if $hasGitopsRepo >>
+              gitopsRepoUrl: <<printf "https://github.com/%s/gitops-%s" $platformOwner $xrName>>
+              <<- end >>
               appRepoUrl: <<printf "https://github.com/%s/%s" $platformOwner $xrName>>
               devCluster: <<$devCluster>>
+              <<- if $spec.extraGitopsRepos >>
+              extraGitopsRepos:
+              <<- range $spec.extraGitopsRepos >>
+                - <<.>>
+              <<- end >>
+              <<- end >>
             ---
             ---
         delims:
@@ -671,6 +765,17 @@ spec:
         source: Inline
         inline:
           template: |
+            # Per-composition inputs for the shared partial compositions/_shared/cicd-onboarding-status/status.yaml
+            # (status.yaml here is a symlink to it). Variables only; no output.
+            <<- $targetResourceName := "aws-lambda-target" >>
+            <<- $targetKind := "AwsLambdaTarget" >>
+            ---
+            # SHARED PARTIAL (compositions/_shared/cicd-onboarding-status/status.yaml): every application composition's
+            # templates/cicd-onboarding-status/status.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/cicd-onboarding-status/00-inputs.yaml defines before this
+            # file is concatenated after it: $targetResourceName and $targetKind (the opt-in cloud-target child of the function kinds; empty for the others, which then never see spec.target.enabled). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
             # child's own status.conditions onto this XR's status. Identical mechanism to
             # nodejsapplication's own cicd-onboarding-status/status.yaml (straight port, not a
@@ -684,7 +789,8 @@ spec:
             <<- $devClusterCondition := dict >>
             <<- $cicdOnboardedCondition := dict >>
             <<- $target := .observed.composite.resource.spec.target | default dict >>
-            <<- $targetRes := index $allObserved "aws-lambda-target" | default dict >>
+            <<- $targetRes := dict >>
+            <<- if $targetResourceName >><<- $targetRes = index $allObserved $targetResourceName | default dict >><<- end >>
             <<- $targetCondition := dict >>
             <<- range (dig "resource" "status" "conditions" list $targetRes) >>
               <<- if eq .type "TargetReady" >>
@@ -743,7 +849,7 @@ spec:
                 status: "False"
                 reason: TargetPending
                 message: >-
-                  spec.target.enabled is set; waiting on the composed AwsLambdaTarget child (<<$xrName>>-target)
+                  spec.target.enabled is set; waiting on the composed <<$targetKind>> child (<<$xrName>>-target)
                   to report its own TargetReady condition - resolves itself once it does.
                 target: CompositeAndClaim
             <<- end >>

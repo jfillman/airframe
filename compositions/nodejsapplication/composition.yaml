@@ -36,6 +36,12 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-devcluster-gate.yaml): every application composition's
+            # templates/render-github-resources/00-devcluster-gate.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: none (this file defines $xrName, $spec, $devCluster, $clusterOk, $tenantsRepo for the files after it). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Real Crossplane extra-resources lookup against the cluster registry
             # (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
             # same mechanism/pattern as applicationenvironment's own 00-cluster-gate.yaml, adapted
@@ -97,6 +103,10 @@ spec:
                 kind: ConfigMap
                 namespace: crossplane-system
                 matchName: <<$devCluster>>
+            ---
+            # Per-composition inputs for the shared partials in compositions/_shared/render-github-resources/
+            # (00-devcluster-gate, secretstore-xr, tekton-cicd-child are symlinks there). Variables only; no output.
+            <<- $hasGitopsRepo := true >>
             ---
             # Commits a minimal, real cicd.yaml (build, then deploy to dev) into this app's own src repo -
             # closes a real onboarding gap found live 2026-09-21: without this file,
@@ -253,6 +263,12 @@ spec:
                   here, rendered by `airframe-application` (Airframe's shared Helm chart).
                 commitMessage: "NodeJSApplication scaffold: README.md"
             ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/secretstore-xr.yaml): every application composition's
+            # templates/render-github-resources/secretstore-xr.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: none. Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Commits a "shared"-mode SecretStore XR manifest into
             # tenants/<app-name>/xr-requests/secretstore.yaml - picked up by this app's own
             # devCluster's xr-requests ApplicationSet (gitops-cluster-dev/02-argocd-apps/
@@ -652,6 +668,12 @@ spec:
                   resource's own status for details.
                 commitMessage: "NodeJSApplication scaffold: README.md"
             ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/tekton-cicd-child.yaml): every application composition's
+            # templates/render-github-resources/tekton-cicd-child.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/render-github-resources/00-inputs.yaml defines before this
+            # file is concatenated after it: $hasGitopsRepo (false for the function kinds, which deploy to a cloud target and have no gitops repo). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Composes a TektonCICD child XR directly - not a GitOps xr-requests commit like
             # SecretStore's own sibling template (secretstore-xr.yaml) uses. TektonCICD only
             # calls the GitHub API (provider-github, cluster-agnostic, reconciled centrally,
@@ -698,7 +720,9 @@ spec:
                 <<setResourceNameAnnotation "tektoncicd">>
             spec:
               appName: <<$xrName>>
+              <<- if $hasGitopsRepo >>
               gitopsRepoUrl: <<printf "https://github.com/%s/gitops-%s" $platformOwner $xrName>>
+              <<- end >>
               appRepoUrl: <<printf "https://github.com/%s/%s" $platformOwner $xrName>>
               devCluster: <<$devCluster>>
               <<- if $spec.extraGitopsRepos >>
@@ -724,23 +748,21 @@ spec:
         source: Inline
         inline:
           template: |
+            # Per-composition inputs for the shared partial compositions/_shared/cicd-onboarding-status/status.yaml
+            # (status.yaml here is a symlink to it). Variables only; no output.
+            <<- $targetResourceName := "" >>
+            <<- $targetKind := "" >>
+            ---
+            # SHARED PARTIAL (compositions/_shared/cicd-onboarding-status/status.yaml): every application composition's
+            # templates/cicd-onboarding-status/status.yaml is a symlink to this file, so the six compositions cannot drift apart
+            # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+            # differences come in through the variables that templates/cicd-onboarding-status/00-inputs.yaml defines before this
+            # file is concatenated after it: $targetResourceName and $targetKind (the opt-in cloud-target child of the function kinds; empty for the others, which then never see spec.target.enabled). Edit here, run tools/build-compositions, then
+            # tools/test_compositions.py and review every composition's expected/ diff.
             # Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
-            # child's own status.conditions onto this XR's status - both conditions are now
-            # computed entirely inside compositions/tektoncicd's own Composition (see
-            # xrds/tektoncicd.yaml's own header for why CI/CD onboarding was extracted there),
-            # this step just re-surfaces them here so `kubectl describe nodejsapplication/<app>`
-            # still shows both directly on the app, same UX as before the extraction.
-            #
-            # Same read-the-observed-resource-map mechanism this step used pre-extraction to
-            # read the raw cicd-identity-yaml RepositoryFile's own Ready condition - just
-            # retargeted one level: "tektoncicd" (setResourceNameAnnotation in
-            # render-github-resources/tekton-cicd-child.yaml) instead of "cicd-identity-yaml".
-            # function-go-templating's ClaimConditions mechanism has no find-by-type helper for
-            # reading observed conditions, only setting them, so this is a plain range/match,
-            # same as every other status-proxy step in this catalog.
-            #
-            # BOTH conditions need this treatment, not just CicdOnboarded - DevClusterReady
-            # would otherwise silently disappear from this XR's own status.
+            # child's own status.conditions onto this XR's status. Identical mechanism to
+            # nodejsapplication's own cicd-onboarding-status/status.yaml (straight port, not a
+            # redesign) - see that file's own header for the full "why".
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $allObserved := .observed.resources | default dict >>
             <<- $childRes := index $allObserved "tektoncicd" | default dict >>
@@ -749,6 +771,15 @@ spec:
             <<- $childConditions := index $childStatus "conditions" | default list >>
             <<- $devClusterCondition := dict >>
             <<- $cicdOnboardedCondition := dict >>
+            <<- $target := .observed.composite.resource.spec.target | default dict >>
+            <<- $targetRes := dict >>
+            <<- if $targetResourceName >><<- $targetRes = index $allObserved $targetResourceName | default dict >><<- end >>
+            <<- $targetCondition := dict >>
+            <<- range (dig "resource" "status" "conditions" list $targetRes) >>
+              <<- if eq .type "TargetReady" >>
+                <<- $targetCondition = . >>
+              <<- end >>
+            <<- end >>
             <<- range $childConditions >>
               <<- if eq .type "DevClusterReady" >>
                 <<- $devClusterCondition = . >>
@@ -788,6 +819,23 @@ spec:
                   Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
                   its own CicdOnboarded condition - resolves itself once it does.
                 target: CompositeAndClaim
+            <<- end >>
+            <<- if $target.enabled >>
+            <<- if $targetCondition >>
+              - type: TargetReady
+                status: <<$targetCondition.status | toJson>>
+                reason: <<$targetCondition.reason>>
+                message: <<$targetCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: TargetReady
+                status: "False"
+                reason: TargetPending
+                message: >-
+                  spec.target.enabled is set; waiting on the composed <<$targetKind>> child (<<$xrName>>-target)
+                  to report its own TargetReady condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
             <<- end >>
             ---
         delims:

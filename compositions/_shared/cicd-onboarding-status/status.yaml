@@ -1,0 +1,84 @@
+# SHARED PARTIAL (compositions/_shared/cicd-onboarding-status/status.yaml): every application composition's
+# templates/cicd-onboarding-status/status.yaml is a symlink to this file, so the six compositions cannot drift apart
+# again (review C3: four 'identical' templates had grown four to five variants). Per-composition
+# differences come in through the variables that templates/cicd-onboarding-status/00-inputs.yaml defines before this
+# file is concatenated after it: $targetResourceName and $targetKind (the opt-in cloud-target child of the function kinds; empty for the others, which then never see spec.target.enabled). Edit here, run tools/build-compositions, then
+# tools/test_compositions.py and review every composition's expected/ diff.
+# Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
+# child's own status.conditions onto this XR's status. Identical mechanism to
+# nodejsapplication's own cicd-onboarding-status/status.yaml (straight port, not a
+# redesign) - see that file's own header for the full "why".
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $allObserved := .observed.resources | default dict >>
+<<- $childRes := index $allObserved "tektoncicd" | default dict >>
+<<- $childXR := index $childRes "resource" | default dict >>
+<<- $childStatus := index $childXR "status" | default dict >>
+<<- $childConditions := index $childStatus "conditions" | default list >>
+<<- $devClusterCondition := dict >>
+<<- $cicdOnboardedCondition := dict >>
+<<- $target := .observed.composite.resource.spec.target | default dict >>
+<<- $targetRes := dict >>
+<<- if $targetResourceName >><<- $targetRes = index $allObserved $targetResourceName | default dict >><<- end >>
+<<- $targetCondition := dict >>
+<<- range (dig "resource" "status" "conditions" list $targetRes) >>
+  <<- if eq .type "TargetReady" >>
+    <<- $targetCondition = . >>
+  <<- end >>
+<<- end >>
+<<- range $childConditions >>
+  <<- if eq .type "DevClusterReady" >>
+    <<- $devClusterCondition = . >>
+  <<- else if eq .type "CicdOnboarded" >>
+    <<- $cicdOnboardedCondition = . >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+<<- if $devClusterCondition >>
+  - type: DevClusterReady
+    status: <<$devClusterCondition.status | toJson>>
+    reason: <<$devClusterCondition.reason>>
+    message: <<$devClusterCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: DevClusterReady
+    status: "False"
+    reason: DevClusterNotReady
+    message: >-
+      Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+      its own DevClusterReady condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>
+<<- if $cicdOnboardedCondition >>
+  - type: CicdOnboarded
+    status: <<$cicdOnboardedCondition.status | toJson>>
+    reason: <<$cicdOnboardedCondition.reason>>
+    message: <<$cicdOnboardedCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: CicdOnboarded
+    status: "False"
+    reason: CicdOnboardingPending
+    message: >-
+      Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+      its own CicdOnboarded condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>
+<<- if $target.enabled >>
+<<- if $targetCondition >>
+  - type: TargetReady
+    status: <<$targetCondition.status | toJson>>
+    reason: <<$targetCondition.reason>>
+    message: <<$targetCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: TargetReady
+    status: "False"
+    reason: TargetPending
+    message: >-
+      spec.target.enabled is set; waiting on the composed <<$targetKind>> child (<<$xrName>>-target)
+      to report its own TargetReady condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>
+<<- end >>

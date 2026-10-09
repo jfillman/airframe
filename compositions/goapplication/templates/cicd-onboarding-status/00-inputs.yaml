@@ -1,0 +1,4 @@
+# Per-composition inputs for the shared partial compositions/_shared/cicd-onboarding-status/status.yaml
+# (status.yaml here is a symlink to it). Variables only; no output.
+<<- $targetResourceName := "" >>
+<<- $targetKind := "" >>

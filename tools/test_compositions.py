@@ -280,7 +280,7 @@ def main() -> int:
     ap.add_argument("--renderer", choices=["auto", "crossplane", "render-pipeline"], default="auto")
     a = ap.parse_args()
     renderer = pick_renderer(a.renderer)
-    dirs = [COMPOSITIONS / n for n in a.names] if a.names else sorted(p for p in COMPOSITIONS.iterdir() if p.is_dir())
+    dirs = [COMPOSITIONS / n for n in a.names] if a.names else sorted(p for p in COMPOSITIONS.iterdir() if p.is_dir() and not p.name.startswith("_"))
     total, failed, without = 0, 0, []
     for d in dirs:
         try:

@@ -24,7 +24,9 @@
 <<- $maxReplicas := $spec.maxReplicas | default 1 >>
 <<- $registry := $spec.registry | default dict >>
 <<- $withRegistry := and (hasKey $registry "username") (hasKey $registry "passwordSecretRef") >>
-<<- $tags := dict "hangar.io/target" $xrName "hangar.io/component" "azure-container-app-target" "hangar.io/app" $appName >>
+# Azure tag NAMES may not contain / (InvalidTagNameCharacters), so the hangar.io/* keys the AWS targets
+# use become hangar-* here: same meaning, same values. Found live on the first az group create.
+<<- $tags := dict "hangar-target" $xrName "hangar-component" "azure-container-app-target" "hangar-app" $appName >>
 apiVersion: azure.m.upbound.io/v1beta1
 kind: ResourceGroup
 metadata:

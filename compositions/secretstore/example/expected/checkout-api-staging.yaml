@@ -58,7 +58,7 @@ resources:
     - '*'
 xr:
   conditions:
-  - message: 'Unready resources: infisical-environment, per-env-cluster-secret-store'
+  - message: 'Unready resources: infisical-environment, and per-env-cluster-secret-store'
     reason: Creating
     status: 'False'
     type: Ready

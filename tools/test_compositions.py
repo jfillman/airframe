@@ -90,11 +90,19 @@ def run_crossplane_render(comp_dir: Path, case: dict) -> dict:
     cmd = ["crossplane", "render", str(ex / case["xr"]), str(comp_dir / "composition.yaml"), tmp.name,
            "--include-full-xr", "--include-function-results", "--timeout=5m"]
     for f in case.get("required", []):
-        cmd += ["--required-resources", str(ex / f)]
-    for f in case.get("observed", []):
-        cmd += ["--observed-resources", str(ex / f)]
+        cmd += ["--required-resources", str(ex / f)]          # repeatable
+    obs_dir = None
+    if case.get("observed"):
+        # --observed-resources takes ONE path (a file or a directory; a repeated flag keeps only the
+        # last), so the case's observed fixtures go into one temporary directory.
+        obs_dir = tempfile.mkdtemp()
+        for f in case["observed"]:
+            shutil.copy(ex / f, Path(obs_dir) / Path(f).name)
+        cmd += ["--observed-resources", obs_dir]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     os.unlink(tmp.name)
+    if obs_dir:
+        shutil.rmtree(obs_dir, ignore_errors=True)
     if r.returncode != 0 and not r.stdout.strip():
         raise RenderError(f"crossplane render failed: {r.stderr.strip()[-800:]}")
     docs = [d for d in yaml.safe_load_all(r.stdout) if isinstance(d, dict)]
@@ -143,13 +151,20 @@ def run_render_pipeline(comp_dir: Path, case: dict) -> dict:
             unready.append(name)
         resources.append(res)
     if unready:
-        names = sorted(unready)   # Crossplane names the first three and counts the rest
-        listed = ", ".join(names[:3]) + (f", and {len(names) - 3} more" if len(names) > 3 else "")
-        conds.append({"type": "Ready", "status": "False", "reason": "Creating", "message": "Unready resources: " + listed})
+        conds.append({"type": "Ready", "status": "False", "reason": "Creating", "message": "Unready resources: " + n_and_some_more(sorted(unready))})
     else:
         conds.append({"type": "Ready", "status": "True", "reason": "Available", "message": ""})
     xr["status"]["conditions"] = conds
     return {"xr": xr, "resources": resources, "results": out.get("results", [])}
+
+
+def n_and_some_more(names: list[str], n: int = 3) -> str:
+    """Crossplane's wording for the Ready condition: 'a', 'a, and b', 'a, b, and c', 'a, b, c, and 7 more'."""
+    if len(names) > n:
+        return ", ".join(names[:n]) + f", and {len(names) - n} more"
+    if len(names) == 1:
+        return names[0]
+    return ", ".join(names[:-1]) + ", and " + names[-1]
 
 
 # ---- normalization ------------------------------------------------------------------------------

@@ -50,7 +50,7 @@ resources:
           totalQuery: sum(rate(http_request_duration_seconds_count{service="checkout-api"}[{{.window}}]))
 xr:
   conditions:
-  - message: 'Unready resources: dashboard-configmap, prometheusservicelevel'
+  - message: 'Unready resources: dashboard-configmap, and prometheusservicelevel'
     reason: Creating
     status: 'False'
     type: Ready

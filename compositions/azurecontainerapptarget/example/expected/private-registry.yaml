@@ -108,7 +108,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: container-app, environment, resource-group'
+  - message: 'Unready resources: container-app, environment, and resource-group'
     reason: Creating
     status: 'False'
     type: Ready

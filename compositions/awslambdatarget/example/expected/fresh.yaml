@@ -57,7 +57,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: ecr-repository, iam-role, iam-role-policy'
+  - message: 'Unready resources: ecr-repository, iam-role, and iam-role-policy'
     reason: Creating
     status: 'False'
     type: Ready

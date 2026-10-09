@@ -50,8 +50,11 @@
 # IdentityUniversalAuth, IdentityUniversalAuthClientSecret, ProjectIdentity, then the
 # same <slug>-infisical-creds Secret the operator writes (clientId + clientSecret), so
 # the ClusterSecretStores need no change. clientId comes from the client-secret
-# resource's status.atProvider.clientId; clientSecret from its connection Secret
-# (key attribute.client_secret), read through the ua-conn-secret ExtraResources lookup.
+# resource's status.atProvider.clientId; clientSecret is copied into that Secret by
+# provider-kubernetes itself (Object.spec.references[].patchesFrom from the <slug>-ua-conn
+# connection Secret), so since 2026-10-09 (review C2) it is never read by, rendered by or
+# carried through the function pipeline. The same pattern carries the kubernetes branch's
+# token-reviewer JWT (infisical-token-reviewer-secret).
 #
 # NOT YET WIRED INTO THE LIVE CLUSTER'S REAL SECRETSTORE XRS: this Composition
 # change, once merged to main, would immediately re-render EVERY existing
@@ -163,7 +166,11 @@ spec:
       name: <<$projectSlug>>
     kubernetesHost: "https://kubernetes.default.svc.cluster.local"
     kubernetesCaCertificate: <<$k8sCaCert | toJson>>
-    tokenReviewerJwt: <<$k8sReviewerJwt | toJson>>
+    # The reviewer JWT is read from a Secret in this namespace (the Object below copies it from
+    # infisical/infisical-token-reviewer-token server-side); it never appears in this spec.
+    tokenReviewerJwtSecretRef:
+      name: <<printf "%s-token-reviewer" $projectSlug>>
+      key: token
     tokenReviewerMode: api
     # Scoped to ESO's own controller ServiceAccount only - it presents its own
     # in-pod projected token, matching clustersecretstore.yaml's own "zero
@@ -176,6 +183,36 @@ spec:
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: <<printf "%s-token-reviewer" $projectSlug>>
+  annotations:
+    <<setResourceNameAnnotation "infisical-token-reviewer-secret">>
+spec:
+  # provider-kubernetes copies the token at apply time, server-side, from the host cluster's
+  # token-reviewer Secret into this namespace: the value is never in this manifest, this XR or any
+  # function payload. The placeholder key below is what patchesFrom overwrites.
+  references:
+    - patchesFrom:
+        apiVersion: v1
+        kind: Secret
+        name: infisical-token-reviewer-token
+        namespace: infisical
+        fieldPath: data.token
+      toFieldPath: data.token
+  forProvider:
+    manifest:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: <<printf "%s-token-reviewer" $projectSlug>>
+        namespace: <<$xrNamespace>>
+      type: Opaque
+      data:
+        token: ""
+  managementPolicies: ["*"]
 ---
   <<- else >>
 apiVersion: identity.infisical.m.hangar.io/v1alpha1
@@ -204,9 +241,9 @@ spec:
       name: <<$projectSlug>>
     description: <<printf "%s (managed by the SecretStore Composition)" $projectSlug | toJson>>
   # Same-namespace connection Secret (the namespaced MR writes into its own
-  # namespace, which is this XR's). Read back through 02-provisioner-gate.yaml's
-  # ua-conn-secret lookup; only key attribute.client_secret is published - the client
-  # id is not sensitive and comes from status.atProvider.clientId instead.
+  # namespace, which is this XR's). provider-kubernetes copies key attribute.client_secret
+  # out of it into <slug>-infisical-creds (the Object below, patchesFrom); nothing in this
+  # pipeline reads it. The client id is not sensitive and comes from status.atProvider.clientId.
   writeConnectionSecretToRef:
     name: <<printf "%s-ua-conn" $projectSlug>>
   providerConfigRef:
@@ -283,7 +320,6 @@ spec:
     <<- end >>
     <<- else >>
     <<- $uaClientId := "" >>
-    <<- $uaSecretB64 := "" >>
     <<- if .observed.resources >>
       <<- $obsCs := index .observed.resources "infisical-identity-ua-client-secret" >>
       <<- if $obsCs >>
@@ -296,14 +332,7 @@ spec:
         <<- end >>
       <<- end >>
     <<- end >>
-    <<- $uaExtra := .extraResources | default dict >>
-    <<- $uaEntry := index $uaExtra "ua-conn-secret" | default dict >>
-    <<- $uaItems := index $uaEntry "items" | default list >>
-    <<- if gt (len $uaItems) 0 >>
-      <<- $uaData := index (index $uaItems 0).resource "data" | default dict >>
-      <<- $uaSecretB64 = index $uaData "attribute.client_secret" | default "" >>
-    <<- end >>
-    <<- if and (ne $uaClientId "") (ne $uaSecretB64 "") >>
+    <<- if ne $uaClientId "" >>
 apiVersion: kubernetes.m.crossplane.io/v1alpha1
 kind: Object
 metadata:
@@ -311,6 +340,19 @@ metadata:
   annotations:
     <<setResourceNameAnnotation "infisical-identity-secret">>
 spec:
+  # The client secret is copied server-side by provider-kubernetes from the
+  # IdentityUniversalAuthClientSecret's connection Secret (<slug>-ua-conn, key
+  # attribute.client_secret, same namespace) at apply time: it is never in this manifest, this
+  # XR or any function payload (review C2). Until the connection Secret exists the apply fails and
+  # retries; the placeholder key is what patchesFrom overwrites.
+  references:
+    - patchesFrom:
+        apiVersion: v1
+        kind: Secret
+        name: <<printf "%s-ua-conn" $projectSlug>>
+        namespace: <<$xrNamespace>>
+        fieldPath: data[attribute.client_secret]
+      toFieldPath: data.clientSecret
   forProvider:
     manifest:
       apiVersion: v1
@@ -318,11 +360,11 @@ spec:
       metadata:
         name: <<printf "%s-infisical-creds" $projectSlug>>
         namespace: <<$xrNamespace>>
-      # data (base64), never stringData - see the kubernetes branch above. The
-      # ExtraResources value is already base64, so it is passed through as-is.
+      type: Opaque
+      # data (base64), never stringData - see the kubernetes branch above.
       data:
         clientId: <<$uaClientId | b64enc>>
-        clientSecret: <<$uaSecretB64 | toJson>>
+        clientSecret: ""
   managementPolicies: ["*"]
 ---
     <<- end >>

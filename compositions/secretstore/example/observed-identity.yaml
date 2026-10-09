@@ -1,0 +1,15 @@
+# The Infisical Identity once created: its external name is the identity id the credentials Secret
+# carries (kubernetes-auth branch).
+apiVersion: identity.infisical.m.hangar.io/v1alpha1
+kind: Identity
+metadata:
+  name: checkout-api-kind-dev
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: infisical-identity
+    crossplane.io/external-name: 11111111-2222-3333-4444-555555555555
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Available

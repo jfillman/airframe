@@ -223,7 +223,12 @@ spec:
             <<- end >>
             <<- $allowed := $spec.allowedNamespaces | default list >>
             <<- /* Readiness (AllReplicasReady, no Ready condition on a RabbitmqCluster) is a CEL rule in
-                   compositions/_shared/readiness-context.yaml, read by the detect-ready step. */ ->>
+                   compositions/_shared/readiness-context.yaml, read by the detect-ready step.
+                   No right-trim marker on this comment: a trim here eats the newline before apiVersion
+                   and glues it onto the previous line (v0.3.128 shipped exactly that; the RabbitmqCluster
+                   lost its apiVersion and the broker XR could not be composed). Go also wants the comment
+                   close to touch the delimiter when no trim marker follows, and the comment body must not
+                   contain the close sequence itself. */>>
             apiVersion: rabbitmq.com/v1beta1
             kind: RabbitmqCluster
             metadata:

@@ -40,13 +40,29 @@
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
 <<- $items := index $entry "items" | default list >>
 <<- $isInfisicalHost := false >>
+<<- $registryInfisicalUrl := "" >>
+<<- $registryInfisicalOrgId := "" >>
 <<- if gt (len $items) 0 >>
   <<- $cm := (index $items 0).resource >>
   <<- $infisicalHost := index $cm.data "infisicalHost" | default "" >>
   <<- if eq $infisicalHost "true" >>
     <<- $isInfisicalHost = true >>
   <<- end >>
+  <<- $registryInfisicalUrl = index $cm.data "infisicalUrl" | default "" >>
+  <<- $registryInfisicalOrgId = index $cm.data "infisicalOrgId" | default "" >>
 <<- end >>
+<<- /* Review C9: where Infisical lives is a fleet fact in clusters.yaml (top-level infisical: block), rendered by
+       the cluster-registry chart into this cluster's record as infisicalUrl and infisicalOrgId. MIGRATION
+       FALLBACK: until both clusters' registries carry those keys, the values below are exactly what the
+       templates hard-coded before, so this release changes no rendered object; the next release removes them. */>>
+<<- $infisicalUrl := $registryInfisicalUrl >>
+<<- if not $infisicalUrl >>
+  <<- $infisicalUrl = "http://dev.kiac.local:31800/api" >>
+  <<- if $isInfisicalHost >>
+    <<- $infisicalUrl = "http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080/api" >>
+  <<- end >>
+<<- end >>
+<<- $infisicalOrgId := $registryInfisicalOrgId | default "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ExtraResources
 requirements:

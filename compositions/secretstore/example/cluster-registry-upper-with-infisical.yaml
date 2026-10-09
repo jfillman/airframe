@@ -1,0 +1,13 @@
+# A cluster that does NOT host Infisical, with the review-C9 keys the cluster-registry chart renders from
+# clusters.yaml's infisical: block. Deliberately different values from the old literals, so the cases that use
+# it prove hostAPI and orgId come from the registry and not from the fallback.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-dev
+  namespace: crossplane-system
+data:
+  type: upper
+  crossplaneReady: "true"
+  infisicalUrl: http://infisical.registry.example:31800/api
+  infisicalOrgId: 11111111-2222-3333-4444-555555555555

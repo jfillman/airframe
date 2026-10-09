@@ -1,3 +1,7 @@
+infisical:
+  orgId: 00000000-0000-0000-0000-000000000001
+  url: http://infisical.example:31800/api
+  inClusterUrl: http://infisical.infisical.svc.cluster.local:8080/api
 clusters:
   - name: kind-dev
     zone: lower

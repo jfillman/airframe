@@ -14,7 +14,6 @@ metadata:
   name: <<$xrName>>-registry-secret-name
   annotations:
     <<setResourceNameAnnotation "registry-secret-name">>
-    gotemplating.fn.crossplane.io/ready: "True"
   labels:
     <<- range $k, $v := $tags >>
     <<$k>>: <<$v | quote>>

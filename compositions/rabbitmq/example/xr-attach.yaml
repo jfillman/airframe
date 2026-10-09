@@ -1,0 +1,16 @@
+# mode: attach - an app's User + Permission on the shared broker, in the app's own namespace.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: RabbitMQ
+metadata:
+  name: flights-mq
+  namespace: app-flights-dev
+spec:
+  environmentRef:
+    name: flights-kind-dev-dev
+  mode: attach
+  brokerRef:
+    name: skyport-broker
+    namespace: app-skyport-broker-dev
+  vhost: flights
+  publish: [flights.events]
+  consume: [bookings.events]

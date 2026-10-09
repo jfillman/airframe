@@ -69,6 +69,10 @@ ids and fix hints, so an agent can retry against them deterministically:
 - Chart guards: a developer label that would override a chart-owned identity label, a `podSpec`
   that replaces the container list, `releaseTracking` on a release with no Rollout, each fail the
   render with a message naming the key.
+- Readiness in one place: how a composed kind without a `Ready` condition counts as ready
+  (Role, RoleBinding, NetworkPolicy, MongoDBCommunity, RabbitmqCluster, PrometheusServiceLevel) is a CEL
+  rule in `compositions/_shared/readiness-context.yaml`, evaluated by `function-auto-ready`; a wrong
+  rule is a Warning and an unready composite, never a false Ready. No template marks itself ready.
 - Composition render tests: every composition's `example/cases.yaml` is rendered through the real
   functions in CI (`tools/test_compositions.py`) and compared with its committed `example/expected/`
   files, so a change to what a composition composes, or to the conditions it reports, is a reviewed

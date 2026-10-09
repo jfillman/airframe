@@ -22,6 +22,10 @@ Two renderers produce the same normalized output:
   crossplane render   (default when the `crossplane` CLI and a Docker daemon are present: CI)
   tools/render-pipeline   (no Docker: the functions run locally under the `container` CLI, see its header)
 Pick one with --renderer; the output names which one ran, and `--update` records it in the file.
+Either way function-auto-ready must run with --feature-gates=CELHealthcheckCustomizations=true: the
+catalog's readiness rules (compositions/_shared/readiness-context.yaml) are CEL. With crossplane render
+set AIRFRAME_RENDER_TARGETS=function-go-templating=localhost:9443,function-auto-ready=localhost:9444 and
+start both functions yourself (see the CI job); the Docker runtime cannot pass the flag.
 
     python3 tools/test_compositions.py               # all compositions, check mode
     python3 tools/test_compositions.py slo redis     # some
@@ -80,10 +84,20 @@ def run_crossplane_render(comp_dir: Path, case: dict) -> dict:
         raise RenderError(f"{comp_dir.name}: example/functions.yaml is required for crossplane render")
     # crossplane render's Docker runtime pulls every function image on every run by default
     # ("Always"); 42 cases × 2 images timed out on a cold CI runner. Reuse what is already local.
+    # AIRFRAME_RENDER_TARGETS="function-go-templating=localhost:9443,function-auto-ready=localhost:9444"
+    # points crossplane render at functions already running (its Development runtime) instead of
+    # letting it start Docker containers: CI starts them itself so function-auto-ready can run with
+    # --feature-gates=CELHealthcheckCustomizations=true, which the Docker runtime cannot pass.
+    targets = dict(kv.split("=", 1) for kv in os.environ.get("AIRFRAME_RENDER_TARGETS", "").split(",") if "=" in kv)
     fdocs = []
     for d in yaml.safe_load_all(functions.read_text()):
         if isinstance(d, dict) and d.get("kind") == "Function":
-            d.setdefault("metadata", {}).setdefault("annotations", {})["render.crossplane.io/runtime-docker-pull-policy"] = "IfNotPresent"
+            ann = d.setdefault("metadata", {}).setdefault("annotations", {})
+            if d["metadata"].get("name") in targets:
+                ann["render.crossplane.io/runtime"] = "Development"
+                ann["render.crossplane.io/runtime-development-target"] = targets[d["metadata"]["name"]]
+            else:
+                ann["render.crossplane.io/runtime-docker-pull-policy"] = "IfNotPresent"
             fdocs.append(d)
     tmp = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
     yaml.safe_dump_all(fdocs, tmp); tmp.close()

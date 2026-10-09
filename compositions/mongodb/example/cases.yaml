@@ -2,18 +2,19 @@
 # (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
 # readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
 cases:
-- name: availability
-  xr: xr-availability.yaml
-- name: availability-generated
-  xr: xr-availability.yaml
+- name: fresh
+  xr: xr-defaults.yaml
   observed:
-  - observed-generated.yaml
+  - observed-password.yaml
   expect:
     conditions:
-      Ready: Available
-- name: latency
-  xr: xr-latency.yaml
-- name: invalid
-  xr: xr-invalid.yaml
+      ComponentReady: MongoDBProvisioning
+- name: running
+  xr: xr-defaults.yaml
+  observed:
+  - observed-password.yaml
+  - observed-running.yaml
   expect:
-    fatal: true
+    conditions:
+      ComponentReady: MongoDBReady
+      Ready: Available

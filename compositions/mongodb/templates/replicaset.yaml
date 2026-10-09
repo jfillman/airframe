@@ -21,11 +21,6 @@
 <<- $members := $spec.members | default 1 >>
 <<- $storage := $spec.storageSize | default "5Gi" >>
 <<- $version := $spec.mongoVersion | default "8.0.32" >>
-<<- $rsObs := index (.observed.resources | default dict) "replicaset" | default dict >>
-<<- $rsReady := "False" >>
-<<- if eq (dig "resource" "status" "phase" "" $rsObs) "Running" >>
-  <<- $rsReady = "True" >>
-<<- end >>
 <<- $db := $spec.databaseName | default (replace "-" "_" $xrName) >>
 <<- $hangarLabels := dict >>
 <<- range $k, $v := (.observed.composite.resource.metadata.labels | default dict) >>
@@ -40,7 +35,6 @@ metadata:
   namespace: <<$xrNamespace>>
   annotations:
     <<setResourceNameAnnotation "replicaset">>
-    gotemplating.fn.crossplane.io/ready: <<$rsReady | quote>>
   labels:
     <<- range $k, $v := $hangarLabels >>
     <<$k>>: <<$v | quote>>

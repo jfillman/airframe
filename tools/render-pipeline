@@ -6,7 +6,7 @@ step. No Docker needed - `crossplane composition render` insists on a Docker dae
 Development runtime, which this machine does not run. Start the functions once:
 
   container run -d --name fn-gotpl -p 127.0.0.1:9443:9443 ghcr.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443
-  container run -d --name fn-ready -p 127.0.0.1:9444:9443 ghcr.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443
+  container run -d --name fn-ready -p 127.0.0.1:9444:9443 ghcr.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443 --feature-gates=CELHealthcheckCustomizations=true
 
 (pull from ghcr.io/crossplane-contrib, not xpkg.crossplane.io - the `container` CLI refuses that
 proxy's cross-domain token exchange). Then:

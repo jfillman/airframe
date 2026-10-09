@@ -17,7 +17,6 @@ metadata:
     <<setResourceNameAnnotation "networkpolicy">>
     # A NetworkPolicy has no status, so function-auto-ready would wait on it forever and the
     # XR would never go Ready (seen live). It is ready as soon as it exists.
-    gotemplating.fn.crossplane.io/ready: "True"
   labels:
     <<- range $k, $v := $hangarLabels >>
     <<$k>>: <<$v | quote>>

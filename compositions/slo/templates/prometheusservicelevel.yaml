@@ -40,52 +40,18 @@
 # appeared in Prometheus's own /api/v1/rules - not a bug in this template, but
 # worth knowing before assuming a fresh SLO isn't working.)
 #
-# Explicit readiness: Sloth's PrometheusServiceLevel never sets
-# status.conditions[type=Ready] (confirmed live - it only sets its own custom
-# status fields, e.g. promOpRulesGenerated), so function-auto-ready's default
-# "no Ready condition = not ready" fallback leaves the parent SLO XR stuck at
-# Ready=False/Creating forever, even once Sloth has actually finished
-# generating the PrometheusRule. The gotemplating.fn.crossplane.io/ready
-# annotation (read by function-go-templating itself, honored by
-# function-auto-ready as an explicit override for this named resource) lets
-# this template report real readiness instead: True once Sloth's own
-# generation status confirms success, False (not simply absent) beforehand so
-# a slow first reconcile still reports Creating rather than a false-positive
-# Ready.
-#
-# NOT a single `dig ... false .observed.resources` call (v0.3.60's original
-# form) - Sprig's dig only degrades gracefully to its default when a KEY is
-# entirely ABSENT at some level; if an intermediate level is PRESENT but nil
-# (confirmed live 2026-09-13 on checkout-api-readiness-latency: 36 identical
-# failures over 16 minutes, every single reconcile, not a one-off first-pass
-# race - checkout-api-liveness-latency happened not to hit this timing, not
-# proof it can't), dig's internal type-assert to map[string]interface{}
-# panics instead of falling through. Walked one level at a time with `index`
-# + an `if` truthiness check instead - a nil value at any level is simply
-# falsy in a Go template `if`, no panic, same end result ($promSLReady stays
-# false) for the genuinely-doesn't-exist-yet case this was originally meant
-# to cover.
+# Readiness: Sloth's PrometheusServiceLevel never sets status.conditions[type=Ready] (confirmed
+# live; it only sets its own fields such as promOpRulesGenerated), so a plain function-auto-ready
+# would leave the SLO XR at Ready=False/Creating forever. The rule that counts it ready once
+# promOpRulesGenerated is true is a CEL expression in compositions/_shared/readiness-context.yaml,
+# read by this composition's detect-ready step (review C7). It replaced a per-template
+# gotemplating.fn.crossplane.io/ready annotation and the index-walk that fed it (v0.3.60-v0.3.127).
 <<- $spec := .observed.composite.resource.spec >>
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $service := $spec.service >>
 <<- $indicator := $spec.indicator >>
 <<- $objective := $spec.objective >>
-<<- $promSLReady := false >>
-<<- if .observed.resources >>
-  <<- $obsPromSL := index .observed.resources "prometheusservicelevel" >>
-  <<- if $obsPromSL >>
-    <<- $obsPromSLResource := $obsPromSL.resource >>
-    <<- if $obsPromSLResource >>
-      <<- $obsPromSLStatus := $obsPromSLResource.status >>
-      <<- if $obsPromSLStatus >>
-        <<- if $obsPromSLStatus.promOpRulesGenerated >>
-          <<- $promSLReady = true >>
-        <<- end >>
-      <<- end >>
-    <<- end >>
-  <<- end >>
-<<- end >>
 
 <<- if eq $indicator.type "availability" >>
   <<- if not $indicator.errorFilter >>
@@ -118,7 +84,6 @@ metadata:
     release: kube-prometheus-stack
   annotations:
     <<setResourceNameAnnotation "prometheusservicelevel">>
-    gotemplating.fn.crossplane.io/ready: <<if $promSLReady>>"True"<<else>>"False"<<end>>
 spec:
   service: <<$service | toJson>>
   slos:

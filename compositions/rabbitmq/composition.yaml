@@ -28,6 +28,46 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL: the catalog's readiness rules, declared once (airframe review C7).
+            #
+            # function-auto-ready decides when a composed resource is ready. It knows the standard kinds
+            # (Secret, ConfigMap, ServiceAccount, Service, Job, Deployment, ...) and otherwise expects a
+            # `Ready` condition, which Crossplane managed resources, Usage and CNPG's Cluster all have. The
+            # kinds below have no Ready condition, so until 2026-10-09 every template that composed one
+            # hand-set `gotemplating.fn.crossplane.io/ready` and each missing annotation was found on a live
+            # cluster (Role/RoleBinding and MongoDBCommunity, a ServiceAccount on kind-prod, Sloth's
+            # PrometheusServiceLevel, NetworkPolicy).
+            #
+            # Now the rules live here, as CEL over the observed object, keyed <group>_<version>_<kind>. This
+            # file is concatenated into the render step of every composition that composes one of these kinds
+            # (a templates/ symlink to it) and writes them into the function context; the composition's
+            # detect-ready step reads them with
+            #     celHealthCheckCustomizationFrom: "[hangar.io/readiness].rules"
+            # The function needs its CELHealthcheckCustomizations feature gate on (the clusters' runtime config
+            # function-auto-ready; the render tools start it with --feature-gates=CELHealthcheckCustomizations=true).
+            # A rule that errors or returns a non-boolean counts as not ready and raises a Warning, so a wrong
+            # rule is loud, never a false Ready. Adding a kind: add its rule here and symlink this file into the
+            # composition that composes it.
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: Context
+            data:
+              hangar.io/readiness:
+                rules:
+                  # Exist-is-ready: no status at all, nothing more to wait for.
+                  rbac.authorization.k8s.io_v1_Role: "true"
+                  rbac.authorization.k8s.io_v1_RoleBinding: "true"
+                  networking.k8s.io_v1_NetworkPolicy: "true"
+                  # MongoDB Community operator: status.phase, no conditions.
+                  mongodbcommunity.mongodb.com_v1_MongoDBCommunity: >-
+                    has(object.status) && has(object.status.phase) && object.status.phase == 'Running'
+                  # RabbitMQ cluster operator: AllReplicasReady is its readiness; there is no Ready type.
+                  rabbitmq.com_v1beta1_RabbitmqCluster: >-
+                    has(object.status) && has(object.status.conditions) &&
+                    object.status.conditions.exists(c, c.type == 'AllReplicasReady' && c.status == 'True')
+                  # Sloth: only its own fields; promOpRulesGenerated flips once the PrometheusRule exists.
+                  sloth.slok.dev_v1_PrometheusServiceLevel: >-
+                    has(object.status) && has(object.status.promOpRulesGenerated) && object.status.promOpRulesGenerated == true
+            ---
             # mode: attach - see xrds/rabbitmq.yaml's header. A User + Permission in THIS namespace that
             # reference the broker across namespaces (the broker must list this namespace in its
             # allowedNamespaces), and a ConfigMap of connection details. Nothing renders in broker mode.
@@ -128,7 +168,6 @@ spec:
               namespace: <<$ns>>
               annotations:
                 <<setResourceNameAnnotation "connection">>
-                gotemplating.fn.crossplane.io/ready: "True"
               labels:
                 <<- range $k, $v := $hangarLabels >>
                 <<$k>>: <<$v | quote>>
@@ -183,17 +222,8 @@ spec:
               <<- end >>
             <<- end >>
             <<- $allowed := $spec.allowedNamespaces | default list >>
-            <<- /* A RabbitmqCluster has no `Ready` condition (it reports AllReplicasReady), so
-                   function-auto-ready would wait on it forever (seen live): mark it ready from the
-                   observed condition instead. */ ->>
-            <<- $ready := "False" >>
-            <<- with (index (.observed.resources | default dict) "cluster") >>
-              <<- range $c := (.resource.status.conditions | default list) >>
-                <<- if and (eq $c.type "AllReplicasReady") (eq $c.status "True") >>
-                  <<- $ready = "True" >>
-                <<- end >>
-              <<- end >>
-            <<- end >>
+            <<- /* Readiness (AllReplicasReady, no Ready condition on a RabbitmqCluster) is a CEL rule in
+                   compositions/_shared/readiness-context.yaml, read by the detect-ready step. */ ->>
             apiVersion: rabbitmq.com/v1beta1
             kind: RabbitmqCluster
             metadata:
@@ -201,7 +231,6 @@ spec:
               namespace: <<$ns>>
               annotations:
                 <<setResourceNameAnnotation "cluster">>
-                gotemplating.fn.crossplane.io/ready: <<$ready | quote>>
                 <<- if $allowed >>
                 rabbitmq.com/topology-allowed-namespaces: <<join "," $allowed | quote>>
                 <<- end >>
@@ -260,7 +289,6 @@ spec:
               namespace: <<$ns>>
               annotations:
                 <<setResourceNameAnnotation "networkpolicy">>
-                gotemplating.fn.crossplane.io/ready: "True"
               labels:
                 <<- range $k, $v := $hangarLabels >>
                 <<$k>>: <<$v | quote>>
@@ -357,3 +385,9 @@ spec:
     - step: detect-ready
       functionRef:
         name: function-auto-ready
+      input:
+        apiVersion: autoready.fn.crossplane.io/v1alpha1
+        kind: Input
+        # the catalog's readiness rules, written into the context by the render step from
+        # compositions/_shared/readiness-context.yaml (review C7)
+        celHealthCheckCustomizationFrom: "[hangar.io/readiness].rules"

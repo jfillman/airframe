@@ -1,0 +1,48 @@
+# Everything observed and the replica set Running: with the readiness rules in
+# compositions/_shared/readiness-context.yaml (MongoDBCommunity phase == Running; Role and RoleBinding
+# exist) every composed resource is ready and the composite turns Ready.
+apiVersion: mongodbcommunity.mongodb.com/v1
+kind: MongoDBCommunity
+metadata:
+  name: baggage-db
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: replicaset
+status:
+  phase: Running
+  currentMongoDBMembers: 1
+  currentStatefulSetReplicas: 1
+  mongoUri: mongodb://baggage-db-svc.app-flights-dev.svc.cluster.local:27017/?replicaSet=baggage-db
+  version: 8.0.32
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: mongodb-kubernetes-appdb
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: appdb-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: mongodb-kubernetes-appdb
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: appdb-rolebinding
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-kubernetes-appdb
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: appdb-sa
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mongodb-database
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: database-pods-sa

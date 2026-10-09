@@ -49,10 +49,15 @@ jobs:
           curl -sL https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh | XP_VERSION=v2.4.1 sh
           sudo mv crossplane /usr/local/bin/crossplane
           crossplane version --client
-      - name: pull the function images once (crossplane render's per-run pull timed out on a cold runner)
+      - name: start the two functions (Development runtime; auto-ready needs its CEL feature gate, which the Docker runtime cannot pass)
         run: |
-          for img in $(grep -h 'package:' compositions/*/example/functions.yaml | awk '{print $2}' | sort -u); do docker pull -q "$img"; done
+          docker run -d --name fn-gotpl -p 127.0.0.1:9443:9443 xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443
+          docker run -d --name fn-ready -p 127.0.0.1:9444:9443 xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443 --feature-gates=CELHealthcheckCustomizations=true
+          for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/9443) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9444) 2>/dev/null && break; sleep 2; done
+          docker ps --format '{{.Names}} {{.Status}}'
       - run: python3 tools/test_compositions.py --renderer crossplane
+        env:
+          AIRFRAME_RENDER_TARGETS: function-go-templating=localhost:9443,function-auto-ready=localhost:9444
 
   scorecard:
     runs-on: ubuntu-latest

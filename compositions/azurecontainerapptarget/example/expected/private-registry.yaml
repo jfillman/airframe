@@ -108,7 +108,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: container-app, environment, and resource-group'
+  - message: 'Unready resources: container-app, environment, registry-secret-name, and 1 more'
     reason: Creating
     status: 'False'
     type: Ready

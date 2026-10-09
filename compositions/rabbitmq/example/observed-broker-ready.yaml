@@ -1,0 +1,42 @@
+# The RabbitmqCluster has no Ready condition; AllReplicasReady is what the readiness rule in
+# compositions/_shared/readiness-context.yaml reads. The Vhost (messaging topology operator) does report
+# Ready; the NetworkPolicy exists.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: skyport-broker
+  namespace: app-skyport-broker-dev
+  annotations:
+    crossplane.io/composition-resource-name: cluster
+status:
+  conditions:
+    - type: AllReplicasReady
+      status: "True"
+      reason: AllPodsAreReady
+    - type: ClusterAvailable
+      status: "True"
+      reason: AtLeastOneEndpointAvailable
+    - type: ReconcileSuccess
+      status: "True"
+      reason: Success
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: skyport-broker-flights
+  namespace: app-skyport-broker-dev
+  annotations:
+    crossplane.io/composition-resource-name: vhost-flights
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: SuccessfulCreateOrUpdate
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: skyport-broker-rabbitmq-access
+  namespace: app-skyport-broker-dev
+  annotations:
+    crossplane.io/composition-resource-name: networkpolicy

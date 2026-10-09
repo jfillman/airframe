@@ -41,3 +41,32 @@ and give every linking composition whatever inputs it needs.
 The symlinks are relative and committed as symlinks; `git`, the builder and the GitHub runner all
 read through them. Templates that genuinely differ per stack (`src-repo.yaml`, `cicd-yaml.yaml`,
 `gitops-repo.yaml`, `target-child.yaml`) stay per composition.
+
+## Readiness rules (`readiness-context.yaml`)
+
+function-auto-ready decides when a composed resource is ready: it knows the standard kinds (Secret,
+ConfigMap, ServiceAccount, Service, Job, Deployment, ...) and otherwise expects a `Ready` condition.
+Kinds that have neither (Role, RoleBinding, NetworkPolicy, MongoDBCommunity, RabbitmqCluster, Sloth's
+PrometheusServiceLevel) used to be hand-marked in each template with
+`gotemplating.fn.crossplane.io/ready`, and every missing or wrong mark was found live (review C7).
+
+`readiness-context.yaml` declares those rules once, as CEL over the observed object keyed
+`<group>_<version>_<kind>`, inside a `Context` document. A composition that composes one of these kinds
+symlinks the file into its render step (`templates/00-readiness-context.yaml` in the flat layout) and
+points its `detect-ready` step at the context:
+
+```yaml
+- step: detect-ready
+  functionRef: {name: function-auto-ready}
+  input:
+    apiVersion: autoready.fn.crossplane.io/v1alpha1
+    kind: Input
+    celHealthCheckCustomizationFrom: "[hangar.io/readiness].rules"
+```
+
+The function's `CELHealthcheckCustomizations` feature gate must be on: the clusters' `function-auto-ready`
+DeploymentRuntimeConfig passes `--feature-gates=CELHealthcheckCustomizations=true`, and so do the render
+tools (`tools/render-pipeline` header, the `compositions` CI job). A rule that errors or returns a
+non-boolean counts as not ready and raises a Warning on the XR: loud, never a false Ready. Never add a
+`gotemplating.fn.crossplane.io/ready` annotation to a template again; add a rule here and a `ready` case
+with an observed fixture to the composition's `example/`.

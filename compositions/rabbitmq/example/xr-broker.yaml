@@ -1,0 +1,12 @@
+# mode: broker - the shared RabbitmqCluster, one vhost, apps in two namespaces may attach.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: RabbitMQ
+metadata:
+  name: skyport-broker
+  namespace: app-skyport-broker-dev
+spec:
+  environmentRef:
+    name: skyport-broker-kind-dev-dev
+  mode: broker
+  vhosts: [flights]
+  allowedNamespaces: [app-flights-dev, app-baggage-api-dev]

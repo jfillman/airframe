@@ -1,0 +1,24 @@
+# CNPG reports its own Ready condition (so function-auto-ready needs no rule for it); the
+# NetworkPolicy has no status and is ready by the exist-is-ready rule.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: checkin-db
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: cluster
+status:
+  phase: Cluster in healthy state
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: ClusterIsReady
+      message: Cluster is Ready
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkin-db-cnpg-operator
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: networkpolicy

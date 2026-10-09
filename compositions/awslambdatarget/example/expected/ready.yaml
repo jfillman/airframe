@@ -216,7 +216,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: function-url-permission, and iam-role-policy'
+  - message: 'Unready resources: function-url-permission, iam-role-policy'
     reason: Creating
     status: 'False'
     type: Ready

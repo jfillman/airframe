@@ -150,7 +150,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: bootstrap-job, and iam-role-policy'
+  - message: 'Unready resources: bootstrap-job, iam-role-policy'
     reason: Creating
     status: 'False'
     type: Ready

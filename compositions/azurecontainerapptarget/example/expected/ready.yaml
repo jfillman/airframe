@@ -84,7 +84,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: environment, and resource-group'
+  - message: 'Unready resources: environment, resource-group'
     reason: Creating
     status: 'False'
     type: Ready

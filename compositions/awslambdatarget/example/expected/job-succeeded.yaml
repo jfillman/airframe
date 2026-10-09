@@ -181,7 +181,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: iam-role-policy, and lambda-function'
+  - message: 'Unready resources: iam-role-policy, lambda-function'
     reason: Creating
     status: 'False'
     type: Ready

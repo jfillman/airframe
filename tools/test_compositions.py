@@ -78,13 +78,23 @@ def run_crossplane_render(comp_dir: Path, case: dict) -> dict:
     functions = ex / "functions.yaml"
     if not functions.exists():
         raise RenderError(f"{comp_dir.name}: example/functions.yaml is required for crossplane render")
-    cmd = ["crossplane", "render", str(ex / case["xr"]), str(comp_dir / "composition.yaml"), str(functions),
-           "--include-full-xr", "--include-function-results"]
+    # crossplane render's Docker runtime pulls every function image on every run by default
+    # ("Always"); 42 cases × 2 images timed out on a cold CI runner. Reuse what is already local.
+    fdocs = []
+    for d in yaml.safe_load_all(functions.read_text()):
+        if isinstance(d, dict) and d.get("kind") == "Function":
+            d.setdefault("metadata", {}).setdefault("annotations", {})["render.crossplane.io/runtime-docker-pull-policy"] = "IfNotPresent"
+            fdocs.append(d)
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+    yaml.safe_dump_all(fdocs, tmp); tmp.close()
+    cmd = ["crossplane", "render", str(ex / case["xr"]), str(comp_dir / "composition.yaml"), tmp.name,
+           "--include-full-xr", "--include-function-results", "--timeout=5m"]
     for f in case.get("required", []):
         cmd += ["--required-resources", str(ex / f)]
     for f in case.get("observed", []):
         cmd += ["--observed-resources", str(ex / f)]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    os.unlink(tmp.name)
     if r.returncode != 0 and not r.stdout.strip():
         raise RenderError(f"crossplane render failed: {r.stderr.strip()[-800:]}")
     docs = [d for d in yaml.safe_load_all(r.stdout) if isinstance(d, dict)]

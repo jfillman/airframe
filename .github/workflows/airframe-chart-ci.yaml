@@ -49,6 +49,9 @@ jobs:
           curl -sL https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh | XP_VERSION=v2.4.1 sh
           sudo mv crossplane /usr/local/bin/crossplane
           crossplane version --client
+      - name: pull the function images once (crossplane render's per-run pull timed out on a cold runner)
+        run: |
+          for img in $(grep -h 'package:' compositions/*/example/functions.yaml | awk '{print $2}' | sort -u); do docker pull -q "$img"; done
       - run: python3 tools/test_compositions.py --renderer crossplane
 
   scorecard:

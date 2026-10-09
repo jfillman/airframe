@@ -39,29 +39,28 @@ jobs:
   # C3: every composition's render fixtures (compositions/*/example/cases.yaml) through the real
   # functions with `crossplane render` (the runner has Docker; locally without Docker the same
   # test runs through tools/render-pipeline), compared with the committed expectations.
+  # C3/C7: every composition's render fixtures (compositions/*/example/cases.yaml) through the real
+  # functions, compared with the committed expectations. The functions run as containers started
+  # here so function-auto-ready can carry --feature-gates=CELHealthcheckCustomizations=true (the
+  # catalog's readiness rules are CEL); tools/render-pipeline drives them over gRPC exactly as a
+  # developer does locally. crossplane render's Docker runtime cannot pass that flag and its
+  # Development runtime did not engage on the runner (containers started anyway, renders hung), so
+  # the harness is the CI renderer; its output was cross-checked against crossplane render on every
+  # case before the feature gate was needed (airframe#65).
   compositions:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: pip install pyyaml
-      - name: install the crossplane CLI
-        run: |
-          curl -sL https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh | XP_VERSION=v2.4.1 sh
-          sudo mv crossplane /usr/local/bin/crossplane
-          crossplane version --client
-      - name: start the two functions (Development runtime; auto-ready needs its CEL feature gate, which the Docker runtime cannot pass)
+      - run: pip install pyyaml crossplane-function-sdk-python==0.15.1
+      - name: start the two functions (auto-ready with its CEL feature gate)
         run: |
           docker run -d --name fn-gotpl -p 127.0.0.1:9443:9443 xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443
           docker run -d --name fn-ready -p 127.0.0.1:9444:9443 xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443 --feature-gates=CELHealthcheckCustomizations=true
           for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/9443) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9444) 2>/dev/null && break; sleep 2; done
           docker ps --format '{{.Names}} {{.Status}}'
-      - name: smoke render (one composition, fail fast if the Development runtime cannot reach the functions)
-        run: timeout 180 python3 tools/test_compositions.py --renderer crossplane slo
-        env:
-          AIRFRAME_RENDER_TARGETS: function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444
-      - run: python3 tools/test_compositions.py --renderer crossplane
-        env:
-          AIRFRAME_RENDER_TARGETS: function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444
+      - name: smoke render (one composition, fail fast if the functions are unreachable)
+        run: timeout 180 python3 tools/test_compositions.py --renderer render-pipeline slo
+      - run: python3 tools/test_compositions.py --renderer render-pipeline
       - name: function logs (diagnostics)
         if: always()
         run: |

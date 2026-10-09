@@ -19,13 +19,16 @@ with the diff. `--update` rewrites the expectations after a deliberate template 
 diff like code, it IS the behaviour change.
 
 Two renderers produce the same normalized output:
-  crossplane render   (default when the `crossplane` CLI and a Docker daemon are present: CI)
-  tools/render-pipeline   (no Docker: the functions run locally under the `container` CLI, see its header)
-Pick one with --renderer; the output names which one ran, and `--update` records it in the file.
-Either way function-auto-ready must run with --feature-gates=CELHealthcheckCustomizations=true: the
-catalog's readiness rules (compositions/_shared/readiness-context.yaml) are CEL. With crossplane render
-set AIRFRAME_RENDER_TARGETS=function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444 and
-start both functions yourself (see the CI job); the Docker runtime cannot pass the flag.
+  tools/render-pipeline   the functions run as containers you start (CI: docker; locally: the `container`
+                          CLI, see its header) and are driven over gRPC. This is what CI runs.
+  crossplane render       when the `crossplane` CLI and a Docker daemon are present. Its Docker runtime
+                          cannot pass function-auto-ready the --feature-gates flag the catalog's CEL
+                          readiness rules need, and its Development runtime did not engage on a GitHub
+                          runner, so it is the cross-check, not the gate (it agreed on every case in #65).
+                          AIRFRAME_RENDER_TARGETS=function-go-templating=127.0.0.1:9443,... points it at
+                          running functions through the Development runtime where that works.
+Pick one with --renderer (auto prefers crossplane render when Docker is present); the output names which
+one ran, and `--update` records it in the file.
 
     python3 tools/test_compositions.py               # all compositions, check mode
     python3 tools/test_compositions.py slo redis     # some

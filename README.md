@@ -431,6 +431,7 @@ xrds/
   applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.hangar.io/v1alpha1)
   slo.yaml                      SLO XRD (catalog.hangar.io/v1alpha1)
 compositions/
+  _shared/                      the four templates every application composition links to instead of copying (see its README)
   nodejsapplication/            NodeJSApplication Composition (source: Inline) + templates (built by tools/build-compositions)
   applicationenvironment/       ApplicationEnvironment Composition (source: Inline) + templates (built by tools/build-compositions)
   slo/                          SLO Composition (source: Inline) + templates (built by tools/build-compositions)

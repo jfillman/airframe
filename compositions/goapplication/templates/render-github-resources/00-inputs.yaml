@@ -1,0 +1,3 @@
+# Per-composition inputs for the shared partials in compositions/_shared/render-github-resources/
+# (00-devcluster-gate, secretstore-xr, tekton-cicd-child are symlinks there). Variables only; no output.
+<<- $hasGitopsRepo := true >>

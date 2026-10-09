@@ -128,7 +128,7 @@ def main() -> int:
     ap.add_argument("names", nargs="*", help="composition directory names (default: all with templates/)")
     ap.add_argument("--check", action="store_true", help="report stale compositions, change nothing, exit 1 if any")
     a = ap.parse_args()
-    dirs = [COMPOSITIONS / n for n in a.names] if a.names else sorted(p for p in COMPOSITIONS.iterdir() if p.is_dir())
+    dirs = [COMPOSITIONS / n for n in a.names] if a.names else sorted(p for p in COMPOSITIONS.iterdir() if p.is_dir() and not p.name.startswith("_"))
     stale, skipped, failed = [], [], []
     for d in dirs:
         if not d.is_dir():

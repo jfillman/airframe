@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
-      - run: pip install pyyaml jsonschema
+      - run: pip install pyyaml jsonschema cryptography
       - run: helm lint charts/airframe-application
         # the chart warns on the empty default name; only real failures matter
       - run: charts/airframe-application/tests/run.sh
@@ -35,6 +35,10 @@ jobs:
       - run: python3 tools/gen_contract.py --check
       - run: python3 tools/test_capabilities_coldstart.py
       - run: python3 tools/test_xr_validate.py
+      # A3: every xrds/*.meta.yaml sidecar agrees with its composition renders (11 seeded drifts must be caught),
+      # and airframe-verify's step runners work against a fake cluster and a fake Dex
+      - run: python3 tools/test_sidecars.py
+      - run: python3 tools/test_airframe_verify.py
 
   # C3: every composition's render fixtures (compositions/*/example/cases.yaml) through the real
   # functions with `crossplane render` (the runner has Docker; locally without Docker the same
@@ -52,6 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install pyyaml crossplane-function-sdk-python==0.15.1
+      # function-dex has no CI of its own; its suite includes the test xrds/dex.meta.yaml's sources
+      # name as `checkedBy` (tools/test_sidecars.py only checks that the test exists)
+      - name: function-dex unit tests
+        working-directory: functions/function-dex
+        run: pip install click && python3 -m unittest tests.test_fn
       - name: start the two functions (auto-ready with its CEL feature gate)
         run: |
           docker run -d --name fn-gotpl -p 127.0.0.1:9443:9443 xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443

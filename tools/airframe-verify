@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""airframe-verify (review A3): run one XR's verify contract against a live cluster. Read-only.
+
+    tools/airframe-verify <KIND> <namespace>/<name> [--context CTX] [--format text|json] [--only ID,...]
+
+KIND is the XRD kind (PostgreSQL), its lowercase key (postgresql) or its plural (postgresqls). The steps
+come from contract/airframe-contract.json, i.e. the kind's xrds/<kind>.meta.yaml `verify` list; nothing
+else is read from the repo. Each step reports pass, fail, skip (its `when` does not match this XR) or
+manual (no tool can make it; the sentence says what a human checks).
+
+What it touches, all read-only:
+  kubectl get            the XR, Secrets/ConfigMaps (values are never printed, only whether a key is
+                         non-empty), and named resources
+  kubectl port-forward   tcp/http/oauth steps that target an in-cluster Service. A port-forward reaches
+                         the pod directly, so it proves the server listens and answers; it does NOT prove
+                         that the app's own namespace can reach it (NetworkPolicy, Service routing).
+  HTTP                   GET for http steps; one POST to the Dex token endpoint for oauthClientCredentials
+                         (mints a short-lived token, never printed)
+  aws / az CLI           read-only verbs only (get-/describe-/list-, show/list), enforced by the sidecar
+                         validator; uses whatever credentials the shell already has
+
+Exit 0 when nothing failed, 1 when a step failed, 2 for usage errors or an XR that cannot be read.
+"""
+import argparse
+import base64
+import json
+import re
+import select
+import socket
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from sidecars import Unresolved, dig, render, when_matches  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+CONTRACT = ROOT / "contract" / "airframe-contract.json"
+SVC_HOST = re.compile(r"^(?P<svc>[a-z0-9-]+)\.(?P<ns>[a-z0-9-]+)\.svc(\.cluster\.local)?$")
+
+
+class StepError(Exception):
+    pass
+
+
+class Kube:
+    def __init__(self, context):
+        self.base = ["kubectl"] + (["--context", context] if context else [])
+
+    def get(self, *args):
+        r = subprocess.run(self.base + ["get", *args, "-o", "json"], capture_output=True, text=True, timeout=60)
+        if r.returncode != 0:
+            raise StepError(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f"kubectl get {' '.join(args)} failed")
+        return json.loads(r.stdout)
+
+    def port_forward(self, namespace, service, port):
+        return PortForward(self.base, namespace, service, port)
+
+
+class PortForward:
+    """`kubectl port-forward svc/<service> :<port>`; the local port is read from kubectl's own output."""
+
+    def __init__(self, base, namespace, service, port):
+        self.cmd = base + ["-n", namespace, "port-forward", f"svc/{service}", f":{port}"]
+        self.proc = None
+        self.local_port = None
+        self.stderr = ""
+
+    def __enter__(self):
+        self.proc = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        deadline = time.time() + 20
+        while time.time() < deadline:
+            ready, _, _ = select.select([self.proc.stdout, self.proc.stderr], [], [], 0.5)
+            for stream in ready:
+                line = stream.readline()
+                if stream is self.proc.stderr and line:
+                    self.stderr += line
+                m = re.search(r"Forwarding from 127\.0\.0\.1:(\d+)", line or "")
+                if m:
+                    self.local_port = int(m.group(1))
+                    return self
+            if self.proc.poll() is not None:
+                self.stderr += self.proc.stderr.read()
+                raise StepError(f"port-forward failed: {self.stderr.strip().splitlines()[-1] if self.stderr.strip() else 'kubectl exited'}")
+        raise StepError("port-forward did not start within 20s")
+
+    def errors(self, wait=0.0):
+        """Anything kubectl reported on stderr since the forward started (connection refused etc.)."""
+        end = time.time() + wait
+        while True:
+            ready, _, _ = select.select([self.proc.stderr], [], [], max(0.0, end - time.time()))
+            if not ready:
+                break
+            line = self.proc.stderr.readline()
+            if not line:
+                break
+            self.stderr += line
+        return [line for line in self.stderr.splitlines() if "error" in line.lower() or "refused" in line.lower()]
+
+    def __exit__(self, *exc):
+        if self.proc and self.proc.poll() is None:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+
+
+def path_get(obj, path):
+    """`a.b[0].c` lookup for cloud CLI JSON."""
+    cur = obj
+    for part in re.findall(r"[^.\[\]]+|\[\d+\]", path):
+        if part.startswith("["):
+            idx = int(part[1:-1])
+            if not isinstance(cur, list) or idx >= len(cur):
+                return None
+            cur = cur[idx]
+        else:
+            if not isinstance(cur, dict) or part not in cur:
+                return None
+            cur = cur[part]
+    return cur
+
+
+def decode(data, key):
+    raw = (data or {}).get(key)
+    if raw is None:
+        return None
+    try:
+        return base64.b64decode(raw).decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 - malformed data counts as unreadable, not a crash
+        return None
+
+
+# ---- step runners: each returns a detail string on pass, raises StepError on fail ------------------
+def run_condition(run, xr, ctx):
+    want = run.get("status", "True")
+    conds = {c["type"]: c for c in (xr.get("status") or {}).get("conditions") or []}
+    c = conds.get(run["type"])
+    if c is None:
+        raise StepError(f"the XR has no {run['type']} condition")
+    detail = f"{run['type']}={c.get('status')} reason={c.get('reason')}"
+    gen, obs = (xr.get("metadata") or {}).get("generation"), c.get("observedGeneration")
+    if gen is not None and obs is not None and obs < gen:
+        detail += f" (observedGeneration {obs} < generation {gen}: not yet reconciled against the current spec)"
+    if c.get("status") != want or (run.get("reasons") and c.get("reason") not in run["reasons"]):
+        raise StepError(detail + (f"; message: {c.get('message')}" if c.get("message") else ""))
+    return detail
+
+
+def run_xr_field(run, xr, ctx):
+    v = dig(xr, run["path"])
+    ok = (v == run["equals"]) if "equals" in run else (v in run["in"])
+    if not ok:
+        raise StepError(f"{run['path']} is {v!r}, expected {run.get('equals', run.get('in'))!r}")
+    return f"{run['path']}={v!r}"
+
+
+def _keys(kind, name, ns, keys, ctx):
+    obj = ctx["kube"].get(kind, "-n", ns, name)
+    data = obj.get("data") or {}
+    if kind == "secret":
+        values = {k: decode(data, k) for k in keys}
+    else:
+        values = {k: data.get(k) for k in keys}
+    empty = [k for k, val in values.items() if not val]
+    if empty:
+        raise StepError(f"{kind} {ns}/{name} is missing or has empty keys {empty} (has {sorted(data)})")
+    return f"{kind} {ns}/{name} has non-empty {keys}"
+
+
+def run_secret_keys(run, xr, ctx):
+    return _keys("secret", ctx["r"](run["secret"]), ctx["r"](run.get("namespace", "{namespace}")), run["keys"], ctx)
+
+
+def run_configmap_keys(run, xr, ctx):
+    return _keys("configmap", ctx["r"](run["configMap"]), ctx["r"](run.get("namespace", "{namespace}")), run["keys"], ctx)
+
+
+def run_resource(run, xr, ctx):
+    name = ctx["r"](run["name"])
+    args = [run["resource"], name] if run.get("clusterScoped") else [run["resource"], "-n", ctx["r"](run.get("namespace", "{namespace}")), name]
+    obj = ctx["kube"].get(*args)
+    parts = [f"{run['resource']} {name} exists"]
+    if run.get("condition"):
+        c = next((c for c in (obj.get("status") or {}).get("conditions") or [] if c["type"] == run["condition"]["type"]), None)
+        want = run["condition"].get("status", "True")
+        if c is None or c.get("status") != want:
+            raise StepError(f"{run['resource']} {name}: {run['condition']['type']} is {c.get('status') if c else 'absent'}"
+                            + (f" ({c.get('reason')}: {c.get('message')})" if c else ""))
+        parts.append(f"{c['type']}={c['status']}")
+    if run.get("field"):
+        v = dig(obj, run["field"])
+        if "equals" in run and v != run["equals"]:
+            raise StepError(f"{run['resource']} {name}: {run['field']} is {v!r}, expected {run['equals']!r}")
+        parts.append(f"{run['field']}={v!r}")
+    return ", ".join(parts)
+
+
+def run_tcp(run, xr, ctx):
+    ns, svc, port = ctx["r"](run.get("namespace", "{namespace}")), ctx["r"](run["service"]), int(run["port"])
+    with ctx["kube"].port_forward(ns, svc, port) as pf:
+        s = socket.create_connection(("127.0.0.1", pf.local_port), timeout=5)
+        s.settimeout(2)
+        closed = False
+        try:
+            closed = s.recv(1) == b""
+        except socket.timeout:
+            pass  # open and silent: the server waits for the client to speak first (postgres, redis, mongo, amqp)
+        finally:
+            s.close()
+        errs = pf.errors(wait=0.5)
+        if errs or closed:
+            raise StepError(f"svc/{svc}:{port} in {ns}: " + (errs[-1] if errs else "connection closed immediately"))
+    return f"svc/{svc}:{port} in {ns} accepted a connection (via port-forward)"
+
+
+def _http(url, method="GET", data=None, headers=None, timeout=15):
+    req = urllib.request.Request(url, data=data, method=method, headers=headers or {})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - URLs come from the sidecar contract
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def run_http(run, xr, ctx):
+    expect = run.get("expectStatus")
+    if run.get("url"):
+        url = ctx["r"](run["url"])
+        if not url:
+            raise StepError("the URL is empty: the XR has not published it yet")
+        host = urllib.parse.urlparse(url).hostname or ""
+        m = SVC_HOST.match(host)
+        if not m:
+            code, _ = _http(url)
+            if expect and code != expect:
+                raise StepError(f"GET {url} returned {code}, expected {expect}")
+            return f"GET {url} answered {code}"
+        u = urllib.parse.urlparse(url)
+        ns, svc, port, path = m.group("ns"), m.group("svc"), u.port or 80, u.path or "/"
+    else:
+        ns, svc, port, path = ctx["r"](run.get("namespace", "{namespace}")), ctx["r"](run["service"]), int(run["port"]), run.get("path", "/")
+    with ctx["kube"].port_forward(ns, svc, port) as pf:
+        code, _ = _http(f"http://127.0.0.1:{pf.local_port}{path}")
+    if expect and code != expect:
+        raise StepError(f"GET svc/{svc}:{port}{path} in {ns} returned {code}, expected {expect}")
+    return f"GET svc/{svc}:{port}{path} in {ns} answered {code} (via port-forward)"
+
+
+def _b64url(s):
+    return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+
+
+def run_oauth(run, xr, ctx):
+    ns, name = ctx["r"](run.get("namespace", "{namespace}")), ctx["r"](run["secret"])
+    keys = {k: run.get(f"{k}Key", d) for k, d in (("clientId", "client-id"), ("clientSecret", "client-secret"),
+                                                  ("tokenUrl", "token-url"), ("jwksUrl", "jwks-url"))}
+    data = ctx["kube"].get("secret", "-n", ns, name).get("data") or {}
+    vals = {k: decode(data, key) for k, key in keys.items()}
+    missing = [keys[k] for k, v in vals.items() if not v]
+    if missing:
+        raise StepError(f"secret {ns}/{name} lacks {missing}")
+    tok = urllib.parse.urlparse(vals["tokenUrl"])
+    m = SVC_HOST.match(tok.hostname or "")
+    if not m:
+        raise StepError(f"token URL host {tok.hostname} is not an in-cluster Service name; cannot port-forward to it")
+    jwks_path = urllib.parse.urlparse(vals["jwksUrl"]).path
+    with ctx["kube"].port_forward(m.group("ns"), m.group("svc"), tok.port or 80) as pf:
+        base = f"http://127.0.0.1:{pf.local_port}"
+        basic = base64.b64encode(f"{urllib.parse.quote(vals['clientId'])}:{urllib.parse.quote(vals['clientSecret'])}".encode()).decode()
+        code, body = _http(base + tok.path, "POST", b"grant_type=client_credentials",
+                           {"Content-Type": "application/x-www-form-urlencoded", "Authorization": f"Basic {basic}"})
+        if code != 200:
+            raise StepError(f"token endpoint returned {code}: {body[:200].decode('utf-8', 'replace')}")
+        token = json.loads(body).get("access_token") or ""
+        jcode, jbody = _http(base + jwks_path)
+    if token.count(".") != 2:
+        raise StepError("the token endpoint answered 200 without a JWT access_token")
+    header = json.loads(_b64url(token.split(".")[0]))
+    jwks = json.loads(jbody) if jcode == 200 else {}
+    key = next((k for k in jwks.get("keys", []) if k.get("kid") == header.get("kid")), None)
+    if key is None:
+        raise StepError(f"access_token kid {header.get('kid')} is not in the JWKS at {jwks_path} ({jcode})")
+    detail = f"client_credentials token issued for client {vals['clientId']}, kid {header.get('kid')} published in JWKS"
+    try:
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
+    except ImportError:
+        return detail + "; signature not checked (python cryptography not installed)"
+    if key.get("kty") != "RSA" or header.get("alg") != "RS256":
+        return detail + f"; signature not checked ({key.get('kty')}/{header.get('alg')})"
+    pub = rsa.RSAPublicNumbers(int.from_bytes(_b64url(key["e"]), "big"), int.from_bytes(_b64url(key["n"]), "big")).public_key()
+    signing_input, sig = token.rsplit(".", 1)
+    try:
+        pub.verify(_b64url(sig), signing_input.encode(), padding.PKCS1v15(), hashes.SHA256())
+    except Exception as e:  # noqa: BLE001 - any verification error is a failed check
+        raise StepError(f"access_token signature does not verify against the JWKS key: {e}") from e
+    return detail + "; RS256 signature verified"
+
+
+def run_cloud(run, xr, ctx):
+    args = [ctx["r"](a) for a in run["args"]]
+    cmd = [run["cli"], *args] + (["--output", "json"] if run["cli"] == "aws" else ["-o", "json"])
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+    except FileNotFoundError as e:
+        raise StepError(f"{run['cli']} CLI not installed") from e
+    if r.returncode != 0:
+        raise StepError(f"{' '.join(cmd[:3])} failed: {(r.stderr.strip().splitlines() or ['?'])[-1][:200]}")
+    out = json.loads(r.stdout or "{}")
+    exp = run.get("expect") or {}
+    if not exp:
+        return f"{' '.join(cmd[:3])} succeeded"
+    got = path_get(out, exp["path"])
+    want = path_get(out, exp["equalsPath"]) if "equalsPath" in exp else exp.get("equals")
+    if got != want:
+        raise StepError(f"{exp['path']} is {got!r}, expected {want!r}")
+    return f"{exp['path']}={got!r}"
+
+
+RUNNERS = {"condition": run_condition, "xrField": run_xr_field, "secretKeys": run_secret_keys,
+           "configMapKeys": run_configmap_keys, "resource": run_resource, "tcp": run_tcp, "http": run_http,
+           "oauthClientCredentials": run_oauth, "cloudCli": run_cloud}
+
+
+def find_kind(contract, name):
+    every = {**contract["components"], **contract.get("targets", {}), **contract.get("kinds", {})}
+    for key, sc in every.items():
+        xrd = contract["xrds"].get(sc["kind"]) or {}
+        if name in (key, sc["kind"], xrd.get("plural")):
+            return sc, xrd
+    return None, None
+
+
+def verify(sc, xrd, ns, name, context, only=None):
+    kube = Kube(context)
+    xr = kube.get(f"{xrd['plural']}.{xrd['group']}", "-n", ns, name)
+
+    def r(tpl):
+        return render(tpl, xr)
+
+    ctx = {"kube": kube, "r": r}
+    results = []
+    for step in sc.get("verify") or []:
+        if only and step["id"] not in only:
+            continue
+        res = {"id": step["id"], "kind": step["run"]["kind"], "check": step["check"]}
+        if not when_matches(step.get("when"), xr):
+            res.update(status="skip", detail=f"when {step['when']} does not match this XR")
+        elif step["run"]["kind"] == "manual":
+            res.update(status="manual", detail="no tool can make this check; the sentence says what to look at")
+        else:
+            try:
+                res.update(status="pass", detail=RUNNERS[step["run"]["kind"]](step["run"], xr, ctx))
+            except Unresolved as e:
+                res.update(status="fail", detail=f"cannot resolve {{{e.args[0]}}}: the XR has not published it")
+            except StepError as e:
+                res.update(status="fail", detail=str(e))
+            except Exception as e:  # noqa: BLE001 - one broken step must not hide the others
+                res.update(status="fail", detail=f"{type(e).__name__}: {e}")
+        results.append(res)
+    return results
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("kind")
+    ap.add_argument("ref", help="namespace/name of the XR")
+    ap.add_argument("--context", help="kubeconfig context (default: current)")
+    ap.add_argument("--format", choices=("text", "json"), default="text")
+    ap.add_argument("--only", help="comma-separated step ids")
+    a = ap.parse_args()
+    if "/" not in a.ref:
+        print("error: the XR must be given as namespace/name", file=sys.stderr)
+        return 2
+    contract = json.loads(CONTRACT.read_text())
+    sc, xrd = find_kind(contract, a.kind)
+    if sc is None:
+        print(f"error: no verify contract for kind {a.kind!r} (see tools/airframe-capabilities kinds/components/targets)", file=sys.stderr)
+        return 2
+    ns, name = a.ref.split("/", 1)
+    try:
+        results = verify(sc, xrd, ns, name, a.context, set(a.only.split(",")) if a.only else None)
+    except StepError as e:
+        print(f"error: cannot read {sc['kind']} {ns}/{name}: {e}", file=sys.stderr)
+        return 2
+    failed = [x for x in results if x["status"] == "fail"]
+    if a.format == "json":
+        print(json.dumps({"kind": sc["kind"], "namespace": ns, "name": name, "passed": not failed, "steps": results}, indent=2))
+    else:
+        for x in results:
+            print(f"{x['status'].upper():6} {x['id']:20} {x['detail']}")
+        print(f"\n{sc['kind']} {ns}/{name}: " + ("all checks passed" if not failed else f"{len(failed)} of {len(results)} failed"))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

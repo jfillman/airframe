@@ -1,0 +1,74 @@
+# Sidecar contract for ApplicationEnvironment (review A3; format in tools/sidecars.py). Checked against
+# compositions/applicationenvironment/ renders by tools/test_sidecars.py.
+kind: ApplicationEnvironment
+role: environment
+summary: 'Adds a deploy environment (staging, prod) on a target cluster for an onboarded app: the env''s identity.yaml
+  in that cluster''s tenants repo, SecretStore requests, and a one-time values.yaml scaffold in the app''s gitops
+  repo.'
+outputs:
+  valuesFile:
+    kind: literal
+    value: '{spec.cluster}/{spec.env}/values.yaml'
+    description: Path of the environment's values file in the app's gitops repo (scaffolded once, then the developer's).
+    at:
+      kind: RepositoryFile
+      field: spec.forProvider.file
+  envIdentityFile:
+    kind: literal
+    value: tenants/{spec.appName}/{spec.env}/identity.yaml
+    description: The file in the target cluster's tenants repo that the tenant-onboarding ApplicationSet renders
+      the environment's Application from.
+    at:
+      kind: RepositoryFile
+      field: spec.forProvider.file
+sources:
+- object:
+    kind: RepositoryFile
+    name: '{name}-tenant-identity-yaml'
+  createdBy: composition
+conditions:
+- type: ClusterReady
+  reasons:
+  - reason: ClusterEligible
+    status: 'True'
+    meaning: spec.cluster is in the cluster registry with a tenants repo; files are composed.
+  - reason: ClusterNotEligible
+    status: 'False'
+    meaning: spec.cluster is missing from the registry or not eligible; nothing is composed.
+- type: AppResolved
+  reasons:
+  - reason: AppResolved
+    status: 'True'
+    meaning: The app named in spec.appName was found as one of the application kinds; a Usage protects it.
+  - reason: AppLookupPending
+    status: 'False'
+    meaning: The app lookup has not returned yet (first reconcile).
+  - reason: AppNotFound
+    status: 'False'
+    meaning: No application XR named spec.appName exists in this namespace; check the name.
+verify:
+- id: cluster-ready
+  check: ClusterReady is True (ClusterEligible).
+  run:
+    kind: condition
+    type: ClusterReady
+    reasons:
+    - ClusterEligible
+- id: app-resolved
+  check: AppResolved is True.
+  run:
+    kind: condition
+    type: AppResolved
+    reasons:
+    - AppResolved
+- id: env-identity-file
+  check: The RepositoryFile {name}-tenant-identity-yaml is Ready, so the environment's identity.yaml exists in the
+    tenants repo.
+  run:
+    kind: resource
+    resource: repositoryfiles.repo.github.m.upbound.io
+    name: '{name}-tenant-identity-yaml'
+    condition:
+      type: Ready
+      status: 'True'
+owner: human

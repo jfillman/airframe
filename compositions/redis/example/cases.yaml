@@ -1,0 +1,15 @@
+# Render cases for compositions/redis (tools/test_compositions.py).
+cases:
+- name: fresh
+  xr: xr-cache.yaml
+  expect:
+    conditions:
+      ComponentReady: RedisProvisioning
+- name: deployed
+  xr: xr-cache.yaml
+  observed:
+  - observed-release-deployed.yaml
+  expect:
+    conditions:
+      ComponentReady: RedisReady
+      Ready: Available

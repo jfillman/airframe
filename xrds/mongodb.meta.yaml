@@ -4,6 +4,7 @@
 # connectionStringSecret field list: connectionString.standard, connectionString.standardSrv,
 # username, password) - not illustrative.
 kind: MongoDB
+role: component
 summary: A dedicated MongoDB replica set, one per application environment.
 outputs:
   # {name} is the components[] entry's own `name` field.
@@ -28,6 +29,15 @@ outputs:
     secret: "{name}-app"
     key: connectionString.standardSrv
     description: The same connection string, using mongodb+srv:// DNS seedlist discovery instead of listing every member.
+sources:
+  - object: {kind: Secret, name: "{name}-app"}
+    createdBy: operator
+    from: {kind: MongoDBCommunity, name: "{name}", field: "spec.users[].connectionStringSecretName", equals: "{name}-app"}
+    note: The MongoDB Kubernetes operator writes each user's connection strings into the Secret named by users[].connectionStringSecretName.
+  - object: {kind: Service, name: "{name}-svc"}
+    createdBy: operator
+    from: {kind: MongoDBCommunity, name: "{name}"}
+    note: The operator creates the headless <name>-svc Service for the replica set's StatefulSet.
 conditions:
   # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
   # see compositions/mongodb/templates/status.yaml. Closed set, from the real operator's own three
@@ -49,8 +59,12 @@ conditions:
 verify:
   - id: xr-ready
     check: The MongoDB XR's ComponentReady condition has reason MongoDBReady.
+    run: {kind: condition, type: ComponentReady, reasons: [MongoDBReady]}
   - id: secret-exists
-    check: Secret {name}-app exists in the app namespace and has non-empty username/password keys.
+    check: Secret {name}-app exists in the app namespace and has non-empty username, password and connectionString.standard keys.
+    run: {kind: secretKeys, secret: "{name}-app", keys: [username, password, connectionString.standard]}
   - id: reachable
-    check: A TCP connect to {name}-0.{name}-svc:27017 succeeds from the app namespace.
+    check: >-
+      A replica-set member behind {name}-svc accepts a TCP connection on 27017, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
+    run: {kind: tcp, service: "{name}-svc", port: 27017}
 owner: human

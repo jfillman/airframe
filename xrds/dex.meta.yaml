@@ -3,6 +3,7 @@
 # shared infrastructure other apps attach to, not something an app's own env references via
 # fromComponent).
 kind: Dex
+role: component
 summary: >-
   attach mode: a confidential OAuth2 client on an existing shared Dex server, for
   machine-to-machine client_credentials auth. server mode (no outputs below apply): the shared
@@ -28,6 +29,15 @@ outputs:
     kind: secretKeyRef
     secret: "{name}-oauth-credentials"
     key: jwks-url
+sources:
+  - object: {kind: Secret, name: "{name}-oauth-credentials"}
+    createdBy: function
+    checkedBy: functions/function-dex/tests/test_fn.py::test_sidecar_secret_and_service_match_the_function
+    when: {field: spec.mode, equals: attach}
+  - object: {kind: Service, name: "{name}"}
+    createdBy: function
+    checkedBy: functions/function-dex/tests/test_fn.py::test_sidecar_secret_and_service_match_the_function
+    when: {field: spec.mode, equals: server}
 conditions:
   # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
   # see compositions/dex/templates/status.yaml. One reason set per mode; both live under the same
@@ -49,10 +59,22 @@ conditions:
 verify:
   - id: xr-ready
     check: The Dex XR's ComponentReady condition has reason DexAttachReady (attach) or DexServerReady (server).
+    run: {kind: condition, type: ComponentReady, reasons: [DexAttachReady, DexServerReady]}
   - id: secret-exists
     check: Secret {name}-oauth-credentials exists in the app namespace with non-empty client-id and client-secret keys.
+    when: {field: spec.mode, equals: attach}
+    run: {kind: secretKeys, secret: "{name}-oauth-credentials", keys: [client-id, client-secret]}
   - id: token-issuance
     check: >-
       POST {tokenUrl} with grant_type=client_credentials and the client-id/client-secret from the
-      Secret returns a real access_token whose signature validates against {jwksUrl}.
+      Secret returns a real access_token whose signing key is published at {jwksUrl} (reached through
+      kubectl port-forward to the Dex server's Service).
+    when: {field: spec.mode, equals: attach}
+    run: {kind: oauthClientCredentials, secret: "{name}-oauth-credentials"}
+  - id: server-discovery
+    check: >-
+      The Dex server's {name} Service answers GET /dex/.well-known/openid-configuration with 200 on
+      5556 (through kubectl port-forward).
+    when: {field: spec.mode, equals: server}
+    run: {kind: http, service: "{name}", port: 5556, path: /dex/.well-known/openid-configuration, expectStatus: 200}
 owner: human

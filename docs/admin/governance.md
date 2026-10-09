@@ -166,7 +166,9 @@ Ground-tier identity from reaching Flight-tier destinations.
 
 Every XRD reports standard `Ready`/`Synced` conditions plus catalog-specific conditions with a
 closed reason set (`ComponentReady`, `TargetReady`, `ClusterReady`, `AppResolved`, `CicdOnboarded`),
-listed with their meaning in each `xrds/<kind>.meta.yaml` and the contract bundle. The AI-friendliness
+listed with their meaning in each `xrds/<kind>.meta.yaml` and the contract bundle. Every kind's sidecar
+also carries executable verify steps that `tools/airframe-verify` runs read-only against a live XR, and
+`tools/test_sidecars.py` fails CI when a sidecar disagrees with its composition's renders. The AI-friendliness
 scorecard (`hangar/tools/airframe-scorecard`) runs in CI when the fleet read token is present and fails
 on regression. Glidepath records
 every release with provenance and signatures. What the catalog does not yet produce is a compliance

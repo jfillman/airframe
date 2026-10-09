@@ -3,6 +3,7 @@
 # owning role together and writes the generated password into the `{name}-app` Secret it manages itself
 # (not rendered by this Composition - CNPG's own convention, documented and unchanged since).
 kind: PostgreSQL
+role: component
 summary: A dedicated PostgreSQL database (CloudNativePG), one per application environment.
 outputs:
   host:
@@ -34,6 +35,15 @@ outputs:
     kind: secretKeyRef
     secret: "{name}-app"
     key: jdbc-uri
+sources:
+  - object: {kind: Secret, name: "{name}-app"}
+    createdBy: operator
+    from: {kind: Cluster, name: "{name}", field: spec.bootstrap.initdb}
+    note: CloudNativePG creates <Cluster>-app (owner role, generated password, uri, jdbc-uri) from bootstrap.initdb.
+  - object: {kind: Service, name: "{name}-rw"}
+    createdBy: operator
+    from: {kind: Cluster, name: "{name}"}
+    note: CloudNativePG creates <Cluster>-rw (primary), -ro and -r Services for every Cluster.
 conditions:
   # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
   # see compositions/postgresql/templates/status.yaml. Closed set.
@@ -51,8 +61,12 @@ conditions:
 verify:
   - id: xr-ready
     check: The PostgreSQL XR's ComponentReady condition has reason PostgreSQLReady.
+    run: {kind: condition, type: ComponentReady, reasons: [PostgreSQLReady]}
   - id: secret-exists
-    check: Secret {name}-app exists in the app namespace and has a non-empty password key.
+    check: Secret {name}-app exists in the app namespace and has non-empty password and uri keys.
+    run: {kind: secretKeys, secret: "{name}-app", keys: [password, uri]}
   - id: reachable
-    check: A TCP connect to {name}-rw:5432 succeeds from the app namespace (CNPG's read-write Service).
+    check: >-
+      {name}-rw accepts a TCP connection on 5432 (CNPG's read-write Service), through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
+    run: {kind: tcp, service: "{name}-rw", port: 5432}
 owner: human

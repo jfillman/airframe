@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 from airframe_schema import load_base_schema
-from component_outputs import load_all as load_component_meta
+from component_outputs import load_all as load_component_meta, load_by_role
 
 ROOT = Path(__file__).resolve().parent.parent
 XRDS = ROOT / "xrds"
@@ -79,7 +79,7 @@ def xrd_summaries():
 
 
 def component_contracts():
-    """component type -> {summary, outputs, verify, owner}, from xrds/*.meta.yaml."""
+    """component type -> {summary, outputs, sources, conditions, verify, owner}, from xrds/*.meta.yaml."""
     return load_component_meta()
 
 
@@ -88,6 +88,14 @@ def target_contracts():
     marked `component: false` (AwsLambdaTarget, AwsEcsTarget, AzureContainerAppTarget): what an agent
     needs to stand one up and tell whether it worked, without reading the XRD or the Composition."""
     return {k: {kk: vv for kk, vv in v.items() if kk != "outputs"} for k, v in load_component_meta(targets=True).items()}
+
+
+def kind_contracts():
+    """Every other XRD with a sidecar (role bootstrap, environment, platform, observability): the app
+    stacks, ApplicationEnvironment, SecretStore, TektonCICD, SLO, RolloutWatch. Same shape as a
+    component (summary, outputs, sources, conditions, verify, owner) plus its role; nothing here feeds
+    the chart's fromComponent."""
+    return load_by_role("bootstrap", "environment", "platform", "observability")
 
 
 def build_contract():
@@ -101,6 +109,7 @@ def build_contract():
         "xrds": xrd_summaries(),
         "components": component_contracts(),
         "targets": target_contracts(),
+        "kinds": kind_contracts(),
     }
 
 

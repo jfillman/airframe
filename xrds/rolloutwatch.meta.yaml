@@ -1,0 +1,23 @@
+# Sidecar contract for RolloutWatch (review A3; format in tools/sidecars.py). Rendered by
+# function-rollout-watcher (no go-templating), so there are no sources to check against renders.
+kind: RolloutWatch
+role: observability
+summary: Watches one app environment's Argo Rollout; on Degraded it dispatches a HolmesGPT diagnosis Job (at most
+  once per revision) and records the phase in status.
+outputs: {}
+conditions: []
+verify:
+- id: xr-ready
+  check: The RolloutWatch XR is Ready.
+  run:
+    kind: condition
+    type: Ready
+    reasons:
+    - Available
+- id: rollout-healthy
+  check: 'status.rolloutPhase is Healthy: the watched Rollout''s last observed phase.'
+  run:
+    kind: xrField
+    path: status.rolloutPhase
+    equals: Healthy
+owner: human

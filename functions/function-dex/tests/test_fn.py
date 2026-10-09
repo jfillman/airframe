@@ -193,6 +193,34 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
             self.assertIn("my-dex", server.servicer.created)
             self.assertFalse(server.servicer.created["my-dex"].public)
 
+    async def test_sidecar_secret_and_service_match_the_function(self):
+        # xrds/dex.meta.yaml is what the chart's fromComponent, the contract bundle and airframe-verify
+        # trust for this kind's names; tools/test_sidecars.py points its `checkedBy` here because this
+        # function, not a go-template, renders them. Every secretKeyRef output must name a key the
+        # attach Secret really carries, and the server-discovery verify step must hit a real port.
+        import pathlib
+
+        import yaml as _yaml
+
+        sidecar = _yaml.safe_load((pathlib.Path(__file__).resolve().parents[3] / "xrds" / "dex.meta.yaml").read_text())
+        name = "my-dex"
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server)
+        secret = resource.struct_to_dict(rsp.desired.resources["oauth-credentials"].resource)
+        source = next(s["object"] for s in sidecar["sources"] if s["object"]["kind"] == "Secret")
+        self.assertEqual(secret["metadata"]["name"], source["name"].replace("{name}", name))
+        for out, spec in sidecar["outputs"].items():
+            self.assertEqual(spec["secret"].replace("{name}", name), secret["metadata"]["name"], out)
+            self.assertTrue(secret["stringData"].get(spec["key"]), f"output {out}: key {spec['key']} missing")
+
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server"))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        svc = resource.struct_to_dict(rsp.desired.resources["service"].resource)
+        source = next(s["object"] for s in sidecar["sources"] if s["object"]["kind"] == "Service")
+        self.assertEqual(svc["metadata"]["name"], source["name"].replace("{name}", name))
+        step = next(v["run"] for v in sidecar["verify"] if v["id"] == "server-discovery")
+        self.assertIn(step["port"], [p["port"] for p in svc["spec"]["ports"]])
+
     async def test_attach_mode_reuses_the_observed_secret_instead_of_rotating_it(self):
         async with FakeDexServer() as server:
             observed_secret_data = {"client-secret": base64.b64encode(b"already-set-secret").decode()}

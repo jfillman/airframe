@@ -1,0 +1,76 @@
+# Sidecar contract for InfraService (review A3; format in tools/sidecars.py). Checked against
+# compositions/infraservice/ renders by tools/test_sidecars.py. Role bootstrap: the XR onboards an app; nothing in a
+# values.yaml references it, so it is not in the chart's fromComponent table.
+kind: InfraService
+role: bootstrap
+summary: 'Onboards a shared infrastructure service (a broker, an identity server): its gitops-infra-<name> repo
+  with a cicd.yaml stub, a SecretStore request and the TektonCICD child.'
+outputs:
+  gitopsRepo:
+    kind: literal
+    value: gitops-infra-{name}
+    description: The GitHub repository Argo CD deploys this app from (values per cluster and environment).
+    at:
+      kind: Repository
+      field: spec.forProvider.name
+  tektonCicd:
+    kind: literal
+    value: '{name}-tektoncicd'
+    description: The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied
+      from it.
+    at:
+      kind: TektonCICD
+      field: metadata.name
+sources:
+- object:
+    kind: Repository
+    name: '{name}-gitops-infra'
+  createdBy: composition
+- object:
+    kind: TektonCICD
+    name: '{name}-tektoncicd'
+  createdBy: composition
+conditions:
+- type: DevClusterReady
+  reasons:
+  - reason: DevClusterReady
+    status: 'True'
+    meaning: The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.
+  - reason: DevClusterNotReady
+    status: 'False'
+    meaning: The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed
+      until it is.
+- type: CicdOnboarded
+  reasons:
+  - reason: CicdOnboarded
+    status: 'True'
+    meaning: The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard
+      it.
+  - reason: CicdOnboardingPending
+    status: 'False'
+    meaning: identity.yaml has not been observed Ready yet (normal for a minute after creation).
+verify:
+- id: dev-cluster-ready
+  check: The XR's DevClusterReady condition is True (DevClusterReady).
+  run:
+    kind: condition
+    type: DevClusterReady
+    reasons:
+    - DevClusterReady
+- id: cicd-onboarded
+  check: 'The XR''s CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app''s identity.yaml.'
+  run:
+    kind: condition
+    type: CicdOnboarded
+    reasons:
+    - CicdOnboarded
+- id: gitops-repo
+  check: The Repository managed resource {name}-gitops-infra is Ready, so the GitHub gitops repository exists.
+  run:
+    kind: resource
+    resource: repositories.repo.github.m.upbound.io
+    name: '{name}-gitops-infra'
+    condition:
+      type: Ready
+      status: 'True'
+owner: human

@@ -56,6 +56,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install pyyaml crossplane-function-sdk-python==0.15.1
+      # function-dex has no CI of its own; its suite includes the test xrds/dex.meta.yaml's sources
+      # name as `checkedBy` (tools/test_sidecars.py only checks that the test exists)
+      - name: function-dex unit tests
+        working-directory: functions/function-dex
+        run: pip install click && python3 -m unittest tests.test_fn
       - name: start the two functions (auto-ready with its CEL feature gate)
         run: |
           docker run -d --name fn-gotpl -p 127.0.0.1:9443:9443 xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443

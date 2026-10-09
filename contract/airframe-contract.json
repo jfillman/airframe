@@ -508,6 +508,16 @@
         }
       ],
       "kind": "PostgreSQL",
+      "knownFailures": [
+        {
+          "condition": "Synced",
+          "example": "cannot compose resources: cannot apply composed resource \"cluster\": Internal error occurred: failed calling webhook \"mcluster.cnpg.io\": failed to call webhook: Post \"https://cnpg-webhook-service.cnpg-system.svc:443/mutate-postgresql-cnpg-io-v1-cluster?timeout=10s\": dial tcp 10.108.177.11:443: connect: connection refused",
+          "hint": "Check the operator, not the database: kubectl -n cnpg-system get pods,endpointslices. It runs two replicas so a leader exit does not drop the webhook; if both are down, look for leader-election losses in their logs. The XR re-syncs on its own once the webhook answers.",
+          "id": "CNPGWebhookUnavailable",
+          "match": "failed calling webhook \"[a-z]+\\.cnpg\\.io\"",
+          "meaning": "The CloudNativePG operator's admission webhook did not answer, so Crossplane could not apply the Cluster. The database itself is unaffected; ComponentReady keeps its last value. Every PostgreSQL XR on the cluster reports this at once."
+        }
+      ],
       "outputs": {
         "database": {
           "key": "dbname",
@@ -640,6 +650,16 @@
         }
       ],
       "kind": "RabbitMQ",
+      "knownFailures": [
+        {
+          "condition": "Synced",
+          "example": "cannot compose resources: cannot apply composed resource \"user\": Internal error occurred: failed calling webhook \"vuser.kb.io\": failed to call webhook: Post \"https://messaging-topology-webhook-service.rabbitmq-system.svc:443/validate-rabbitmq-com-v1beta1-user?timeout=10s\": dial tcp 10.96.0.12:443: connect: connection refused",
+          "hint": "Check the operator: kubectl -n rabbitmq-system get pods,endpointslices -l app.kubernetes.io/name=messaging-topology-operator. It runs two replicas; if both are down, look for leader-election losses in their logs. The XR re-syncs on its own.",
+          "id": "RabbitMQTopologyWebhookUnavailable",
+          "match": "failed calling webhook \"[a-z0-9-]+\\.kb\\.io\".*messaging-topology-webhook-service",
+          "meaning": "The RabbitMQ messaging-topology operator's admission webhook did not answer, so Crossplane could not apply a User, Vhost or Permission. The broker and existing credentials are unaffected; ComponentReady keeps its last value."
+        }
+      ],
       "outputs": {
         "host": {
           "configMap": "{name}-connection",

@@ -108,7 +108,8 @@ def xr(mode="attach", generation=1, observed=1, reason="DexAttachReady"):
     return {"apiVersion": "catalog.hangar.io/v1alpha1", "kind": "Dex",
             "metadata": {"name": "my-client", "namespace": "app-x-dev", "generation": generation},
             "spec": {"mode": mode},
-            "status": {"conditions": [{"type": "ComponentReady", "status": "True", "reason": reason, "observedGeneration": observed}]}}
+            "status": {"conditions": [{"type": "ComponentReady", "status": "True", "reason": reason, "observedGeneration": observed},
+                                      {"type": "Synced", "status": "True", "reason": "ReconcileSuccess"}]}}
 
 
 def contract_dex():
@@ -201,7 +202,24 @@ def main():
     fe = next(r for r in results if r["id"] == "function-exists")
     expect("unresolved status template fails clearly", fe["status"] == "fail" and "status.functionName" in fe["detail"], fe)
 
-    # 7. every kind resolves by key, Kind and plural
+    # 7. Synced=False is classified: a CNPG webhook outage is named, an unknown cause is quoted, True passes (C8)
+    sc, xrd = av.find_kind(contract, "postgresql")
+    pg_msg = next(k for k in sc["knownFailures"] if k["id"] == "CNPGWebhookUnavailable")["example"]
+    for msg, want in ((pg_msg, "CNPGWebhookUnavailable"),
+                      ('cannot apply composed resource "x": failed calling webhook "vexternalsecret.kb.io": connection refused', "AdmissionWebhookUnavailable"),
+                      ("cannot compose resources: something new", None)):
+        x = {"metadata": {"name": "db", "namespace": "ns"}, "spec": {},
+             "status": {"conditions": [{"type": "Synced", "status": "False", "reason": "ReconcileError", "message": msg},
+                                       {"type": "ComponentReady", "status": "True", "reason": "PostgreSQLReady"}]}}
+        r0 = av.check_synced(sc, x)
+        expect(f"synced classification {want}", r0["status"] == "fail" and r0.get("knownFailure") == want
+               and (want is not None or "something new" in r0["detail"]), r0)
+    ok0 = av.check_synced(sc, {"status": {"conditions": [{"type": "Synced", "status": "True"}]}})
+    expect("Synced=True passes", ok0["status"] == "pass", ok0)
+    results, _ = run(creds(), port)
+    expect("xr-synced runs first", results[0]["id"] == "xr-synced", results[0])
+
+    # 8. every kind resolves by key, Kind and plural
     for key, sc in {**contract["components"], **contract["targets"], **contract["kinds"]}.items():
         plural = contract["xrds"][sc["kind"]]["plural"]
         for name in (key, sc["kind"], plural):

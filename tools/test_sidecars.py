@@ -286,6 +286,8 @@ MUTATIONS = [
      lambda sc: sc["sources"][0].update(checkedBy="functions/function-dex/tests/test_fn.py::test_nope"), "does not name a test"),
     ("tcp step names a Service with no source", "postgresql",
      lambda sc: _verify_step(sc, "reachable")["run"].update(service="{name}-primary"), "Service {name}-primary has no sources entry"),
+    ("known-failure pattern no longer matches its own example", "postgresql",
+     lambda sc: sc["knownFailures"][0].update(match="failed calling webhook \"cnpg"), "VALIDATE"),
     ("composed object renamed", "slo",
      lambda sc: _source(sc, "ConfigMap", "{name}-slo-dashboard")["object"].update(name="{name}-dashboard"), "composes no ConfigMap named"),
 ]
@@ -297,7 +299,15 @@ def self_test(sidecars):
     for label, key, mutate, expect in MUTATIONS:
         mutated = copy.deepcopy(sidecars)
         mutate(mutated[key])
-        found = [p for p in run_all(mutated) if expect in p]
+        if expect == "VALIDATE":
+            from sidecars import SidecarError, validate
+            try:
+                validate(mutated[key], Path(mutated[key]["_file"]))
+                found = []
+            except SidecarError as e:
+                found = [str(e)]
+        else:
+            found = [p for p in run_all(mutated) if expect in p]
         if not found:
             failures.append(f"mutation not caught: {label} ({key}; expected a problem containing {expect!r})")
     gone = copy.deepcopy(sidecars)

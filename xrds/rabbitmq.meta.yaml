@@ -59,6 +59,26 @@ conditions:
       - reason: RabbitMQBrokerProvisioning
         status: "False"
         meaning: (broker mode) The RabbitmqCluster has not reported ClusterAvailable=True yet.
+# Known failures (review C8). Crossplane applies every composed resource in one pass and returns on the first
+# apply error, before it writes the status the pipeline computed - so an operator outage cannot be reported
+# through ComponentReady (it keeps its last value). It lands in Synced=False's message instead, and these
+# patterns let airframe-verify (and any agent) name it instead of reading it as "the component is broken".
+knownFailures:
+  - id: RabbitMQTopologyWebhookUnavailable
+    condition: Synced
+    match: 'failed calling webhook "[a-z0-9-]+\.kb\.io".*messaging-topology-webhook-service'
+    example: >-
+      cannot compose resources: cannot apply composed resource "user": Internal error occurred: failed calling
+      webhook "vuser.kb.io": failed to call webhook: Post
+      "https://messaging-topology-webhook-service.rabbitmq-system.svc:443/validate-rabbitmq-com-v1beta1-user?timeout=10s":
+      dial tcp 10.96.0.12:443: connect: connection refused
+    meaning: >-
+      The RabbitMQ messaging-topology operator's admission webhook did not answer, so Crossplane could not apply a
+      User, Vhost or Permission. The broker and existing credentials are unaffected; ComponentReady keeps its last
+      value.
+    hint: >-
+      Check the operator: kubectl -n rabbitmq-system get pods,endpointslices -l app.kubernetes.io/name=messaging-topology-operator.
+      It runs two replicas; if both are down, look for leader-election losses in their logs. The XR re-syncs on its own.
 verify:
   - id: xr-ready
     check: The RabbitMQ XR's ComponentReady condition has reason RabbitMQAttachReady (attach) or RabbitMQBrokerReady (broker).

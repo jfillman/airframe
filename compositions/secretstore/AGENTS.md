@@ -33,6 +33,6 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - `python3 tools/test_compositions.py --update secretstore` regenerates `example/expected/`; review that diff like code, it is the behaviour change.
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
 - Credentials never pass through the function pipeline: provider-kubernetes Objects copy the reviewer token and the universal-auth client secret server-side (references.patchesFrom). Keep it that way (review C2).
-- Kubernetes auth on the Infisical-hosting cluster, universal auth elsewhere; the cluster registry decides, not the spec.
+- Kubernetes auth on the Infisical-hosting cluster, universal auth elsewhere; the cluster registry decides, not the spec. Infisical's URL and org id also come from the registry (infisicalUrl, infisicalOrgId, rendered from clusters.yaml's top-level infisical: block, review C9); never hard-code them in a template.
 
 Contract: `tools/airframe-capabilities verify secretstore`; schema: `xrds/secretstore.yaml`.

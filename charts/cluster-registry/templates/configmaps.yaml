@@ -6,9 +6,17 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
   crossplaneReady  airframe.crossplaneReady   (upper clusters: Crossplane can compose onto it)
   infisicalHost    airframe.infisicalHost
   tenantsRepo      tenantsRepo
+  infisicalUrl     infisical.inClusterUrl on the airframe.infisicalHost cluster, infisical.url elsewhere
+  infisicalOrgId   infisical.orgId
   zone, roles      the taxonomy, for gates that move from `type` to `zone` (glidepath ADR-0024)
 */ -}}
 {{- $seen := dict }}
+{{- $inf := .Values.infisical | default dict }}
+{{- if $inf }}
+{{- range list "orgId" "url" "inClusterUrl" }}
+{{- if not (index $inf .) }}{{ fail (printf "infisical: '%s' is required once the infisical block is set" .) }}{{ end }}
+{{- end }}
+{{- end }}
 {{- range .Values.clusters }}
 {{- if not .name }}{{ fail "clusters: every record needs a name" }}{{ end }}
 {{- $zone := .zone | default "upper" }}
@@ -50,6 +58,12 @@ data:
   {{- end }}
   {{- with $rec.tenantsRepo }}
   tenantsRepo: {{ . }}
+  {{- end }}
+  {{- if $inf }}
+  {{- $infUrl := $inf.url }}
+  {{- if $a.infisicalHost }}{{ $infUrl = $inf.inClusterUrl }}{{ end }}
+  infisicalUrl: {{ $infUrl | quote }}
+  infisicalOrgId: {{ $inf.orgId | quote }}
   {{- end }}
   zone: {{ $zone }}
   roles: {{ $roles | join "," | quote }}

@@ -1,0 +1,14 @@
+# The Infisical-hosting cluster's record with the review-C9 keys (infisicalUrl is the in-cluster URL there).
+# Values differ from the old literals on purpose; see cluster-registry-upper-with-infisical.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-dev
+  namespace: crossplane-system
+data:
+  type: dev
+  cicdReady: "true"
+  infisicalHost: "true"
+  tenantsRepo: gitops-cluster-dev-tenants
+  infisicalUrl: http://infisical.infisical.svc.cluster.local:9999/api
+  infisicalOrgId: 11111111-2222-3333-4444-555555555555

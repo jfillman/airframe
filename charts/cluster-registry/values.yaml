@@ -9,6 +9,14 @@
 #   aliases: []                      # other names this cluster also answers to (one ConfigMap each)
 #   airframe: { crossplaneReady: true }   # cicdReady, crossplaneReady, infisicalHost
 clusters: []
+# The fleet's one Infisical server (review C9): the top-level `infisical:` block of the same clusters.yaml.
+#   infisical:
+#     orgId: <uuid>                    # the organization every app's Infisical project lives in
+#     url: http://host:port/api        # how a cluster that does NOT host Infisical reaches its API
+#     inClusterUrl: http://svc...:8080/api   # how the cluster marked airframe.infisicalHost reaches it
+# Rendered into every record as infisicalUrl (inClusterUrl on the infisicalHost cluster, url elsewhere) and
+# infisicalOrgId; the SecretStore Composition reads both instead of hard-coding them.
+infisical: {}
 
 # Where the Compositions look the records up (ExtraResources matchName in crossplane-system).
 namespace: crossplane-system

@@ -23,3 +23,18 @@ cases:
   xr: xr-checkout-api.yaml
   observed:
   - observed-ua-client-secret.yaml
+# Review C9: the cluster registry supplies Infisical's URL and org id (cluster-registry chart, from clusters.yaml's
+# infisical: block). Both cases use values that differ from the pre-C9 literals.
+- name: registry-url-universal-auth
+  xr: xr-checkout-api.yaml
+  required:
+  - cluster-registry-upper-with-infisical.yaml
+  observed:
+  - observed-ua-client-secret.yaml
+- name: registry-url-kubernetes-auth
+  xr: xr-checkout-api.yaml
+  required:
+  - cluster-registry-infisical-host-with-urls.yaml
+  - kube-root-ca.yaml
+  observed:
+  - observed-identity.yaml

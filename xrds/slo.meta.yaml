@@ -45,4 +45,7 @@ verify:
     name: '{name}-slo'
     field: status.promOpRulesGenerated
     equals: true
+agentNotes:
+  - "Availability queries wrap the error rate in `or vector(0)`: with no errors the bare rate is an empty vector and every ratio evaluates to no data."
+  - "Readiness is Sloth's status.promOpRulesGenerated, a CEL rule in compositions/_shared/readiness-context.yaml."
 owner: human

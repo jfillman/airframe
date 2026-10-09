@@ -35,4 +35,6 @@ verify:
   - id: port-answers
     check: An HTTP GET of http://<task public IP>:{containerPort}/ (the IP from aws ecs describe-tasks and describe-network-interfaces) returns a response.
     run: {kind: manual}
+agentNotes:
+  - "terraform-provider-aws revokes AWS's default egress rule when it creates a security group, so the composition adds an explicit egress SecurityGroupRule."
 owner: human

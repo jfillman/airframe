@@ -96,4 +96,7 @@ verify:
       The broker's {name} Service accepts an AMQP TCP connection on 5672, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
     when: {field: spec.mode, equals: broker}
     run: {kind: tcp, service: "{name}", port: 5672}
+agentNotes:
+  - "Never end a Go-template comment with a right-trim marker right before apiVersion: v0.3.128 shipped a RabbitmqCluster with no apiVersion that way."
+  - "Attach mode composes a Usage that blocks deleting the broker while attachers exist. The topology operator's webhook fails closed: an outage shows as Synced=False with RabbitMQTopologyWebhookUnavailable."
 owner: human

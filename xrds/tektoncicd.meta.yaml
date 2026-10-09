@@ -63,4 +63,6 @@ verify:
     condition:
       type: Ready
       status: 'True'
+agentNotes:
+  - "Writes tenants/<appName>/identity.yaml to the dev cluster's tenants repo; that file is what onboards the app's CI. It is Update-managed (the composition is its only writer)."
 owner: human

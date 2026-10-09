@@ -77,4 +77,7 @@ verify:
       5556 (through kubectl port-forward).
     when: {field: spec.mode, equals: server}
     run: {kind: http, service: "{name}", port: 5556, path: /dex/.well-known/openid-configuration, expectStatus: 200}
+agentNotes:
+  - "Rendered by function-dex (Python, functions/function-dex), not go-templating. Build and push per its README; it has unit tests in CI."
+  - "Attach mode adopts the secret the server already holds on already_exists and never prunes a live credentials Secret on a transient failure (review C1). It composes a Usage that blocks deleting the server while attachers exist."
 owner: human

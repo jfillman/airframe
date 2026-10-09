@@ -32,4 +32,6 @@ verify:
   - id: url-answers
     check: An HTTP GET of status.url returns a response (the Azure Functions placeholder serves its landing page).
     run: {kind: http, url: "{status.url}"}
+agentNotes:
+  - "Azure forbids '/' in tag names: tags here are hangar-target / hangar-component / hangar-app, not the hangar.io/* labels used on Kubernetes and AWS."
 owner: human

@@ -68,4 +68,7 @@ verify:
     check: >-
       {name}-master accepts a TCP connection on 6379, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
     run: {kind: tcp, service: "{name}-master", port: 6379}
+agentNotes:
+  - "The image is pinned to bitnamilegacy; the upstream Bitnami images moved. Use hasKey, not default, for booleans: Sprig's default turns an explicit false into the default."
+  - "The {name}-connection Secret comes from the Release's connectionDetails; an output key that is not a connection key is caught by tools/test_sidecars.py."
 owner: human

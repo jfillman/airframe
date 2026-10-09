@@ -38,6 +38,7 @@ jobs:
       # A3: every xrds/*.meta.yaml sidecar agrees with its composition renders (11 seeded drifts must be caught),
       # and airframe-verify's step runners work against a fake cluster and a fake Dex
       - run: python3 tools/test_sidecars.py
+      - run: python3 tools/gen_component_agents.py --check
       - run: python3 tools/test_airframe_verify.py
 
   # C3: every composition's render fixtures (compositions/*/example/cases.yaml) through the real

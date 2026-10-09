@@ -71,4 +71,8 @@ verify:
     condition:
       type: Ready
       status: 'True'
+agentNotes:
+  - "values.yaml in the app's gitops repo is a create-once scaffold (ledgered and retired); the identity files and SecretStore requests stay Update-managed because only this composition writes them."
+  - "Nothing is composed until spec.cluster is in the cluster registry (ClusterReady). A Usage protects the app XR named by spec.appName while the environment exists."
+  - "spec.appName plus spec.env is capped at 58 characters: the environment's namespace is app-<appName>-<env>."
 owner: human

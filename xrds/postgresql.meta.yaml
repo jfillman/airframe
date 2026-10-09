@@ -90,4 +90,6 @@ verify:
     check: >-
       {name}-rw accepts a TCP connection on 5432 (CNPG's read-write Service), through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
     run: {kind: tcp, service: "{name}-rw", port: 5432}
+agentNotes:
+  - "CloudNativePG, not this composition, creates {name}-app and the {name}-rw Service. Its admission webhook fails closed: an operator outage shows as Synced=False with CNPGWebhookUnavailable, the database is unaffected."
 owner: human

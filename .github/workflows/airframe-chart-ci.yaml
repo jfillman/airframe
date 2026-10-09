@@ -55,9 +55,19 @@ jobs:
           docker run -d --name fn-ready -p 127.0.0.1:9444:9443 xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443 --feature-gates=CELHealthcheckCustomizations=true
           for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/9443) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9444) 2>/dev/null && break; sleep 2; done
           docker ps --format '{{.Names}} {{.Status}}'
+      - name: smoke render (one composition, fail fast if the Development runtime cannot reach the functions)
+        run: timeout 180 python3 tools/test_compositions.py --renderer crossplane slo
+        env:
+          AIRFRAME_RENDER_TARGETS: function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444
       - run: python3 tools/test_compositions.py --renderer crossplane
         env:
           AIRFRAME_RENDER_TARGETS: function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444
+      - name: function logs (diagnostics)
+        if: always()
+        run: |
+          docker ps -a --format '{{.Names}} {{.Status}}'
+          docker logs --tail 30 fn-gotpl 2>&1 | tail -30
+          docker logs --tail 30 fn-ready 2>&1 | tail -30
 
   scorecard:
     runs-on: ubuntu-latest

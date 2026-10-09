@@ -65,6 +65,29 @@ spec:
         openAPIV3Schema:
           type: object
           properties:
+            status:
+              type: object
+              properties:
+                scaffold:
+                  type: object
+                  description: >-
+                    Scaffold ledger, written by the Composition. Scaffold files (RepositoryFiles the
+                    platform writes once and then hands to the developer: boilerplate source, cicd.yaml,
+                    README, the gitops values.yaml) are composed only until they are observed Ready;
+                    their composition-resource-names are then recorded here and the managed resources
+                    retire, leaving the GitHub files in place. "Scaffold once, reconcile never": a name
+                    in this list is never rendered again for this XR, so a later template change cannot
+                    overwrite a developer's edits and the provider has nothing to poll.
+                  properties:
+                    done:
+                      type: array
+                      description: >-
+                        composition-resource-names of the scaffold files this XR has already written
+                        (sorted, unique). Empty or absent on a fresh XR, and again after a cluster
+                        rebuild, when the pinned external names let the provider adopt the existing
+                        files without writing them - after which they re-enter this list.
+                      items:
+                        type: string
             spec:
               type: object
               required: ["appName", "env", "cluster"]

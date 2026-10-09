@@ -6,5 +6,30 @@ cases:
   xr: xr-defaults.yaml
 - name: defaults
   xr: xr-defaults.yaml
-  required:
+  required: &id001
   - cluster-registry-dev-ready.yaml
+- name: scaffold-ready
+  xr: xr-defaults.yaml
+  required: *id001
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    present: &id002
+    - gitops-repo-readme
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-go-mod
+    - src-repo-main-go
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired
+  xr: xr-defaults-scaffolded.yaml
+  required: *id001
+  expect:
+    absent: *id002
+    status:
+      scaffold:
+        done: *id002

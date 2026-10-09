@@ -18,4 +18,6 @@ xr:
   - reason: Available
     status: 'True'
     type: Ready
-  status: {}
+  status:
+    scaffold:
+      done: []

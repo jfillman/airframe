@@ -71,6 +71,7 @@
 # live bug (every app-scaffolding composition in this catalog was Synced: False from
 # this) - see springbootapplication's own src-repo.yaml for the full writeup.
 <<- if $clusterOk >>
+<<- if not (has "values-yaml" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -94,4 +95,5 @@ spec:
       envName: <<$env>>
       rollout: null
     commitMessage: <<printf "Bootstrap %s environment: add %s/%s/values.yaml" $env $cluster $env | toJson>>
+<<- end >>
 <<- end >>

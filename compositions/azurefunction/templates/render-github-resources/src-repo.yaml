@@ -76,6 +76,7 @@ spec:
           - status: disabled
 ---
 <<- if eq $runtime "nodejs20" >>
+<<- if not (has "src-repo-package-json" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -102,7 +103,9 @@ spec:
         }
       }
     commitMessage: "AzureFunction scaffold: package.json"
+<<- end >>
 ---
+<<- if not (has "src-repo-host-json" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -128,7 +131,9 @@ spec:
         }
       }
     commitMessage: "AzureFunction scaffold: host.json"
+<<- end >>
 ---
+<<- if not (has "src-repo-hello-js" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -156,9 +161,11 @@ spec:
         },
       });
     commitMessage: "AzureFunction scaffold: src/functions/hello.js"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -184,9 +191,11 @@ spec:
       RUN npm install --omit=dev
       COPY src ./src
     commitMessage: "AzureFunction scaffold: Containerfile"
+<<- end >>
 ---
 <<- end >>
 <<- if eq $runtime "python3.12" >>
+<<- if not (has "src-repo-host-json" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -212,7 +221,9 @@ spec:
         }
       }
     commitMessage: "AzureFunction scaffold: host.json"
+<<- end >>
 ---
+<<- if not (has "src-repo-function-app" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -239,7 +250,9 @@ spec:
       def hello(req: func.HttpRequest) -> func.HttpResponse:
           return func.HttpResponse('{"message": "Hello from <<$xrName>>"}', mimetype="application/json")
     commitMessage: "AzureFunction scaffold: function_app.py"
+<<- end >>
 ---
+<<- if not (has "src-repo-requirements" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -259,9 +272,11 @@ spec:
     content: |
       azure-functions
     commitMessage: "AzureFunction scaffold: requirements.txt"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -286,8 +301,10 @@ spec:
       RUN pip install --no-cache-dir -r /requirements.txt
       COPY host.json function_app.py /home/site/wwwroot/
     commitMessage: "AzureFunction scaffold: Containerfile"
+<<- end >>
 ---
 <<- end >>
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -311,7 +328,9 @@ spec:
       .env
       local.settings.json
     commitMessage: "AzureFunction scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -350,3 +369,5 @@ spec:
 
       The image is built for amd64 only: Microsoft's Functions base images are not published for arm64.
     commitMessage: "AzureFunction scaffold: README.md"
+
+<<- end >>

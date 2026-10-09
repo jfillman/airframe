@@ -110,6 +110,7 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
+<<- if not (has "src-repo-go-mod" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -131,7 +132,9 @@ spec:
 
       go <<$goVersion>>
     commitMessage: "GoApplication scaffold: go.mod"
+<<- end >>
 ---
+<<- if not (has "src-repo-main-go" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -177,9 +180,11 @@ spec:
       	log.Fatal(http.ListenAndServe(":"+port, nil))
       }
     commitMessage: "GoApplication scaffold: main.go"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -228,7 +233,9 @@ spec:
       EXPOSE <<$port>>
       CMD ["./app"]
     commitMessage: "GoApplication scaffold: Containerfile"
+<<- end >>
 ---
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -250,7 +257,9 @@ spec:
       *.log
       .env
     commitMessage: "GoApplication scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -283,3 +292,5 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "GoApplication scaffold: README.md"
+
+<<- end >>

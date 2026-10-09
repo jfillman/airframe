@@ -1,0 +1,23 @@
+# xr-python.yaml plus the scaffold ledger as it stands once every scaffold file of the python
+# render has been seen Ready and recorded (status.scaffold.done). The render for this XR must compose
+# NONE of those files (scaffold once, reconcile never) and must carry the ledger forward unchanged.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AzureFunction
+metadata:
+  name: thumb-py
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: python3.12
+  resourceGroup: glidepath-smoke
+  visibility: private
+status:
+  scaffold:
+    done:
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-function-app
+    - src-repo-gitignore
+    - src-repo-host-json
+    - src-repo-readme
+    - src-repo-requirements

@@ -1,0 +1,155 @@
+# --observed-resources fixture for the scaffold-ledger cases (see ../README.md and
+# compositions/_shared/render-github-resources/00-scaffold-done.yaml): every create-once RepositoryFile
+# of the python render, as provider-github reports it once the file is written (Ready=True). The
+# render that sees this must still compose all of them (a file leaves the render only on the reconcile
+# AFTER it enters the ledger) and must write all their names into status.scaffold.done.
+# Generated from expected/python.yaml; regenerate rather than hand-edit if the scaffold set changes.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-app-py
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-app-py
+    crossplane.io/external-name: 'resize-py:app.py:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: app.py
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-cicd-yaml
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-cicd-yaml
+    crossplane.io/external-name: 'resize-py:cicd.yaml:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: cicd.yaml
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-dockerfile
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-dockerfile
+    crossplane.io/external-name: 'resize-py:Containerfile:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: Containerfile
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-gitignore
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-gitignore
+    crossplane.io/external-name: 'resize-py:.gitignore:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: .gitignore
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-readme
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-readme
+    crossplane.io/external-name: 'resize-py:README.md:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: README.md
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: resize-py-src-requirements
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-requirements
+    crossplane.io/external-name: 'resize-py:requirements.txt:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: resize-py
+    file: requirements.txt
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess

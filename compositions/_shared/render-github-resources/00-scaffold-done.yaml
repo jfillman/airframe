@@ -1,0 +1,26 @@
+# SHARED PARTIAL (compositions/_shared/render-github-resources/00-scaffold-done.yaml). Variables only;
+# no output. Spliced before any scaffold document (00- prefix) so every create-once RepositoryFile in
+# the step can ask "was I already scaffolded?".
+#
+# $scaffoldDone is the XR's scaffold ledger: status.scaffold.done, the composition-resource-names of
+# every create-once RepositoryFile (managementPolicies without "Update") this XR has already seen
+# reach Ready. zz-scaffold-ledger.yaml (same directory) writes it; a create-once document wraps itself
+# in `if not (has "<its name>" $scaffoldDone)` so it stops being composed once it is in the ledger,
+# and Crossplane then deletes the managed resource - with no "Delete" policy the GitHub file stays.
+# "Scaffold once, reconcile never": the file is real developer source after that first write, so
+# there is nothing for the provider to observe every poll, and a later composition change to the
+# template (or to the resource's identity fields) cannot touch an already-scaffolded repo.
+#
+# Why a ledger and not "compose until observed Ready, then stop": that was tried (2026-09-23 canary)
+# and loops - stop composing, Crossplane deletes the MR, the next reconcile observes nothing and
+# cannot tell "already scaffolded" from "brand new", so it creates again. The ledger is the durable
+# memory. It lives in XR status (declared in the XRD, so the API server keeps it), is re-emitted on
+# every reconcile as (observed ledger) UNION (create-once files observed Ready now), and a file is
+# only dropped from the render on the reconcile AFTER it entered the ledger - so the ledger write
+# always lands before the managed resource goes away.
+#
+# Cluster rebuild (XR status lost): the ledger is empty, every scaffold file is composed again, and
+# the pinned external-name makes the provider adopt the existing GitHub file (Observe, no write) -
+# then it is Ready, enters the ledger, and retires again. Zero GitHub writes, two reconciles.
+<<- $scaffoldDone := dig "status" "scaffold" "done" list .observed.composite.resource >>
+<<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>

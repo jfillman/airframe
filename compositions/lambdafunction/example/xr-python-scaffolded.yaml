@@ -1,0 +1,22 @@
+# xr-python.yaml plus the scaffold ledger as it stands once every scaffold file of the python
+# render has been seen Ready and recorded (status.scaffold.done). The render for this XR must compose
+# NONE of those files (scaffold once, reconcile never) and must carry the ledger forward unchanged.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: LambdaFunction
+metadata:
+  name: resize-py
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  runtime: python3.13
+  region: us-east-1
+  visibility: private
+status:
+  scaffold:
+    done:
+    - src-repo-app-py
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-readme
+    - src-repo-requirements

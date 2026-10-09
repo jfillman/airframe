@@ -1,0 +1,53 @@
+# Mid-rollout ledger case: README just reached Ready (enters the ledger this reconcile), the
+# Containerfile is still Creating (stays composed, not ledgered), .gitignore / cicd.yaml / the gitops
+# README are not observed at all yet. package.json and index.js are already in the XR's ledger
+# (xr-defaults-partial.yaml) and must not render.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-readme
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-readme
+    crossplane.io/external-name: 'widget-service:README.md:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: README.md
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-dockerfile
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-dockerfile
+    crossplane.io/external-name: 'widget-service:Containerfile:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: Containerfile
+status:
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: Creating
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess

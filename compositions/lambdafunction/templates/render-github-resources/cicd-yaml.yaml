@@ -22,6 +22,7 @@
 <<- $agent := "nodejs-22" >>
 <<- if eq $runtime "python3.13" >><<- $agent = "python-3.13" >><<- end >>
 <<- if eq $runtime "go" >><<- $agent = "go-1.24" >><<- end >>
+<<- if not (has "src-repo-cicd-yaml" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -83,3 +84,5 @@ spec:
         backstage:
           enabled: true # build/deploy results show in Backstage and Tower
     commitMessage: "LambdaFunction scaffold: cicd.yaml (build + deploy-to-Lambda starter)"
+
+<<- end >>

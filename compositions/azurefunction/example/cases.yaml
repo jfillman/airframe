@@ -6,11 +6,11 @@ cases:
   xr: xr-defaults.yaml
 - name: defaults
   xr: xr-defaults.yaml
-  required:
+  required: &id001
   - cluster-registry-dev-ready.yaml
 - name: python
   xr: xr-python.yaml
-  required:
+  required: &id003
   - cluster-registry-dev-ready.yaml
 - name: with-target
   xr: xr-with-target.yaml
@@ -19,3 +19,43 @@ cases:
   expect:
     conditions:
       TargetReady: TargetPending
+- name: scaffold-ready
+  xr: xr-defaults.yaml
+  required: *id001
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    present: &id002
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-hello-js
+    - src-repo-host-json
+    - src-repo-package-json
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired
+  xr: xr-defaults-scaffolded.yaml
+  required: *id001
+  expect:
+    absent: *id002
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired-python
+  xr: xr-python-scaffolded.yaml
+  required: *id003
+  expect:
+    absent: &id004
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-function-app
+    - src-repo-gitignore
+    - src-repo-host-json
+    - src-repo-readme
+    - src-repo-requirements
+    status:
+      scaffold:
+        done: *id004

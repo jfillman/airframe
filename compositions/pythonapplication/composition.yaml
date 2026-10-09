@@ -103,6 +103,33 @@ spec:
             # (00-devcluster-gate, secretstore-xr, tekton-cicd-child are symlinks there). Variables only; no output.
             <<- $hasGitopsRepo := true >>
             ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-scaffold-done.yaml). Variables only;
+            # no output. Spliced before any scaffold document (00- prefix) so every create-once RepositoryFile in
+            # the step can ask "was I already scaffolded?".
+            #
+            # $scaffoldDone is the XR's scaffold ledger: status.scaffold.done, the composition-resource-names of
+            # every create-once RepositoryFile (managementPolicies without "Update") this XR has already seen
+            # reach Ready. zz-scaffold-ledger.yaml (same directory) writes it; a create-once document wraps itself
+            # in `if not (has "<its name>" $scaffoldDone)` so it stops being composed once it is in the ledger,
+            # and Crossplane then deletes the managed resource - with no "Delete" policy the GitHub file stays.
+            # "Scaffold once, reconcile never": the file is real developer source after that first write, so
+            # there is nothing for the provider to observe every poll, and a later composition change to the
+            # template (or to the resource's identity fields) cannot touch an already-scaffolded repo.
+            #
+            # Why a ledger and not "compose until observed Ready, then stop": that was tried (2026-09-23 canary)
+            # and loops - stop composing, Crossplane deletes the MR, the next reconcile observes nothing and
+            # cannot tell "already scaffolded" from "brand new", so it creates again. The ledger is the durable
+            # memory. It lives in XR status (declared in the XRD, so the API server keeps it), is re-emitted on
+            # every reconcile as (observed ledger) UNION (create-once files observed Ready now), and a file is
+            # only dropped from the render on the reconcile AFTER it entered the ledger - so the ledger write
+            # always lands before the managed resource goes away.
+            #
+            # Cluster rebuild (XR status lost): the ledger is empty, every scaffold file is composed again, and
+            # the pinned external-name makes the provider adopt the existing GitHub file (Observe, no write) -
+            # then it is Ready, enters the ledger, and retires again. Zero GitHub writes, two reconciles.
+            <<- $scaffoldDone := dig "status" "scaffold" "done" list .observed.composite.resource >>
+            <<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>
+            ---
             # Commits a minimal, real cicd.yaml (build, then deploy to dev) into this app's own src repo -
             # same fix, same reasoning, as nodejsapplication's own copy of this file (see
             # its header for the full write-up of the onboarding gap this closes).
@@ -124,6 +151,7 @@ spec:
             # cluster/gitops decision, so adding one stays a deliberate step in Tower.
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $pythonVersion := .observed.composite.resource.spec.pythonVersion >>
+            <<- if not (has "src-repo-cicd-yaml" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -174,6 +202,8 @@ spec:
                     backstage:
                       enabled: true # build/deploy results show in Backstage and Tower
                 commitMessage: "PythonApplication scaffold: cicd.yaml (build + deploy-to-dev starter)"
+
+            <<- end >>
             ---
             # Empty, scaffolded gitops-<app-name> repo - identical mechanism to
             # nodejsapplication's own gitops-repo.yaml (straight port, not a redesign). Just a
@@ -214,6 +244,7 @@ spec:
                     secretScanningPushProtection:
                       - status: disabled
             ---
+            <<- if not (has "gitops-repo-readme" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -240,6 +271,8 @@ spec:
                   resource is created - each environment gets its own `<cluster>/<env>/values.yaml`
                   here, rendered by `airframe-application` (Airframe's shared Helm chart).
                 commitMessage: "PythonApplication scaffold: README.md"
+
+            <<- end >>
             ---
             # SHARED PARTIAL (compositions/_shared/render-github-resources/secretstore-xr.yaml): every application composition's
             # templates/render-github-resources/secretstore-xr.yaml is a symlink to this file, so the six compositions cannot drift apart
@@ -435,6 +468,7 @@ spec:
                       - status: disabled
             ---
             <<- if eq $packageManager "pip" >>
+            <<- if not (has "src-repo-dependency-file" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -454,7 +488,9 @@ spec:
                 content: |
                   # No dependencies yet - main.py is stdlib-only.
                 commitMessage: "PythonApplication scaffold: requirements.txt"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-version-file" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -479,7 +515,9 @@ spec:
                 # VERSION file when no manifest has one; this seeds a real starting value instead of
                 # leaving a pip app to rediscover the gap the hard way.
                 commitMessage: "PythonApplication scaffold: VERSION"
+            <<- end >>
             <<- else >>
+            <<- if not (has "src-repo-dependency-file" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -505,7 +543,9 @@ spec:
                   dependencies = []
                 commitMessage: "PythonApplication scaffold: pyproject.toml"
             <<- end >>
+            <<- end >>
             ---
+            <<- if not (has "src-repo-main-py" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -549,9 +589,11 @@ spec:
                       print(<<printf "%s listening on port {}" $xrName | toJson>>.format(PORT))
                       server.serve_forever()
                 commitMessage: "PythonApplication scaffold: main.py"
+            <<- end >>
             ---
             <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
             <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+            <<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -597,7 +639,9 @@ spec:
                   EXPOSE <<$port>>
                   CMD ["python", "main.py"]
                 commitMessage: "PythonApplication scaffold: Containerfile"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-gitignore" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -620,7 +664,9 @@ spec:
                   .venv/
                   .env
                 commitMessage: "PythonApplication scaffold: .gitignore"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-readme" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -655,6 +701,8 @@ spec:
                   ApplicationSet has picked up this app's committed tenant identity yet. See the
                   resource's own status for details.
                 commitMessage: "PythonApplication scaffold: README.md"
+
+            <<- end >>
             ---
             # SHARED PARTIAL (compositions/_shared/render-github-resources/tekton-cicd-child.yaml): every application composition's
             # templates/render-github-resources/tekton-cicd-child.yaml is a symlink to this file, so the six compositions cannot drift apart
@@ -720,6 +768,37 @@ spec:
               <<- end >>
               <<- end >>
             ---
+            ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/zz-scaffold-ledger.yaml). Writes the
+            # XR's scaffold ledger (see 00-scaffold-done.yaml for the design). Spliced last (zz- prefix); it only
+            # reads observed state, so its position relative to the documents does not matter.
+            #
+            # A create-once RepositoryFile is recognised by its managementPolicies lacking "Update" - that is this
+            # catalog's documented meaning of "scaffold" (create-once-then-hands-off, see any src-repo.yaml header),
+            # so nothing has to be marked, and the Update-managed files (cluster-identity.yaml, secretstore XRs,
+            # tenant identity) are never ledgered or retired. An MR with no managementPolicies at all is the
+            # provider default "*" (everything, Update included) and is left alone too.
+            #
+            # The ledger is emitted on every reconcile, even when empty, so it never depends on how Crossplane
+            # merges a status field the pipeline did not set this time.
+            <<- $ledger := list >>
+            <<- range $rn, $o := (.observed.resources | default dict) >>
+              <<- $res := index $o "resource" | default dict >>
+              <<- if eq (index $res "kind" | default "") "RepositoryFile" >>
+                <<- $pol := dig "spec" "managementPolicies" list $res >>
+                <<- if and (gt (len $pol) 0) (not (has "Update" $pol)) >>
+                  <<- range (dig "status" "conditions" list $res) >>
+                    <<- if and (eq .type "Ready") (eq .status "True") >><<- $ledger = append $ledger $rn >><<- end >>
+                  <<- end >>
+                <<- end >>
+              <<- end >>
+            <<- end >>
+            <<- $scaffoldDoneNow := concat $scaffoldDone $ledger | uniq | sortAlpha >>
+            apiVersion: <<.observed.composite.resource.apiVersion>>
+            kind: <<.observed.composite.resource.kind>>
+            status:
+              scaffold:
+                done: <<$scaffoldDoneNow | toJson>>
             ---
         delims:
           left: "<<"

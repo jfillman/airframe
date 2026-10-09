@@ -41,6 +41,7 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
+<<- if not (has "gitops-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -71,3 +72,5 @@ spec:
       resource is created - each environment gets its own `<cluster>/<env>/values.yaml`
       here, rendered by `airframe-application` (Airframe's shared Helm chart).
     commitMessage: "NodeJSApplication scaffold: README.md"
+
+<<- end >>

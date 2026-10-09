@@ -83,6 +83,7 @@ spec:
           - status: disabled
 ---
 <<- if eq $runtime "nodejs22" >>
+<<- if not (has "src-repo-package-json" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -107,7 +108,9 @@ spec:
         "main": "index.mjs"
       }
     commitMessage: "LambdaFunction scaffold: package.json"
+<<- end >>
 ---
+<<- if not (has "src-repo-index-mjs" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -133,9 +136,11 @@ spec:
         };
       };
     commitMessage: "LambdaFunction scaffold: index.mjs"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -157,9 +162,11 @@ spec:
       COPY package.json index.mjs ${LAMBDA_TASK_ROOT}/
       CMD ["index.handler"]
     commitMessage: "LambdaFunction scaffold: Containerfile"
+<<- end >>
 ---
 <<- end >>
 <<- if eq $runtime "python3.13" >>
+<<- if not (has "src-repo-app-py" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -187,7 +194,9 @@ spec:
               "body": json.dumps({"message": "Hello from <<$xrName>>", "path": event.get("rawPath")}),
           }
     commitMessage: "LambdaFunction scaffold: app.py"
+<<- end >>
 ---
+<<- if not (has "src-repo-requirements" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -207,9 +216,11 @@ spec:
     content: |
       # runtime dependencies, one per line
     commitMessage: "LambdaFunction scaffold: requirements.txt"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -233,9 +244,11 @@ spec:
       COPY app.py ${LAMBDA_TASK_ROOT}/
       CMD ["app.handler"]
     commitMessage: "LambdaFunction scaffold: Containerfile"
+<<- end >>
 ---
 <<- end >>
 <<- if eq $runtime "go" >>
+<<- if not (has "src-repo-go-mod" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -259,7 +272,9 @@ spec:
 
       require github.com/aws/aws-lambda-go v1.47.0
     commitMessage: "LambdaFunction scaffold: go.mod"
+<<- end >>
 ---
+<<- if not (has "src-repo-main-go" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -300,9 +315,11 @@ spec:
       	lambda.Start(handler)
       }
     commitMessage: "LambdaFunction scaffold: main.go"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -329,8 +346,10 @@ spec:
       COPY --from=build /out/main ./main
       ENTRYPOINT ["./main"]
     commitMessage: "LambdaFunction scaffold: Containerfile"
+<<- end >>
 ---
 <<- end >>
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -354,7 +373,9 @@ spec:
       *.log
       .env
     commitMessage: "LambdaFunction scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -394,3 +415,5 @@ spec:
       **Known gap:** Lambda can only pull from Amazon ECR, and Glidepath currently pushes every image to
       `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
     commitMessage: "LambdaFunction scaffold: README.md"
+
+<<- end >>

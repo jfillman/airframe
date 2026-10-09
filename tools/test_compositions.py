@@ -11,6 +11,14 @@ Each composition with an example/ directory declares its cases in example/cases.
         expect:                                       # optional, readable assertions on top of the golden file
           conditions: {TargetReady: AwsLambdaTargetReady}   # condition type -> reason
           fatal: false                                      # true: the pipeline must return a fatal result
+          present: [src-repo-readme]                        # composition-resource-names that must render
+          absent: [src-repo-package-json]                   # ... and that must not
+          status: {scaffold: {done: [src-repo-readme]}}     # subset the XR's rendered status must contain
+
+Invariants checked on every case, whatever the expectation file says: every composed resource has an
+apiVersion and a kind, and a create-once RepositoryFile (managementPolicies without "Update") whose name
+is already in the XR's status.scaffold.done is never rendered again (the scaffold ledger, review C4; see
+compositions/_shared/render-github-resources/00-scaffold-done.yaml).
 
 The render is normalized (composed resources sorted by composition-resource-name with apiVersion,
 kind, metadata.name/namespace/labels/annotations minus what Crossplane adds, and spec; the XR's
@@ -250,6 +258,13 @@ def load_cases(comp_dir: Path) -> list[dict]:
     return cases
 
 
+def is_subset(want, got) -> bool:
+    """Every key/value in `want` appears in `got` (recursively for mappings; lists must be equal)."""
+    if isinstance(want, dict):
+        return isinstance(got, dict) and all(k in got and is_subset(v, got[k]) for k, v in want.items())
+    return want == got
+
+
 def dump(obj) -> str:
     return yaml.safe_dump(obj, sort_keys=True, default_flow_style=False, width=120)
 
@@ -278,6 +293,24 @@ def check_case(comp_dir: Path, case: dict, renderer: str, update: bool) -> list[
         for k in ("apiVersion", "kind"):
             if not r.get(k):
                 problems.append(f"{case['name']}: composed resource {r['name']!r} has no {k}")
+    # Scaffold ledger (review C4): a create-once RepositoryFile already recorded in the observed XR's
+    # status.scaffold.done must not be composed again - that is the whole point of the ledger, and it is
+    # what the 2026-09-23 canary loop would have tripped on had this check existed.
+    xr_in = yaml.safe_load((comp_dir / "example" / case["xr"]).read_text()) or {}
+    ledger = set((((xr_in.get("status") or {}).get("scaffold") or {}).get("done")) or [])
+    for r in actual["resources"]:
+        pol = ((r.get("spec") or {}).get("managementPolicies")) or []
+        if r.get("kind") == "RepositoryFile" and r["name"] in ledger and pol and "Update" not in pol:
+            problems.append(f"{case['name']}: create-once RepositoryFile {r['name']!r} is in status.scaffold.done but rendered again")
+    names = {r["name"] for r in actual["resources"]}
+    for n in expect.get("present") or []:
+        if n not in names:
+            problems.append(f"{case['name']}: resource {n!r} expected present, not rendered")
+    for n in expect.get("absent") or []:
+        if n in names:
+            problems.append(f"{case['name']}: resource {n!r} expected absent, but rendered")
+    if expect.get("status") is not None and not is_subset(expect["status"], actual["xr"]["status"]):
+        problems.append(f"{case['name']}: XR status {dump(actual['xr']['status']).strip()!r} does not contain expected {dump(expect['status']).strip()!r}")
     got = {c["type"]: c.get("reason") for c in actual["xr"]["conditions"]}
     for ctype, reason in (expect.get("conditions") or {}).items():
         if got.get(ctype) != reason:

@@ -19,6 +19,7 @@
 # cluster/gitops decision, so adding one stays a deliberate step in Tower.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $pythonVersion := .observed.composite.resource.spec.pythonVersion >>
+<<- if not (has "src-repo-cicd-yaml" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -69,3 +70,5 @@ spec:
         backstage:
           enabled: true # build/deploy results show in Backstage and Tower
     commitMessage: "PythonApplication scaffold: cicd.yaml (build + deploy-to-dev starter)"
+
+<<- end >>

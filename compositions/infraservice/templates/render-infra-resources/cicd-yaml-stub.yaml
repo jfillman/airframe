@@ -28,6 +28,7 @@
 # same reasoning as gitops-repo.yaml (this same directory), which this file always
 # follows: neither commits into $tenantsRepo or needs any devCluster registry data
 # to resolve, so there's nothing for the gate to actually protect here.
+<<- if not (has "cicd-yaml-stub" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -52,3 +53,5 @@ spec:
       build:
         agent: nodejs-20
     commitMessage: "InfraService scaffold: cicd.yaml (no pipeline stages - this service has no source code)"
+
+<<- end >>

@@ -6,15 +6,15 @@ cases:
   xr: xr-defaults.yaml
 - name: defaults
   xr: xr-defaults.yaml
-  required:
+  required: &id001
   - cluster-registry-dev-ready.yaml
 - name: go
   xr: xr-go.yaml
-  required:
+  required: &id003
   - cluster-registry-dev-ready.yaml
 - name: python
   xr: xr-python.yaml
-  required:
+  required: &id005
   - cluster-registry-dev-ready.yaml
 - name: with-target-pending
   xr: xr-with-target.yaml
@@ -32,3 +32,55 @@ cases:
   expect:
     conditions:
       TargetReady: AwsLambdaTargetReady
+- name: scaffold-ready
+  xr: xr-defaults.yaml
+  required: *id001
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    present: &id002
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-index-mjs
+    - src-repo-package-json
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired
+  xr: xr-defaults-scaffolded.yaml
+  required: *id001
+  expect:
+    absent: *id002
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired-go
+  xr: xr-go-scaffolded.yaml
+  required: *id003
+  expect:
+    absent: &id004
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-go-mod
+    - src-repo-main-go
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id004
+- name: scaffold-retired-python
+  xr: xr-python-scaffolded.yaml
+  required: *id005
+  expect:
+    absent: &id006
+    - src-repo-app-py
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-readme
+    - src-repo-requirements
+    status:
+      scaffold:
+        done: *id006

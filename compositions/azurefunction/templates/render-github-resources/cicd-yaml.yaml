@@ -17,6 +17,7 @@
 <<- $appName := .observed.composite.resource.spec.appName | default $xrName >>
 <<- $agent := "nodejs-20" >>
 <<- if eq $runtime "python3.12" >><<- $agent = "python-3.12" >><<- end >>
+<<- if not (has "src-repo-cicd-yaml" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -75,3 +76,5 @@ spec:
         backstage:
           enabled: true # build/deploy results show in Backstage and Tower
     commitMessage: "AzureFunction scaffold: cicd.yaml (build + deploy-to-Container-Apps starter)"
+
+<<- end >>

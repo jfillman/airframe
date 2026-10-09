@@ -102,6 +102,33 @@ spec:
             # (00-devcluster-gate, secretstore-xr, tekton-cicd-child are symlinks there). Variables only; no output.
             <<- $hasGitopsRepo := false >>
             ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-scaffold-done.yaml). Variables only;
+            # no output. Spliced before any scaffold document (00- prefix) so every create-once RepositoryFile in
+            # the step can ask "was I already scaffolded?".
+            #
+            # $scaffoldDone is the XR's scaffold ledger: status.scaffold.done, the composition-resource-names of
+            # every create-once RepositoryFile (managementPolicies without "Update") this XR has already seen
+            # reach Ready. zz-scaffold-ledger.yaml (same directory) writes it; a create-once document wraps itself
+            # in `if not (has "<its name>" $scaffoldDone)` so it stops being composed once it is in the ledger,
+            # and Crossplane then deletes the managed resource - with no "Delete" policy the GitHub file stays.
+            # "Scaffold once, reconcile never": the file is real developer source after that first write, so
+            # there is nothing for the provider to observe every poll, and a later composition change to the
+            # template (or to the resource's identity fields) cannot touch an already-scaffolded repo.
+            #
+            # Why a ledger and not "compose until observed Ready, then stop": that was tried (2026-09-23 canary)
+            # and loops - stop composing, Crossplane deletes the MR, the next reconcile observes nothing and
+            # cannot tell "already scaffolded" from "brand new", so it creates again. The ledger is the durable
+            # memory. It lives in XR status (declared in the XRD, so the API server keeps it), is re-emitted on
+            # every reconcile as (observed ledger) UNION (create-once files observed Ready now), and a file is
+            # only dropped from the render on the reconcile AFTER it entered the ledger - so the ledger write
+            # always lands before the managed resource goes away.
+            #
+            # Cluster rebuild (XR status lost): the ledger is empty, every scaffold file is composed again, and
+            # the pinned external-name makes the provider adopt the existing GitHub file (Observe, no write) -
+            # then it is Ready, enters the ledger, and retires again. Zero GitHub writes, two reconciles.
+            <<- $scaffoldDone := dig "status" "scaffold" "done" list .observed.composite.resource >>
+            <<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>
+            ---
             # Commits a minimal, real cicd.yaml into the function's own src repo: build, then deploy to the
             # existing Lambda function (deploy.target: aws-lambda). Same mechanism as goapplication's copy.
             #
@@ -126,6 +153,7 @@ spec:
             <<- $agent := "nodejs-22" >>
             <<- if eq $runtime "python3.13" >><<- $agent = "python-3.13" >><<- end >>
             <<- if eq $runtime "go" >><<- $agent = "go-1.24" >><<- end >>
+            <<- if not (has "src-repo-cicd-yaml" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -187,6 +215,8 @@ spec:
                     backstage:
                       enabled: true # build/deploy results show in Backstage and Tower
                 commitMessage: "LambdaFunction scaffold: cicd.yaml (build + deploy-to-Lambda starter)"
+
+            <<- end >>
             ---
             # SHARED PARTIAL (compositions/_shared/render-github-resources/secretstore-xr.yaml): every application composition's
             # templates/render-github-resources/secretstore-xr.yaml is a symlink to this file, so the six compositions cannot drift apart
@@ -344,6 +374,7 @@ spec:
                       - status: disabled
             ---
             <<- if eq $runtime "nodejs22" >>
+            <<- if not (has "src-repo-package-json" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -368,7 +399,9 @@ spec:
                     "main": "index.mjs"
                   }
                 commitMessage: "LambdaFunction scaffold: package.json"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-index-mjs" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -394,9 +427,11 @@ spec:
                     };
                   };
                 commitMessage: "LambdaFunction scaffold: index.mjs"
+            <<- end >>
             ---
             <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
             <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+            <<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -418,9 +453,11 @@ spec:
                   COPY package.json index.mjs ${LAMBDA_TASK_ROOT}/
                   CMD ["index.handler"]
                 commitMessage: "LambdaFunction scaffold: Containerfile"
+            <<- end >>
             ---
             <<- end >>
             <<- if eq $runtime "python3.13" >>
+            <<- if not (has "src-repo-app-py" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -448,7 +485,9 @@ spec:
                           "body": json.dumps({"message": "Hello from <<$xrName>>", "path": event.get("rawPath")}),
                       }
                 commitMessage: "LambdaFunction scaffold: app.py"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-requirements" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -468,9 +507,11 @@ spec:
                 content: |
                   # runtime dependencies, one per line
                 commitMessage: "LambdaFunction scaffold: requirements.txt"
+            <<- end >>
             ---
             <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
             <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+            <<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -494,9 +535,11 @@ spec:
                   COPY app.py ${LAMBDA_TASK_ROOT}/
                   CMD ["app.handler"]
                 commitMessage: "LambdaFunction scaffold: Containerfile"
+            <<- end >>
             ---
             <<- end >>
             <<- if eq $runtime "go" >>
+            <<- if not (has "src-repo-go-mod" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -520,7 +563,9 @@ spec:
 
                   require github.com/aws/aws-lambda-go v1.47.0
                 commitMessage: "LambdaFunction scaffold: go.mod"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-main-go" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -561,9 +606,11 @@ spec:
                   	lambda.Start(handler)
                   }
                 commitMessage: "LambdaFunction scaffold: main.go"
+            <<- end >>
             ---
             <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
             <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+            <<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -590,8 +637,10 @@ spec:
                   COPY --from=build /out/main ./main
                   ENTRYPOINT ["./main"]
                 commitMessage: "LambdaFunction scaffold: Containerfile"
+            <<- end >>
             ---
             <<- end >>
+            <<- if not (has "src-repo-gitignore" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -615,7 +664,9 @@ spec:
                   *.log
                   .env
                 commitMessage: "LambdaFunction scaffold: .gitignore"
+            <<- end >>
             ---
+            <<- if not (has "src-repo-readme" $scaffoldDone) >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
             metadata:
@@ -655,6 +706,8 @@ spec:
                   **Known gap:** Lambda can only pull from Amazon ECR, and Glidepath currently pushes every image to
                   `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
                 commitMessage: "LambdaFunction scaffold: README.md"
+
+            <<- end >>
             ---
             # Opt-in (spec.target.enabled, 2026-10-08): composes an AwsLambdaTarget child - the ECR repository,
             # execution role, bootstrap, function and public URL this app deploys into - from this XR's own
@@ -749,6 +802,37 @@ spec:
               <<- end >>
               <<- end >>
             ---
+            ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/zz-scaffold-ledger.yaml). Writes the
+            # XR's scaffold ledger (see 00-scaffold-done.yaml for the design). Spliced last (zz- prefix); it only
+            # reads observed state, so its position relative to the documents does not matter.
+            #
+            # A create-once RepositoryFile is recognised by its managementPolicies lacking "Update" - that is this
+            # catalog's documented meaning of "scaffold" (create-once-then-hands-off, see any src-repo.yaml header),
+            # so nothing has to be marked, and the Update-managed files (cluster-identity.yaml, secretstore XRs,
+            # tenant identity) are never ledgered or retired. An MR with no managementPolicies at all is the
+            # provider default "*" (everything, Update included) and is left alone too.
+            #
+            # The ledger is emitted on every reconcile, even when empty, so it never depends on how Crossplane
+            # merges a status field the pipeline did not set this time.
+            <<- $ledger := list >>
+            <<- range $rn, $o := (.observed.resources | default dict) >>
+              <<- $res := index $o "resource" | default dict >>
+              <<- if eq (index $res "kind" | default "") "RepositoryFile" >>
+                <<- $pol := dig "spec" "managementPolicies" list $res >>
+                <<- if and (gt (len $pol) 0) (not (has "Update" $pol)) >>
+                  <<- range (dig "status" "conditions" list $res) >>
+                    <<- if and (eq .type "Ready") (eq .status "True") >><<- $ledger = append $ledger $rn >><<- end >>
+                  <<- end >>
+                <<- end >>
+              <<- end >>
+            <<- end >>
+            <<- $scaffoldDoneNow := concat $scaffoldDone $ledger | uniq | sortAlpha >>
+            apiVersion: <<.observed.composite.resource.apiVersion>>
+            kind: <<.observed.composite.resource.kind>>
+            status:
+              scaffold:
+                done: <<$scaffoldDoneNow | toJson>>
             ---
         delims:
           left: "<<"

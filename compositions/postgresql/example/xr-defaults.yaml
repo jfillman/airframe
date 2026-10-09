@@ -1,0 +1,8 @@
+apiVersion: catalog.hangar.io/v1alpha1
+kind: PostgreSQL
+metadata:
+  name: checkin-db
+  namespace: app-flights-dev
+spec:
+  environmentRef:
+    name: flights-kind-dev-dev

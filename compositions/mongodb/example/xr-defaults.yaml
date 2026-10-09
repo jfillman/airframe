@@ -1,0 +1,9 @@
+# A MongoDB component as airframe-application's components renderer requests it: one member, defaults.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: MongoDB
+metadata:
+  name: baggage-db
+  namespace: app-flights-dev
+spec:
+  environmentRef:
+    name: flights-kind-dev-dev

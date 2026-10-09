@@ -1,0 +1,21 @@
+# Sloth finished: promOpRulesGenerated is what the readiness rule in
+# compositions/_shared/readiness-context.yaml reads (the CRD never sets a Ready condition). The
+# dashboard ConfigMap exists (a built-in function-auto-ready kind), so the composite turns Ready.
+apiVersion: sloth.slok.dev/v1
+kind: PrometheusServiceLevel
+metadata:
+  name: checkout-availability-slo
+  annotations:
+    crossplane.io/composition-resource-name: prometheusservicelevel
+status:
+  promOpRulesGenerated: true
+  processedSLOs: 1
+  promOpRulesGeneratedSLOs: 1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: checkout-availability-slo-dashboard
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: dashboard-configmap

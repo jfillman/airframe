@@ -98,7 +98,6 @@ metadata:
   namespace: <<$ns>>
   annotations:
     <<setResourceNameAnnotation "connection">>
-    gotemplating.fn.crossplane.io/ready: "True"
   labels:
     <<- range $k, $v := $hangarLabels >>
     <<$k>>: <<$v | quote>>

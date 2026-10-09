@@ -41,17 +41,8 @@
   <<- end >>
 <<- end >>
 <<- $allowed := $spec.allowedNamespaces | default list >>
-<<- /* A RabbitmqCluster has no `Ready` condition (it reports AllReplicasReady), so
-       function-auto-ready would wait on it forever (seen live): mark it ready from the
-       observed condition instead. */ ->>
-<<- $ready := "False" >>
-<<- with (index (.observed.resources | default dict) "cluster") >>
-  <<- range $c := (.resource.status.conditions | default list) >>
-    <<- if and (eq $c.type "AllReplicasReady") (eq $c.status "True") >>
-      <<- $ready = "True" >>
-    <<- end >>
-  <<- end >>
-<<- end >>
+<<- /* Readiness (AllReplicasReady, no Ready condition on a RabbitmqCluster) is a CEL rule in
+       compositions/_shared/readiness-context.yaml, read by the detect-ready step. */ ->>
 apiVersion: rabbitmq.com/v1beta1
 kind: RabbitmqCluster
 metadata:
@@ -59,7 +50,6 @@ metadata:
   namespace: <<$ns>>
   annotations:
     <<setResourceNameAnnotation "cluster">>
-    gotemplating.fn.crossplane.io/ready: <<$ready | quote>>
     <<- if $allowed >>
     rabbitmq.com/topology-allowed-namespaces: <<join "," $allowed | quote>>
     <<- end >>
@@ -118,7 +108,6 @@ metadata:
   namespace: <<$ns>>
   annotations:
     <<setResourceNameAnnotation "networkpolicy">>
-    gotemplating.fn.crossplane.io/ready: "True"
   labels:
     <<- range $k, $v := $hangarLabels >>
     <<$k>>: <<$v | quote>>

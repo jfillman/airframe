@@ -1,0 +1,26 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
+# (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
+# readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+cases:
+- name: broker-fresh
+  xr: xr-broker.yaml
+- name: broker-ready
+  xr: xr-broker.yaml
+  observed:
+  - observed-broker-ready.yaml
+  expect:
+    conditions:
+      Ready: Available
+- name: attach-fresh
+  xr: xr-attach.yaml
+  expect:
+    conditions:
+      ComponentReady: RabbitMQAttachProvisioning
+- name: attach-ready
+  xr: xr-attach.yaml
+  observed:
+  - observed-attach-ready.yaml
+  expect:
+    conditions:
+      ComponentReady: RabbitMQAttachReady
+      Ready: Available

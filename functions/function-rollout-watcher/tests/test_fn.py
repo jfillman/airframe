@@ -23,8 +23,11 @@ def make_req(  # noqa: PLR0913
     last_time=None,
     *,
     job_observed=False,
+    last_phase=None,
 ):
     status = {}
+    if last_phase:
+        status["rolloutPhase"] = last_phase
     if last_revision:
         status["lastDiagnosisRevision"] = last_revision
     if last_job:
@@ -82,6 +85,31 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
 
     async def run_fn(self, req):
         return await self.runner.RunFunction(req, None)
+
+    def normal_events(self, rsp):
+        return [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_NORMAL]
+
+    async def test_phase_event_only_when_the_phase_changes(self) -> None:
+        # C10: one Normal event per phase change, not per reconcile.
+        rsp = await self.run_fn(make_req("Healthy", last_phase="Progressing"))
+        self.assertEqual(
+            self.normal_events(rsp), ["Rollout baggage-api observed phase=Healthy"]
+        )
+        rsp = await self.run_fn(make_req("Healthy", last_phase="Healthy"))
+        self.assertEqual(self.normal_events(rsp), [])
+        rsp = await self.run_fn(make_req("Healthy"))  # first observation
+        self.assertEqual(len(self.normal_events(rsp)), 1)
+        # still degraded on an already-diagnosed revision: no repeat event either
+        rsp = await self.run_fn(
+            make_req(
+                "Degraded",
+                last_phase="Degraded",
+                last_revision="7466d56885",
+                last_job="diagnosis-baggage-api-7466d56885",
+                last_time=ago(10),
+            )
+        )
+        self.assertEqual(self.normal_events(rsp), [])
 
     async def test_first_degraded_revision_dispatches_a_full_job(self) -> None:
         rsp = await self.run_fn(make_req("Degraded"))

@@ -356,6 +356,10 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             }.items()
             if v is not None
         }
+        # C10 (review 2026-10-08): a Normal event only when the observed phase
+        # changes. One per reconcile gave a single RolloutWatch an event count
+        # of 6857 on dev, burying the Warning events (dispatches) that matter.
+        phase_changed = bool(phase) and phase != safe_get(prev_status, "rolloutPhase")
         if phase:
             new_status["rolloutPhase"] = phase
 
@@ -420,7 +424,8 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                     xr=xr_name,
                     phase=phase,
                 )
-            response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
+            if phase_changed:
+                response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
             log.info("watched rollout", xr=xr_name, phase=phase)
         else:
             # Still degraded on the same already-diagnosed revision, or the
@@ -471,7 +476,8 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                     )
                 )
                 rsp.desired.resources[job_key].ready = fnv1.READY_TRUE
-            response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
+            if phase_changed:
+                response.normal(rsp, f"Rollout {xr_name} observed phase={phase}")
             log.info("watched rollout", xr=xr_name, phase=phase)
 
         rsp.desired.composite.resource.update({"status": new_status})

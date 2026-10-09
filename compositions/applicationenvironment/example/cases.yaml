@@ -9,7 +9,7 @@ cases:
       ClusterReady: ClusterNotEligible
 - name: staging-springboot
   xr: xr-staging.yaml
-  required:
+  required: &id001
   - cluster-registry-ready.yaml
   - springboot-app-exists.yaml
   expect:
@@ -40,3 +40,26 @@ cases:
     conditions:
       ClusterReady: ClusterEligible
       AppResolved: AppNotFound
+- name: scaffold-ready
+  xr: xr-staging.yaml
+  required: *id001
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    conditions: &id003
+      ClusterReady: ClusterEligible
+      AppResolved: AppResolved
+    present: &id002
+    - values-yaml
+    status:
+      scaffold:
+        done: *id002
+- name: scaffold-retired
+  xr: xr-staging-scaffolded.yaml
+  required: *id001
+  expect:
+    conditions: *id003
+    absent: *id002
+    status:
+      scaffold:
+        done: *id002

@@ -335,4 +335,6 @@ xr:
     reason: Creating
     status: 'False'
     type: Ready
-  status: {}
+  status:
+    scaffold:
+      done: []

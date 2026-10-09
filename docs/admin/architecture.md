@@ -95,6 +95,13 @@ dependency-lock graph cluster-wide) plus a `function-auto-ready` step.
   app stack scaffolds one now, so onboarding is self-service end to end
   instead of stopping one manual step short of a runnable pipeline), the
   empty `gitops-<app>` repo, `identity.yaml`, release `values.yaml`.
+  Scaffold files (anything the developer owns after the first write: source
+  boilerplate, `cicd.yaml`, READMEs, the bootstrap `values.yaml`) are composed
+  only until they are observed Ready, then recorded in the XR's
+  `status.scaffold.done` and retired as managed resources while the GitHub file
+  stays ("scaffold once, reconcile never"; `compositions/_shared/README.md`).
+  Only the platform-owned files (`identity.yaml`, the SecretStore XR requests,
+  `cluster-identity.yaml`) remain managed and drift-corrected.
 - **Secrets** — `provider-infisical` + ESO. `Project`/`ProjectEnvironment`/
   `Identity`/`ProjectIdentity` managed resources, wrapped through
   `provider-kubernetes` into a real ESO `ClusterSecretStore`. Kubernetes Auth on

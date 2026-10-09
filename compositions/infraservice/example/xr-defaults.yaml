@@ -1,0 +1,11 @@
+# crossplane render doesn't run the XRD's own OpenAPI schema defaulting - this fixture spells out
+# the XRD's defaults explicitly (see ../../../xrds/infraservice.yaml).
+apiVersion: catalog.hangar.io/v1alpha1
+kind: InfraService
+metadata:
+  name: shared-cache
+  namespace: infra-services
+spec:
+  devCluster: kind-dev
+  description: Shared Redis for the demo tenants
+  visibility: private

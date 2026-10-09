@@ -294,4 +294,6 @@ xr:
     reason: AwsLambdaTargetReady
     status: 'True'
     type: TargetReady
-  status: {}
+  status:
+    scaffold:
+      done: []

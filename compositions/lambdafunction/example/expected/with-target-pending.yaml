@@ -294,4 +294,6 @@ xr:
     reason: TargetPending
     status: 'False'
     type: TargetReady
-  status: {}
+  status:
+    scaffold:
+      done: []

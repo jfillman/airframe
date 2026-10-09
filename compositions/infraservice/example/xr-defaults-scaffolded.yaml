@@ -1,0 +1,15 @@
+# xr-defaults.yaml plus the scaffold ledger once both files have been seen Ready: neither may render again.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: InfraService
+metadata:
+  name: shared-cache
+  namespace: infra-services
+spec:
+  devCluster: kind-dev
+  description: Shared Redis for the demo tenants
+  visibility: private
+status:
+  scaffold:
+    done:
+    - cicd-yaml-stub
+    - gitops-repo-readme

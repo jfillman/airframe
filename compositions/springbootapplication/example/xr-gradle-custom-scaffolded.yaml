@@ -1,0 +1,27 @@
+# xr-gradle-custom.yaml plus the scaffold ledger as it stands once every scaffold file of the gradle-custom
+# render has been seen Ready and recorded (status.scaffold.done). The render for this XR must compose
+# NONE of those files (scaffold once, reconcile never) and must carry the ledger forward unchanged.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: SpringBootApplication
+metadata:
+  name: checkout-payments
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  description: Payments service for the demo storefront
+  javaVersion: '17'
+  buildTool: gradle
+  groupId: com.example.storefront
+  port: 9090
+  visibility: public
+status:
+  scaffold:
+    done:
+    - gitops-repo-readme
+    - src-repo-application-java
+    - src-repo-application-properties
+    - src-repo-build-file
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-readme

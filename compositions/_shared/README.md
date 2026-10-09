@@ -70,3 +70,36 @@ tools (`tools/render-pipeline` header, the `compositions` CI job). A rule that e
 non-boolean counts as not ready and raises a Warning on the XR: loud, never a false Ready. Never add a
 `gotemplating.fn.crossplane.io/ready` annotation to a template again; add a rule here and a `ready` case
 with an observed fixture to the composition's `example/`.
+
+## Scaffold ledger (`render-github-resources/00-scaffold-done.yaml`, `zz-scaffold-ledger.yaml`)
+
+Review item C4, "scaffold once, reconcile never". Every application composition's GitHub step (and
+`infraservice`'s `render-infra-resources`, `applicationenvironment`'s `render-github-resources`) symlinks
+both files. A *scaffold* is a `RepositoryFile` whose `managementPolicies` has no `Update`: boilerplate
+source, `cicd.yaml`, READMEs, the gitops `values.yaml` - files the platform writes once and the developer
+owns afterwards. Before this, every one of them stayed a managed resource for the life of the XR (161 on
+kiac-dev, 101 of them scaffolds), observed by provider-github every poll and re-identified by every
+composition change to the template.
+
+- `00-scaffold-done.yaml` reads the XR's ledger, `status.scaffold.done`, into `$scaffoldDone`.
+- Every scaffold document wraps itself in `<<- if not (has "<its composition-resource-name>" $scaffoldDone) >>`
+  ... `<<- end >>` (right before its `apiVersion:`, closing before the next `---`/`else`/branch end).
+- `zz-scaffold-ledger.yaml` emits the XR status with `scaffold.done` = observed ledger UNION every scaffold
+  `RepositoryFile` observed `Ready=True` this reconcile, sorted and unique, on every reconcile.
+
+Why a ledger: "compose until Ready, then stop" was canaried on 2026-09-23 and looped (stop composing ->
+Crossplane deletes the MR -> next reconcile observes nothing -> "brand new" -> create again, ~800 GitHub
+calls in 4 minutes). The ledger is the durable memory, declared in each XRD's status schema so the API
+server keeps it. A file leaves the render only on the reconcile *after* it entered the ledger, so the
+status write always lands before the MR is garbage-collected; with no `Delete` policy the GitHub file
+stays. Cluster rebuild: ledger empty -> everything composes -> the pinned external-name adopts the
+existing file (Observe, no write) -> Ready -> ledgered -> retired. Zero writes, two reconciles.
+
+The harness enforces it: a create-once `RepositoryFile` named in the case XR's `status.scaffold.done`
+must not render (`tools/test_compositions.py`), and every composition has `scaffold-ready` /
+`scaffold-retired` cases (nodejs also `scaffold-partial`) built from observed-Ready fixtures.
+
+Adding a scaffold file: give it `managementPolicies: ["Create", "Observe", "LateInitialize"]`, a
+`setResourceNameAnnotation`, the pinned external-name, and the gate line pair. Forgetting the gate is
+safe (today's behaviour: composed forever, but also listed in the ledger); forgetting the policy makes
+it a managed file that is never retired.

@@ -158,6 +158,7 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
+<<- if not (has "src-repo-package-json" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -188,7 +189,9 @@ spec:
         }
       }
     commitMessage: "NodeJSApplication scaffold: package.json"
+<<- end >>
 ---
+<<- if not (has "src-repo-index-js" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -224,9 +227,11 @@ spec:
         console.log(<<printf "%s listening on port ${port}" $xrName | toJson>>);
       });
     commitMessage: "NodeJSApplication scaffold: index.js"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -274,7 +279,9 @@ spec:
       EXPOSE <<$port>>
       CMD ["node", "index.js"]
     commitMessage: "NodeJSApplication scaffold: Containerfile"
+<<- end >>
 ---
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -296,7 +303,9 @@ spec:
       .env
       *.log
     commitMessage: "NodeJSApplication scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -331,3 +340,5 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "NodeJSApplication scaffold: README.md"
+
+<<- end >>

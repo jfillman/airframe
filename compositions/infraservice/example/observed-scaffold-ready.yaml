@@ -1,0 +1,51 @@
+# --observed-resources fixture for the scaffold-ledger cases: both create-once files of the defaults render
+# as provider-github reports them once written (Ready=True). Generated from expected/defaults.yaml.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: shared-cache-gitops-infra-cicd-yaml
+  namespace: infra-services
+  annotations:
+    crossplane.io/composition-resource-name: cicd-yaml-stub
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: gitops-infra-shared-cache
+    file: cicd.yaml
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: shared-cache-gitops-infra-readme
+  namespace: infra-services
+  annotations:
+    crossplane.io/composition-resource-name: gitops-repo-readme
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: gitops-infra-shared-cache
+    file: README.md
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess

@@ -121,6 +121,7 @@ spec:
           - status: disabled
 ---
 <<- if eq $packageManager "pip" >>
+<<- if not (has "src-repo-dependency-file" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -140,7 +141,9 @@ spec:
     content: |
       # No dependencies yet - main.py is stdlib-only.
     commitMessage: "PythonApplication scaffold: requirements.txt"
+<<- end >>
 ---
+<<- if not (has "src-repo-version-file" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -165,7 +168,9 @@ spec:
     # VERSION file when no manifest has one; this seeds a real starting value instead of
     # leaving a pip app to rediscover the gap the hard way.
     commitMessage: "PythonApplication scaffold: VERSION"
+<<- end >>
 <<- else >>
+<<- if not (has "src-repo-dependency-file" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -191,7 +196,9 @@ spec:
       dependencies = []
     commitMessage: "PythonApplication scaffold: pyproject.toml"
 <<- end >>
+<<- end >>
 ---
+<<- if not (has "src-repo-main-py" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -235,9 +242,11 @@ spec:
           print(<<printf "%s listening on port {}" $xrName | toJson>>.format(PORT))
           server.serve_forever()
     commitMessage: "PythonApplication scaffold: main.py"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -283,7 +292,9 @@ spec:
       EXPOSE <<$port>>
       CMD ["python", "main.py"]
     commitMessage: "PythonApplication scaffold: Containerfile"
+<<- end >>
 ---
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -306,7 +317,9 @@ spec:
       .venv/
       .env
     commitMessage: "PythonApplication scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -341,3 +354,5 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "PythonApplication scaffold: README.md"
+
+<<- end >>

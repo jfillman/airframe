@@ -6,3 +6,42 @@ cases:
   xr: xr-defaults.yaml
 - name: gradle-custom
   xr: xr-gradle-custom.yaml
+- name: scaffold-ready
+  xr: xr-defaults.yaml
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    present: &id001
+    - gitops-repo-readme
+    - src-repo-application-java
+    - src-repo-application-properties
+    - src-repo-build-file
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id001
+- name: scaffold-retired
+  xr: xr-defaults-scaffolded.yaml
+  expect:
+    absent: *id001
+    status:
+      scaffold:
+        done: *id001
+- name: scaffold-retired-gradle
+  xr: xr-gradle-custom-scaffolded.yaml
+  expect:
+    absent: &id002
+    - gitops-repo-readme
+    - src-repo-application-java
+    - src-repo-application-properties
+    - src-repo-build-file
+    - src-repo-cicd-yaml
+    - src-repo-dockerfile
+    - src-repo-gitignore
+    - src-repo-readme
+    status:
+      scaffold:
+        done: *id002

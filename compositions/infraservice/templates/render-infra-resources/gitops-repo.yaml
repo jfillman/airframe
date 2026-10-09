@@ -43,6 +43,7 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
+<<- if not (has "gitops-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -77,3 +78,5 @@ spec:
       structural anchor platform-cicd's tenant-onboarding mechanism needs. See that
       file's own comment for why.
     commitMessage: "InfraService scaffold: README.md"
+
+<<- end >>

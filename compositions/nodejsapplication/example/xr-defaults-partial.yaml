@@ -1,0 +1,17 @@
+# xr-defaults.yaml with a partial scaffold ledger - see observed-scaffold-partial.yaml.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: NodeJSApplication
+metadata:
+  name: widget-service
+  namespace: demo-apps
+spec:
+  devCluster: kind-dev
+  nodeVersion: '20'
+  packageManager: npm
+  port: 8080
+  visibility: private
+status:
+  scaffold:
+    done:
+    - src-repo-index-js
+    - src-repo-package-json

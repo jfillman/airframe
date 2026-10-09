@@ -1,0 +1,180 @@
+# --observed-resources fixture for the scaffold-ledger cases (see ../README.md and
+# compositions/_shared/render-github-resources/00-scaffold-done.yaml): every create-once RepositoryFile
+# of the poetry-custom render, as provider-github reports it once the file is written (Ready=True). The
+# render that sees this must still compose all of them (a file leaves the render only on the reconcile
+# AFTER it enters the ledger) and must write all their names into status.scaffold.done.
+# Generated from expected/poetry-custom.yaml; regenerate rather than hand-edit if the scaffold set changes.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-gitops-readme
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: gitops-repo-readme
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: gitops-widget-service
+    file: README.md
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-cicd-yaml
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-cicd-yaml
+    crossplane.io/external-name: 'widget-service:cicd.yaml:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: cicd.yaml
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-pyproject-toml
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-dependency-file
+    crossplane.io/external-name: 'widget-service:pyproject.toml:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: pyproject.toml
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-dockerfile
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-dockerfile
+    crossplane.io/external-name: 'widget-service:Containerfile:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: Containerfile
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-gitignore
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-gitignore
+    crossplane.io/external-name: 'widget-service:.gitignore:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: .gitignore
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-main-py
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-main-py
+    crossplane.io/external-name: 'widget-service:main.py:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: main.py
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-src-readme
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: src-repo-readme
+    crossplane.io/external-name: 'widget-service:README.md:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: widget-service
+    file: README.md
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess

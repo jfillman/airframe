@@ -1,0 +1,16 @@
+# xr-staging.yaml plus the scaffold ledger as it stands once every scaffold file of the staging-springboot
+# render has been seen Ready and recorded (status.scaffold.done). The render for this XR must compose
+# NONE of those files (scaffold once, reconcile never) and must carry the ledger forward unchanged.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ApplicationEnvironment
+metadata:
+  name: widget-service-kind-prod-staging
+  namespace: demo-apps
+spec:
+  appName: widget-service
+  cluster: kind-prod
+  env: staging
+status:
+  scaffold:
+    done:
+    - values-yaml

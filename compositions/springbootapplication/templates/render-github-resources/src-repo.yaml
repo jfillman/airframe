@@ -144,6 +144,7 @@ spec:
           - status: disabled
 ---
 <<- if eq $buildTool "gradle" >>
+<<- if not (has "src-repo-build-file" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -185,7 +186,9 @@ spec:
           implementation 'org.springframework.boot:spring-boot-starter-actuator'
       }
     commitMessage: "SpringBootApplication scaffold: build.gradle"
+<<- end >>
 <<- else >>
+<<- if not (has "src-repo-build-file" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -247,7 +250,9 @@ spec:
       </project>
     commitMessage: "SpringBootApplication scaffold: pom.xml"
 <<- end >>
+<<- end >>
 ---
+<<- if not (has "src-repo-application-java" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -286,7 +291,9 @@ spec:
           }
       }
     commitMessage: "SpringBootApplication scaffold: Application.java"
+<<- end >>
 ---
+<<- if not (has "src-repo-application-properties" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -308,9 +315,11 @@ spec:
       server.port=${PORT:<<$port>>}
       management.endpoints.web.exposure.include=health,info
     commitMessage: "SpringBootApplication scaffold: application.properties"
+<<- end >>
 ---
 <<- $obsD := index (.observed.resources | default dict) "src-repo-dockerfile" >>
 <<- $pinnedFile := include "scaffoldFile" (dict "obs" $obsD "default" "Containerfile") >>
+<<- if not (has "src-repo-dockerfile" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -371,7 +380,9 @@ spec:
       EXPOSE <<$port>>
       CMD ["java", "-jar", "app.jar"]
     commitMessage: "SpringBootApplication scaffold: Containerfile"
+<<- end >>
 ---
+<<- if not (has "src-repo-gitignore" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -398,7 +409,9 @@ spec:
       *.log
       .env
     commitMessage: "SpringBootApplication scaffold: .gitignore"
+<<- end >>
 ---
+<<- if not (has "src-repo-readme" $scaffoldDone) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -442,3 +455,5 @@ spec:
       ApplicationSet has picked up this app's committed tenant identity yet. See the
       resource's own status for details.
     commitMessage: "SpringBootApplication scaffold: README.md"
+
+<<- end >>

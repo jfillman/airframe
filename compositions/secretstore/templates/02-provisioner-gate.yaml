@@ -51,12 +51,3 @@ requirements:
 # (rather than from the managed resource's connection details) so it is available to the
 # credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
 # unconditionally; on every other branch it simply matches nothing.
-apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
-kind: ExtraResources
-requirements:
-  ua-conn-secret:
-    apiVersion: v1
-    kind: Secret
-    namespace: <<.observed.composite.resource.metadata.namespace>>
-    matchName: <<printf "%s-ua-conn" $gateSlug>>
----

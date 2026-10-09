@@ -1,0 +1,12 @@
+# The cluster registry entry for the cluster that hosts Infisical: infisicalHost flips the SecretStore
+# composition onto its kubernetes-auth branch (00-infisical-host-gate.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-dev
+  namespace: crossplane-system
+data:
+  type: dev
+  cicdReady: "true"
+  infisicalHost: "true"
+  tenantsRepo: gitops-cluster-dev-tenants

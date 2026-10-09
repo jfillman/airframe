@@ -12,3 +12,14 @@ cases:
   xr: xr-checkout-api-staging.yaml
   required:
   - secretstore-provisioner.yaml
+- name: checkout-api-kubernetes-auth
+  xr: xr-checkout-api.yaml
+  required:
+  - cluster-registry-infisical-host.yaml
+  - kube-root-ca.yaml
+  observed:
+  - observed-identity.yaml
+- name: checkout-api-universal-creds
+  xr: xr-checkout-api.yaml
+  observed:
+  - observed-ua-client-secret.yaml

@@ -91,48 +91,38 @@ spec:
                 matchName: <<$spec.cluster>>
             ---
             ---
-            # Real Crossplane extra-resources lookup, same mechanism/convention as
-            # 00-infisical-host-gate.yaml (this same pipeline step - declared once, persists
-            # across --- separators for every later file in this directory).
+            # kubernetes-auth branch inputs (review C2, 2026-10-09): the cluster CA only.
             #
-            # Sources the exact same CA cert + TokenReview-capable service-account JWT the
-            # current hand-rolled operator already uses for its own Kubernetes Auth
-            # configuration (infisical-secretstore-operator's INFISICAL_K8S_CA_CERT/
-            # INFISICAL_K8S_TOKEN_REVIEWER_JWT env vars, both sourced from the same Secret -
-            # confirmed live via `kubectl get deployment infisical-secretstore-operator -o
-            # jsonpath=...`). Reused here rather than minted fresh: this Secret already exists,
-            # is already the credential ESO's TokenReview calls against Infisical are meant to
-            # validate against, and IdentityKubernetesAuth's own forProvider schema takes these
-            # as plain string fields (not SecretKeySelector references - upjet generated them
-            # straight from the Terraform provider's own plain-string schema), so the actual
-            # value has to be resolved at render time and inlined into the rendered CR - never
-            # committed to git, only ever appearing in the live rendered object in-cluster,
-            # same posture as every other live-value lookup in this catalog.
-            <<- $k8sSecretExtra := .extraResources | default dict >>
-            <<- $k8sSecretEntry := index $k8sSecretExtra "k8s-reviewer-secret" | default dict >>
-            <<- $k8sSecretItems := index $k8sSecretEntry "items" | default list >>
+            # Until 2026-10-09 this gate read the token-reviewer ServiceAccount Secret
+            # (infisical/infisical-token-reviewer-token) through ExtraResources and infisicalproject.yaml
+            # rendered its JWT into IdentityKubernetesAuth.spec.forProvider.tokenReviewerJwt: the long-lived
+            # token sat in etcd as plain CR spec, in every XR desired-state round trip and in every function
+            # request and response. Now the JWT never enters the function pipeline:
+            #   - the CA comes from the kube-root-ca.crt ConfigMap every namespace has (public material, same
+            #     bytes as the Secret's ca.crt);
+            #   - the token reaches the identity through a Secret in the XR's namespace that a provider-kubernetes
+            #     Object copies server-side from infisical/infisical-token-reviewer-token with
+            #     references[].patchesFrom (infisicalproject.yaml, infisical-token-reviewer-secret), and
+            #     IdentityKubernetesAuth points at it with tokenReviewerJwtSecretRef (provider-infisical >=
+            #     v0.0.0-8, where upjet marks the field sensitive).
+            # Missing ConfigMap (a namespace without kube-root-ca.crt does not exist on a supported cluster)
+            # renders an empty CA, which the provider rejects loudly rather than silently trusting nothing.
+            <<- $caExtra := .extraResources | default dict >>
+            <<- $caEntry := index $caExtra "kube-root-ca" | default dict >>
+            <<- $caItems := index $caEntry "items" | default list >>
             <<- $k8sCaCert := "" >>
-            <<- $k8sReviewerJwt := "" >>
-            <<- if gt (len $k8sSecretItems) 0 >>
-              <<- $k8sSecret := (index $k8sSecretItems 0).resource >>
-              <<- $k8sSecretData := index $k8sSecret "data" | default dict >>
-              <<- $caB64 := index $k8sSecretData "ca.crt" | default "" >>
-              <<- $jwtB64 := index $k8sSecretData "token" | default "" >>
-              <<- if ne $caB64 "" >>
-                <<- $k8sCaCert = $caB64 | b64dec >>
-              <<- end >>
-              <<- if ne $jwtB64 "" >>
-                <<- $k8sReviewerJwt = $jwtB64 | b64dec >>
-              <<- end >>
+            <<- if gt (len $caItems) 0 >>
+              <<- $caCm := (index $caItems 0).resource >>
+              <<- $k8sCaCert = index (index $caCm "data" | default dict) "ca.crt" | default "" >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:
-              k8s-reviewer-secret:
+              kube-root-ca:
                 apiVersion: v1
-                kind: Secret
-                namespace: infisical
-                matchName: infisical-token-reviewer-token
+                kind: ConfigMap
+                namespace: <<.observed.composite.resource.metadata.namespace>>
+                matchName: kube-root-ca.crt
             ---
             ---
             # Adoption ids for THIS (app, cluster) pair's Infisical project, read from an optional
@@ -188,15 +178,6 @@ spec:
             # (rather than from the managed resource's connection details) so it is available to the
             # credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
             # unconditionally; on every other branch it simply matches nothing.
-            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
-            kind: ExtraResources
-            requirements:
-              ua-conn-secret:
-                apiVersion: v1
-                kind: Secret
-                namespace: <<.observed.composite.resource.metadata.namespace>>
-                matchName: <<printf "%s-ua-conn" $gateSlug>>
-            ---
             ---
             # Rendered by function-go-templating (source: Inline, see composition.yaml/
             # build-composition.sh).
@@ -374,8 +355,11 @@ spec:
             # IdentityUniversalAuth, IdentityUniversalAuthClientSecret, ProjectIdentity, then the
             # same <slug>-infisical-creds Secret the operator writes (clientId + clientSecret), so
             # the ClusterSecretStores need no change. clientId comes from the client-secret
-            # resource's status.atProvider.clientId; clientSecret from its connection Secret
-            # (key attribute.client_secret), read through the ua-conn-secret ExtraResources lookup.
+            # resource's status.atProvider.clientId; clientSecret is copied into that Secret by
+            # provider-kubernetes itself (Object.spec.references[].patchesFrom from the <slug>-ua-conn
+            # connection Secret), so since 2026-10-09 (review C2) it is never read by, rendered by or
+            # carried through the function pipeline. The same pattern carries the kubernetes branch's
+            # token-reviewer JWT (infisical-token-reviewer-secret).
             #
             # NOT YET WIRED INTO THE LIVE CLUSTER'S REAL SECRETSTORE XRS: this Composition
             # change, once merged to main, would immediately re-render EVERY existing
@@ -487,7 +471,11 @@ spec:
                   name: <<$projectSlug>>
                 kubernetesHost: "https://kubernetes.default.svc.cluster.local"
                 kubernetesCaCertificate: <<$k8sCaCert | toJson>>
-                tokenReviewerJwt: <<$k8sReviewerJwt | toJson>>
+                # The reviewer JWT is read from a Secret in this namespace (the Object below copies it from
+                # infisical/infisical-token-reviewer-token server-side); it never appears in this spec.
+                tokenReviewerJwtSecretRef:
+                  name: <<printf "%s-token-reviewer" $projectSlug>>
+                  key: token
                 tokenReviewerMode: api
                 # Scoped to ESO's own controller ServiceAccount only - it presents its own
                 # in-pod projected token, matching clustersecretstore.yaml's own "zero
@@ -500,6 +488,36 @@ spec:
               providerConfigRef:
                 kind: ClusterProviderConfig
                 name: default
+            ---
+            apiVersion: kubernetes.m.crossplane.io/v1alpha1
+            kind: Object
+            metadata:
+              name: <<printf "%s-token-reviewer" $projectSlug>>
+              annotations:
+                <<setResourceNameAnnotation "infisical-token-reviewer-secret">>
+            spec:
+              # provider-kubernetes copies the token at apply time, server-side, from the host cluster's
+              # token-reviewer Secret into this namespace: the value is never in this manifest, this XR or any
+              # function payload. The placeholder key below is what patchesFrom overwrites.
+              references:
+                - patchesFrom:
+                    apiVersion: v1
+                    kind: Secret
+                    name: infisical-token-reviewer-token
+                    namespace: infisical
+                    fieldPath: data.token
+                  toFieldPath: data.token
+              forProvider:
+                manifest:
+                  apiVersion: v1
+                  kind: Secret
+                  metadata:
+                    name: <<printf "%s-token-reviewer" $projectSlug>>
+                    namespace: <<$xrNamespace>>
+                  type: Opaque
+                  data:
+                    token: ""
+              managementPolicies: ["*"]
             ---
               <<- else >>
             apiVersion: identity.infisical.m.hangar.io/v1alpha1
@@ -528,9 +546,9 @@ spec:
                   name: <<$projectSlug>>
                 description: <<printf "%s (managed by the SecretStore Composition)" $projectSlug | toJson>>
               # Same-namespace connection Secret (the namespaced MR writes into its own
-              # namespace, which is this XR's). Read back through 02-provisioner-gate.yaml's
-              # ua-conn-secret lookup; only key attribute.client_secret is published - the client
-              # id is not sensitive and comes from status.atProvider.clientId instead.
+              # namespace, which is this XR's). provider-kubernetes copies key attribute.client_secret
+              # out of it into <slug>-infisical-creds (the Object below, patchesFrom); nothing in this
+              # pipeline reads it. The client id is not sensitive and comes from status.atProvider.clientId.
               writeConnectionSecretToRef:
                 name: <<printf "%s-ua-conn" $projectSlug>>
               providerConfigRef:
@@ -607,7 +625,6 @@ spec:
                 <<- end >>
                 <<- else >>
                 <<- $uaClientId := "" >>
-                <<- $uaSecretB64 := "" >>
                 <<- if .observed.resources >>
                   <<- $obsCs := index .observed.resources "infisical-identity-ua-client-secret" >>
                   <<- if $obsCs >>
@@ -620,14 +637,7 @@ spec:
                     <<- end >>
                   <<- end >>
                 <<- end >>
-                <<- $uaExtra := .extraResources | default dict >>
-                <<- $uaEntry := index $uaExtra "ua-conn-secret" | default dict >>
-                <<- $uaItems := index $uaEntry "items" | default list >>
-                <<- if gt (len $uaItems) 0 >>
-                  <<- $uaData := index (index $uaItems 0).resource "data" | default dict >>
-                  <<- $uaSecretB64 = index $uaData "attribute.client_secret" | default "" >>
-                <<- end >>
-                <<- if and (ne $uaClientId "") (ne $uaSecretB64 "") >>
+                <<- if ne $uaClientId "" >>
             apiVersion: kubernetes.m.crossplane.io/v1alpha1
             kind: Object
             metadata:
@@ -635,6 +645,19 @@ spec:
               annotations:
                 <<setResourceNameAnnotation "infisical-identity-secret">>
             spec:
+              # The client secret is copied server-side by provider-kubernetes from the
+              # IdentityUniversalAuthClientSecret's connection Secret (<slug>-ua-conn, key
+              # attribute.client_secret, same namespace) at apply time: it is never in this manifest, this
+              # XR or any function payload (review C2). Until the connection Secret exists the apply fails and
+              # retries; the placeholder key is what patchesFrom overwrites.
+              references:
+                - patchesFrom:
+                    apiVersion: v1
+                    kind: Secret
+                    name: <<printf "%s-ua-conn" $projectSlug>>
+                    namespace: <<$xrNamespace>>
+                    fieldPath: data[attribute.client_secret]
+                  toFieldPath: data.clientSecret
               forProvider:
                 manifest:
                   apiVersion: v1
@@ -642,11 +665,11 @@ spec:
                   metadata:
                     name: <<printf "%s-infisical-creds" $projectSlug>>
                     namespace: <<$xrNamespace>>
-                  # data (base64), never stringData - see the kubernetes branch above. The
-                  # ExtraResources value is already base64, so it is passed through as-is.
+                  type: Opaque
+                  # data (base64), never stringData - see the kubernetes branch above.
                   data:
                     clientId: <<$uaClientId | b64enc>>
-                    clientSecret: <<$uaSecretB64 | toJson>>
+                    clientSecret: ""
               managementPolicies: ["*"]
             ---
                 <<- end >>

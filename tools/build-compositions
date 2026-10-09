@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""One builder for every Composition's inline templates (review C3).
+
+A Composition in this catalog is `source: Inline`: each function-go-templating step carries its Go
+template as a block scalar inside composition.yaml, the committed, GitOps-tracked artifact. The
+maintainable source of that block is the step's directory under templates/ (one file per composed
+resource, concatenated with `---`). Until 2026-10-09 each composition had its own copy of the
+script that did the concatenation, nothing checked that composition.yaml still matched templates/,
+and the proof that a template change was built was "someone ran the script".
+
+This tool regenerates the inline block of every templating step from templates/ and leaves every
+other byte of composition.yaml alone (its header prose, step order, delimiters, the other steps):
+the file is the source of its own structure, templates/ is the source of its templates.
+
+    tools/build-compositions                 # rebuild every composition that has a templates/ dir
+    tools/build-compositions redis slo       # just these
+    tools/build-compositions --check         # exit 1 if any committed composition.yaml is stale (CI)
+
+Layouts (both existed before this tool; it supports exactly these):
+  per-step   templates/<step name>/*.yaml for each function-go-templating step   (nodejsapplication, ...)
+  flat       templates/*.yaml, and exactly one function-go-templating step       (redis, slo, ...)
+Files are concatenated in sorted order, each followed by `---`, indented to sit under `template: |`
+(12 spaces; blank lines stay empty), byte-for-byte what the per-composition scripts produced, so
+`--check` passed on the whole catalog the day this replaced them.
+
+Compositions with no templates/ directory (dex, rolloutwatch: hand-written, function-backed) are
+left alone and listed as such.
+"""
+import argparse
+import difflib
+import sys
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+COMPOSITIONS = ROOT / "compositions"
+TEMPLATE_LINE = "          template: |"       # 10 spaces: the block scalar under inline:
+BODY_INDENT = "            "                  # 12 spaces: block content
+GOTPL = "function-go-templating"
+
+
+class BuildError(Exception):
+    pass
+
+
+def templating_steps(comp_yaml: dict) -> list[str]:
+    return [s["step"] for s in comp_yaml["spec"]["pipeline"]
+            if s.get("functionRef", {}).get("name") == GOTPL and s.get("input", {}).get("source") == "Inline"]
+
+
+def render_block(files: list[Path]) -> str:
+    """The exact bytes the old scripts produced: `cat f; echo ---` per file, trailing newlines
+    trimmed, one newline added, then every line prefixed with 12 spaces and blank lines emptied."""
+    combined = ""
+    for f in files:
+        text = f.read_text()
+        combined += text if text.endswith("\n") else text + "\n"
+        combined += "---\n"
+    combined = combined.rstrip("\n") + "\n"
+    return "".join(("" if not line.strip() else BODY_INDENT + line) + "\n" for line in combined.split("\n")[:-1])
+
+
+def step_files(comp_dir: Path, steps: list[str]) -> dict[str, list[Path]]:
+    tdir = comp_dir / "templates"
+    subdirs = sorted(p for p in tdir.iterdir() if p.is_dir())
+    flat = sorted(tdir.glob("*.yaml"))
+    if subdirs and flat:
+        raise BuildError(f"{comp_dir.name}: templates/ mixes files and directories; use one layout")
+    if subdirs:
+        out = {}
+        for s in steps:
+            d = tdir / s
+            if not d.is_dir():
+                raise BuildError(f"{comp_dir.name}: step {s!r} has no templates/{s}/ directory")
+            files = sorted(d.glob("*.yaml"))
+            if not files:
+                raise BuildError(f"{comp_dir.name}: templates/{s}/ has no .yaml files")
+            out[s] = files
+        orphans = [d.name for d in subdirs if d.name not in steps]
+        if orphans:
+            raise BuildError(f"{comp_dir.name}: templates/{orphans[0]}/ matches no function-go-templating step")
+        return out
+    if len(steps) != 1:
+        raise BuildError(f"{comp_dir.name}: flat templates/*.yaml needs exactly one templating step, found {len(steps)}")
+    if not flat:
+        raise BuildError(f"{comp_dir.name}: templates/ is empty")
+    return {steps[0]: flat}
+
+
+def splice(text: str, blocks: list[str]) -> str:
+    """Replace the body of each `template: |` block, in order, keeping everything else."""
+    lines = text.split("\n")
+    out, i, n = [], 0, 0
+    while i < len(lines):
+        out.append(lines[i])
+        if lines[i] == TEMPLATE_LINE:
+            if n >= len(blocks):
+                raise BuildError(f"more `template: |` blocks than templating steps ({len(blocks)})")
+            i += 1
+            while i < len(lines) and (lines[i] == "" or lines[i].startswith(BODY_INDENT)):
+                i += 1
+            # the old body ran up to here (exclusive); i now points at `        delims:`
+            out.extend(blocks[n].split("\n")[:-1])
+            n += 1
+            continue
+        i += 1
+    if n != len(blocks):
+        raise BuildError(f"found {n} `template: |` blocks, expected {len(blocks)}")
+    return "\n".join(out)
+
+
+def build_one(comp_dir: Path) -> tuple[str, str] | None:
+    """(current text, rebuilt text), or None when the composition has no templates/."""
+    comp_file = comp_dir / "composition.yaml"
+    if not comp_file.exists() or not (comp_dir / "templates").is_dir():
+        return None
+    text = comp_file.read_text()
+    steps = templating_steps(yaml.safe_load(text))
+    if not steps:
+        raise BuildError(f"{comp_dir.name}: has templates/ but no `source: Inline` function-go-templating step")
+    files = step_files(comp_dir, steps)
+    return text, splice(text, [render_block(files[s]) for s in steps])
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("names", nargs="*", help="composition directory names (default: all with templates/)")
+    ap.add_argument("--check", action="store_true", help="report stale compositions, change nothing, exit 1 if any")
+    a = ap.parse_args()
+    dirs = [COMPOSITIONS / n for n in a.names] if a.names else sorted(p for p in COMPOSITIONS.iterdir() if p.is_dir())
+    stale, skipped, failed = [], [], []
+    for d in dirs:
+        if not d.is_dir():
+            print(f"error: no such composition {d.name}", file=sys.stderr)
+            return 2
+        try:
+            result = build_one(d)
+        except BuildError as e:
+            failed.append(str(e))
+            continue
+        if result is None:
+            skipped.append(d.name)
+            continue
+        current, rebuilt = result
+        if current == rebuilt:
+            print(f"ok      {d.name}")
+            continue
+        stale.append(d.name)
+        if a.check:
+            print(f"STALE   {d.name}: composition.yaml does not match templates/")
+            diff = list(difflib.unified_diff(current.splitlines(), rebuilt.splitlines(), "composition.yaml", "rebuilt from templates/", lineterm="", n=1))
+            for line in diff[:40]:
+                print("        " + line)
+            if len(diff) > 40:
+                print(f"        ... {len(diff) - 40} more lines")
+        else:
+            (d / "composition.yaml").write_text(rebuilt)
+            print(f"rebuilt {d.name}")
+    for e in failed:
+        print(f"FAIL    {e}")
+    if skipped and not a.names:
+        print(f"skipped (no templates/): {', '.join(skipped)}")
+    if failed:
+        return 1
+    if a.check and stale:
+        print(f"\n{len(stale)} composition(s) stale: run tools/build-compositions and commit composition.yaml")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,8 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
+# (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
+# readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+cases:
+- name: defaults
+  xr: xr-defaults.yaml
+- name: pnpm-custom
+  xr: xr-pnpm-custom.yaml

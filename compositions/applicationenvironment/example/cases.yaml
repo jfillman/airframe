@@ -1,0 +1,42 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
+# (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
+# readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+cases:
+- name: gate-fail
+  xr: xr-staging.yaml
+  expect:
+    conditions:
+      ClusterReady: ClusterNotEligible
+- name: staging-springboot
+  xr: xr-staging.yaml
+  required:
+  - cluster-registry-ready.yaml
+  - springboot-app-exists.yaml
+  expect:
+    conditions:
+      ClusterReady: ClusterEligible
+      AppResolved: AppResolved
+- name: staging-python
+  xr: xr-staging.yaml
+  required:
+  - cluster-registry-ready.yaml
+  - pythonapp-exists.yaml
+  expect:
+    conditions:
+      AppResolved: AppResolved
+- name: staging-go
+  xr: xr-staging.yaml
+  required:
+  - cluster-registry-ready.yaml
+  - goapp-exists.yaml
+  expect:
+    conditions:
+      AppResolved: AppResolved
+- name: staging-app-missing
+  xr: xr-staging.yaml
+  required:
+  - cluster-registry-ready.yaml
+  expect:
+    conditions:
+      ClusterReady: ClusterEligible
+      AppResolved: AppNotFound

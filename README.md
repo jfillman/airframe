@@ -420,6 +420,8 @@ charts/
   airframe-application/        §3's Embedded+Attached tier chart - one release per (app, cluster, env)
                                (tests/run.sh: render tests; no workload until rollout.image is set)
 tools/
+  build-compositions           regenerates every composition.yaml's inline template blocks from templates/ (--check in CI)
+  test_compositions.py         renders every composition's example/cases.yaml through the real functions and diffs the result with example/expected/ (CI)
   airframe-validate            strict values-file check (unknown keys, XRD component specs) + helm template
                                --xr: XR requests against the XRD schemas, unknown fields rejected (AF-XR)
   validate.Containerfile       the image CI runs it from (ghcr.io/jfillman/airframe-validate:<tag>, built on release tags)
@@ -429,7 +431,7 @@ xrds/
   applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.hangar.io/v1alpha1)
   slo.yaml                      SLO XRD (catalog.hangar.io/v1alpha1)
 compositions/
-  nodejsapplication/            NodeJSApplication Composition (source: Inline) + templates + build-composition.sh
-  applicationenvironment/       ApplicationEnvironment Composition (source: Inline) + templates + build-composition.sh
-  slo/                          SLO Composition (source: Inline) + templates + build-composition.sh
+  nodejsapplication/            NodeJSApplication Composition (source: Inline) + templates (built by tools/build-compositions)
+  applicationenvironment/       ApplicationEnvironment Composition (source: Inline) + templates (built by tools/build-compositions)
+  slo/                          SLO Composition (source: Inline) + templates (built by tools/build-compositions)
 ```

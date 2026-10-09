@@ -29,11 +29,27 @@ jobs:
       - run: charts/airframe-application/tests/run.sh
       - run: helm lint charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml
       - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -q 'name: kiac-dev'"
+      - run: python3 tools/build-compositions --check
       - run: python3 tools/gen_airframe_schema.py --check --coverage
       - run: python3 tools/gen_component_outputs.py --check
       - run: python3 tools/gen_contract.py --check
       - run: python3 tools/test_capabilities_coldstart.py
       - run: python3 tools/test_xr_validate.py
+
+  # C3: every composition's render fixtures (compositions/*/example/cases.yaml) through the real
+  # functions with `crossplane render` (the runner has Docker; locally without Docker the same
+  # test runs through tools/render-pipeline), compared with the committed expectations.
+  compositions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install pyyaml
+      - name: install the crossplane CLI
+        run: |
+          curl -sL https://raw.githubusercontent.com/crossplane/crossplane/main/install.sh | XP_VERSION=v2.4.1 sh
+          sudo mv crossplane /usr/local/bin/crossplane
+          crossplane version --client
+      - run: python3 tools/test_compositions.py --renderer crossplane
 
   scorecard:
     runs-on: ubuntu-latest

@@ -69,6 +69,11 @@ ids and fix hints, so an agent can retry against them deterministically:
 - Chart guards: a developer label that would override a chart-owned identity label, a `podSpec`
   that replaces the container list, `releaseTracking` on a release with no Rollout, each fail the
   render with a message naming the key.
+- Composition render tests: every composition's `example/cases.yaml` is rendered through the real
+  functions in CI (`tools/test_compositions.py`) and compared with its committed `example/expected/`
+  files, so a change to what a composition composes, or to the conditions it reports, is a reviewed
+  diff rather than something found on a live cluster; `tools/build-compositions --check` fails CI
+  when a `composition.yaml` no longer matches its `templates/`.
 - `AF-XR-001/002/003` and `AF-SCHEMA-001/002` in `--xr` mode: an XR request in a tenants repo with a
   retired API group, an unknown kind, no name, a misspelled field or a value outside the XRD's schema
   fails. The API server would otherwise prune the misspelled field silently (Argo CD's client-side

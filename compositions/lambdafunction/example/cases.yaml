@@ -1,0 +1,34 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
+# (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
+# readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+cases:
+- name: gate-fail
+  xr: xr-defaults.yaml
+- name: defaults
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+- name: go
+  xr: xr-go.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+- name: python
+  xr: xr-python.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+- name: with-target-pending
+  xr: xr-with-target.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+  expect:
+    conditions:
+      TargetReady: TargetPending
+- name: with-target-ready
+  xr: xr-with-target.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+  observed:
+  - observed-target-ready.yaml
+  expect:
+    conditions:
+      TargetReady: AwsLambdaTargetReady

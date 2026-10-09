@@ -27,6 +27,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## Do
 - Validate before you open a PR: `helm template` the chart with your values file, and run `charts/airframe-application/tests/run.sh` if you changed the chart. The chart itself still silently ignores an unknown key (e.g. `rolout` or `replcas`) - `values.schema.json` is what rejects it, and `airframe-validate` is the enforced check on gitops PRs (Glidepath's values-validation gate), so run `tools/airframe-validate FILE` on your file.
+- Changing a composition: edit `templates/`, run `tools/build-compositions` (CI runs `--check`), then `tools/test_compositions.py --update <composition>` and review the diff of `example/expected/`: that diff is the behaviour change. Add a case to `example/cases.yaml` for every new branch.
 - Changed `values.schema.json`? Run `python3 tools/gen_airframe_schema.py --write-values` and commit the regenerated `values.yaml` in the same change - CI's `--check` fails otherwise.
 - Reference a component's connection details with `env: [{name: ..., fromComponent: {name: <components[] entry>, output: <name>}}]` (AF-3). Never hand-write derived names such as `cache-master` or `<name>-connection` - see that component's `xrds/<type>.meta.yaml` for its real output names. `airframe-validate` rejects a `fromComponent` reference to a component or output that doesn't exist (AF-COMP-002).
 - Set `devCluster` from the cluster registry: it is `kind-dev` even though the cluster is called `kiac-dev`.

@@ -159,12 +159,13 @@ def run_render_pipeline(comp_dir: Path, case: dict) -> dict:
 
 
 def n_and_some_more(names: list[str], n: int = 3) -> str:
-    """Crossplane's wording for the Ready condition: 'a', 'a, and b', 'a, b, and c', 'a, b, c, and 7 more'."""
+    """crossplane-runtime's FirstNAndSomeMore wording for the Ready condition, exactly: more than n
+    names 'a, b, c, and 7 more'; exactly n 'a, b, and c'; fewer 'a, b' or 'a'."""
     if len(names) > n:
         return ", ".join(names[:n]) + f", and {len(names) - n} more"
-    if len(names) == 1:
-        return names[0]
-    return ", ".join(names[:-1]) + ", and " + names[-1]
+    if len(names) == n:
+        return ", ".join(names[:-1]) + ", and " + names[-1]
+    return ", ".join(names)
 
 
 # ---- normalization ------------------------------------------------------------------------------

@@ -47,6 +47,12 @@ resources:
         - SCRAM
     statefulSet:
       spec:
+        template:
+          spec:
+            containers:
+            - name: mongodb-agent
+              readinessProbe:
+                timeoutSeconds: 5
         volumeClaimTemplates:
         - metadata:
             name: data-volume

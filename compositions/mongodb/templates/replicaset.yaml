@@ -59,6 +59,17 @@ spec:
       connectionStringSecretName: <<printf "%s-app" $xrName>>
   statefulSet:
     spec:
+      # C11 (review 2026-10-08): the operator's default agent readiness probe has a 1s timeout, and its
+      # readiness script routinely takes longer on a busy node: 3384 Unhealthy warnings in one hour on
+      # kind-prod's bag-db-0 without the pod ever being unready for real (failureThreshold is 40). 5s keeps
+      # the probe meaningful and stops the event flood. The operator merges this into its own container spec
+      # by name, so only timeoutSeconds changes.
+      template:
+        spec:
+          containers:
+            - name: mongodb-agent
+              readinessProbe:
+                timeoutSeconds: 5
       volumeClaimTemplates:
         - metadata:
             name: data-volume

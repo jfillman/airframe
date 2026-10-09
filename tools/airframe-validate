@@ -9,6 +9,16 @@ tools/airframe_schema.py) - then a set of dead-end convention/policy rules (tool
 AF-4b), then renders it with `helm template`.
 
     tools/airframe-validate FILE [FILE...] [--app NAME] [--cluster NAME] [--no-render] [--format text|json]
+    tools/airframe-validate --xr FILE [FILE...] [--format text|json]
+
+--xr (AF-XR, review finding A2): the files are XR requests (tenants/<app>/xr-requests/*.yaml, one or more
+documents each) and are checked against the XRD schemas in xrds/ with additionalProperties:false
+synthesized on every object, so a misspelled field is an error here instead of being silently dropped
+by the API server. Rules: AF-XR-001 apiVersion is not catalog.hangar.io/v1alpha1 (the retired
+catalog.idp.io group is named), AF-XR-002 unknown kind (with the closest real one), AF-XR-003 metadata
+has no name, then AF-SCHEMA-001/002 on spec exactly as for a values file. A missing metadata.namespace
+is a warning only (AF-XR-004): the xr-requests Application supplies its destination namespace, and the
+compositions' own SecretStore requests rely on that. No helm render and no dead-end rules in this mode.
 
 Exit 0 = all files valid, 1 = a problem. Text output (default): one line per problem, `path | rule |
 message | hint`. `--format json` emits one JSON object per file with a `problems` and `warnings` list
@@ -26,6 +36,7 @@ AF-OWNER-001 (error, AF-5b): a release-owned key (`release`, `releaseTracking`, 
 Needs: python3, pyyaml, jsonschema, helm (unless --no-render).
 """
 import argparse
+import copy
 import difflib
 import json
 import subprocess
@@ -37,7 +48,7 @@ import yaml
 from jsonschema import Draft202012Validator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from airframe_schema import CHART, compiled_schema
+from airframe_schema import CHART, ROOT, _strict_copy, compiled_schema
 from component_outputs import known_outputs
 from deadend_rules import all_deadend_problems
 
@@ -163,19 +174,129 @@ def check_file(path, schema, args):
     return errors, warnings
 
 
+XR_API_VERSION = "catalog.hangar.io/v1alpha1"
+RETIRED_GROUPS = {"catalog.idp.io": "renamed to catalog.hangar.io on 2026-10-01 (airframe v0.3.112)"}
+
+
+# What Crossplane v2 adds to every namespaced XR's generated CRD beyond the XRD's own schema: the
+# spec.crossplane block (composition selection, update policy, the composed-resource refs the composer
+# writes). Copied from a live generated CRD (lambdafunctions.catalog.hangar.io on kiac-dev, 2026-10-09);
+# the Backstage scaffolder writes crossplane.compositionUpdatePolicy into every request it commits.
+CROSSPLANE_SPEC = {
+    "type": "object",
+    "properties": {
+        "compositionRef": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "compositionRevisionRef": {"type": "object", "required": ["name"], "properties": {"name": {"type": "string"}}},
+        "compositionRevisionSelector": {"type": "object", "required": ["matchLabels"],
+                                        "properties": {"matchLabels": {"type": "object", "additionalProperties": {"type": "string"}}}},
+        "compositionSelector": {"type": "object", "required": ["matchLabels"],
+                                "properties": {"matchLabels": {"type": "object", "additionalProperties": {"type": "string"}}}},
+        "compositionUpdatePolicy": {"type": "string", "enum": ["Automatic", "Manual"]},
+        "resourceRefs": {"type": "array", "items": {"type": "object", "required": ["apiVersion", "kind"],
+                                                    "properties": {"apiVersion": {"type": "string"}, "kind": {"type": "string"},
+                                                                   "name": {"type": "string"}}}},
+    },
+}
+
+
+def xrd_schemas(xrds_dir=ROOT / "xrds"):
+    """kind -> strict JSON schema for an XR of that kind: the served version's openAPIV3Schema from
+    xrds/<kind>.yaml plus the spec.crossplane block Crossplane itself adds, with
+    additionalProperties:false synthesized on every object (the same _strict_copy the values schema
+    uses for component arms). The API server prunes unknown fields silently; this is where they
+    become errors."""
+    out = {}
+    for f in sorted(Path(xrds_dir).glob("*.yaml")):
+        docs = [d for d in yaml.safe_load_all(f.read_text()) if isinstance(d, dict)]
+        for d in docs:
+            if d.get("kind") != "CompositeResourceDefinition" or d.get("spec", {}).get("group") != "catalog.hangar.io":
+                continue
+            versions = [v for v in d["spec"].get("versions", []) if v.get("served", True)]
+            if not versions:
+                continue
+            schema = copy.deepcopy(versions[0]["schema"]["openAPIV3Schema"])
+            schema.setdefault("properties", {}).setdefault("spec", {"type": "object"})
+            schema["properties"]["spec"].setdefault("properties", {}).setdefault("crossplane", copy.deepcopy(CROSSPLANE_SPEC))
+            top = {"type": "object", "properties": {"spec": _strict_copy(schema["properties"]["spec"])},
+                   "required": ["spec"] if "spec" in (schema.get("required") or ["spec"]) else []}
+            out[d["spec"]["names"]["kind"]] = top
+    return out
+
+
+def check_xr_doc(doc, index, schemas):
+    """One XR document -> (errors, warnings), each a list of (loc, rule, msg, hint)."""
+    at = f"[{index}]" if index else ""
+    if not isinstance(doc, dict):
+        return [(at or "/", "AF-XR-003", "an XR request must be a YAML mapping", "apiVersion, kind, metadata, spec")], []
+    errors, warnings = [], []
+    api = doc.get("apiVersion")
+    if api != XR_API_VERSION:
+        group = str(api or "").split("/")[0]
+        why = RETIRED_GROUPS.get(group, "")
+        errors.append((f"{at}/apiVersion", "AF-XR-001", f"apiVersion is {api!r}, expected {XR_API_VERSION!r}",
+                       why or f"every Airframe XRD is served as {XR_API_VERSION}"))
+    kind = doc.get("kind")
+    if kind not in schemas:
+        near = difflib.get_close_matches(str(kind or ""), sorted(schemas), n=1)
+        errors.append((f"{at}/kind", "AF-XR-002", f"unknown kind {kind!r}",
+                       f"did you mean '{near[0]}'?" if near else "known kinds: " + ", ".join(sorted(schemas))))
+        return errors, warnings
+    md = doc.get("metadata") or {}
+    if not isinstance(md.get("name"), str) or not md.get("name"):
+        errors.append((f"{at}/metadata/name", "AF-XR-003", "metadata.name is missing", "the XR's name; the composition derives resource names from it"))
+    if not isinstance(md.get("namespace"), str) or not md.get("namespace"):
+        warnings.append((f"{at}/metadata/namespace", "AF-XR-004", "metadata.namespace is not set",
+                         "fine under the xr-requests Application, which supplies app-<app>-cicd; set it if the file is ever applied by hand"))
+    schema = schemas[kind]
+    v = Draft202012Validator(schema)
+    body = {"spec": doc.get("spec")} if "spec" in doc else {}
+    for err in sorted(v.iter_errors(body), key=lambda e: list(map(str, e.absolute_path))):
+        loc = at + "/" + "/".join(map(str, err.absolute_path))
+        loc = loc.rstrip("/") if loc != at + "/" else at + "/"
+        if err.validator == "additionalProperties":
+            allowed = known_keys(schema, list(err.absolute_path))
+            for bad in [k for k in err.instance if k not in allowed]:
+                near = difflib.get_close_matches(bad, allowed, n=1)
+                hint = f"did you mean '{near[0]}'?" if near else f"no such field on {kind}; see xrds/{kind.lower()}.yaml"
+                errors.append((f"{loc}/{bad}", "AF-SCHEMA-001", f"unknown key '{bad}'", hint))
+        elif err.validator in ("if", "then", "allOf", "anyOf", "oneOf"):
+            continue
+        else:
+            errors.append((loc, "AF-SCHEMA-002", err.message[:160], f"see the field's schema in xrds/{kind.lower()}.yaml"))
+    return errors, warnings
+
+
+def check_xr_file(path, schemas):
+    try:
+        docs = [d for d in yaml.safe_load_all(Path(path).read_text())]
+    except yaml.YAMLError as e:
+        return [(str(path), "AF-SCHEMA-002", f"not valid YAML: {e}", "fix the YAML syntax")], []
+    docs = [d for d in docs if d is not None]
+    if not docs:
+        return [("/", "AF-XR-003", "the file holds no document", "one XR request per document")], []
+    errors, warnings = [], []
+    for i, d in enumerate(docs):
+        e, w = check_xr_doc(d, i if len(docs) > 1 else None, schemas)
+        errors.extend(e)
+        warnings.extend(w)
+    return errors, warnings
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+")
     ap.add_argument("--app")
     ap.add_argument("--cluster", default="kind-dev")
     ap.add_argument("--no-render", action="store_true")
+    ap.add_argument("--xr", action="store_true", help="the files are XR requests; validate them against the XRDs")
     ap.add_argument("--format", choices=["text", "json"], default="text")
     a = ap.parse_args()
-    schema = compiled_schema()
+    schema = None if a.xr else compiled_schema()
+    xr_schemas = xrd_schemas() if a.xr else None
     bad = 0
     results = []
     for f in a.files:
-        errors, warnings = check_file(f, schema, a)
+        errors, warnings = check_xr_file(f, xr_schemas) if a.xr else check_file(f, schema, a)
         if errors:
             bad += 1
         results.append({"file": f, "valid": not errors,

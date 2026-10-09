@@ -15,6 +15,7 @@
 
 - `tools/render-pipeline XR.yaml compositions/<x>/composition.yaml [--required FIX ...] [--observed OBS ...]`: render any composition through the real functions offline, no cluster or Docker (see its header).
 - `tools/airframe-validate FILE...`: validate an environment values file against the strict schema, component output references, and dead-end convention rules. `--format json` for tooling.
+- `tools/airframe-validate --xr FILE...`: validate XR requests (tenants/<app>/xr-requests/*.yaml) against the XRD schemas with unknown fields rejected (AF-XR-001..004, AF-SCHEMA-001/002): the pre-merge half of closing the silent-typo hole; the xr-requests Applications apply server-side for the other half.
 - `tools/airframe-capabilities <components|component|targets|target|xrds|xrd|field|output> ...`: answer "what exists and what does it do" from the contract bundle alone.
 - `tools/gen_airframe_schema.py`, `tools/gen_component_outputs.py`, `tools/gen_contract.py`: regenerate the generated files above after editing their sources. Each has a `--check` mode for CI.
 

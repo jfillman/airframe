@@ -33,6 +33,7 @@ jobs:
       - run: python3 tools/gen_component_outputs.py --check
       - run: python3 tools/gen_contract.py --check
       - run: python3 tools/test_capabilities_coldstart.py
+      - run: python3 tools/test_xr_validate.py
 
   scorecard:
     runs-on: ubuntu-latest

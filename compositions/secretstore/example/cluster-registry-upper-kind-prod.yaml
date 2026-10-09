@@ -1,0 +1,14 @@
+# Same record as cluster-registry-upper.yaml, for the kind-prod cluster the staging XR names.
+# This cluster's record as the cluster-registry chart renders it for a cluster that does not host Infisical
+# (review C9): infisicalUrl is the address other clusters reach Infisical at, infisicalOrgId the fleet's org.
+# The values are the live ones from clusters.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-prod
+  namespace: crossplane-system
+data:
+  type: upper
+  crossplaneReady: "true"
+  infisicalUrl: http://dev.kiac.local:31800/api
+  infisicalOrgId: 820c617c-71a5-45e4-bc19-863a4f88edf8

@@ -4,18 +4,22 @@
 cases:
 - name: checkout-api-new-project
   xr: xr-checkout-api.yaml
+  required:
+  - cluster-registry-upper.yaml
 - name: checkout-api-adopted
   xr: xr-checkout-api.yaml
   required:
+  - cluster-registry-upper.yaml
   - secretstore-provisioner.yaml
 - name: checkout-api-staging
   xr: xr-checkout-api-staging.yaml
   required:
+  - cluster-registry-upper-kind-prod.yaml
   - secretstore-provisioner.yaml
 - name: checkout-api-kubernetes-auth
   xr: xr-checkout-api.yaml
   required:
-  - cluster-registry-infisical-host.yaml
+  - cluster-registry-infisical-host-with-live-urls.yaml
   - kube-root-ca.yaml
   observed:
   - observed-identity.yaml
@@ -23,8 +27,8 @@ cases:
   xr: xr-checkout-api.yaml
   observed:
   - observed-ua-client-secret.yaml
-# Review C9: the cluster registry supplies Infisical's URL and org id (cluster-registry chart, from clusters.yaml's
-# infisical: block). Both cases use values that differ from the pre-C9 literals.
+  required:
+  - cluster-registry-upper.yaml
 - name: registry-url-universal-auth
   xr: xr-checkout-api.yaml
   required:
@@ -38,3 +42,10 @@ cases:
   - kube-root-ca.yaml
   observed:
   - observed-identity.yaml
+- name: registry-keys-missing
+  xr: xr-checkout-api.yaml
+  required:
+  - cluster-registry-infisical-host.yaml
+  - kube-root-ca.yaml
+  expect:
+    fatal: true

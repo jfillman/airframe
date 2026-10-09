@@ -27,12 +27,16 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - `xr-ready` (condition): The SecretStore XR is Ready (every Infisical resource and the store are up).
 - `store-valid` (resource): ClusterSecretStore {name} reports Ready True: External Secrets authenticated to Infisical with the identity.
 
+## Known failures
+
+- `InfisicalRegistryKeysMissing` (Synced=False): This cluster's registry record (crossplane-system ConfigMap named after spec.cluster) is missing, or was rendered without the hub clusters.yaml's infisical: block. The render stops before applying anything, so every existing store, identity and project is untouched; only new or changed SecretStores wait. Check kubectl -n crossplane-system get cm <cluster> -o jsonpath='{.data}' for infisicalUrl and infisicalOrgId. If absent, add the infisical: block to gitops-cluster-dev/clusters.yaml and sync this cluster's cluster-registry Application (manual by design).
+
 ## Editing this composition
 
 - Edit `compositions/secretstore/templates/`, never the inline blocks in `composition.yaml`: `python3 tools/build-compositions secretstore` splices them.
 - `python3 tools/test_compositions.py --update secretstore` regenerates `example/expected/`; review that diff like code, it is the behaviour change.
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
 - Credentials never pass through the function pipeline: provider-kubernetes Objects copy the reviewer token and the universal-auth client secret server-side (references.patchesFrom). Keep it that way (review C2).
-- Kubernetes auth on the Infisical-hosting cluster, universal auth elsewhere; the cluster registry decides, not the spec. Infisical's URL and org id also come from the registry (infisicalUrl, infisicalOrgId, rendered from clusters.yaml's top-level infisical: block, review C9); never hard-code them in a template.
+- Kubernetes auth on the Infisical-hosting cluster, universal auth elsewhere; the cluster registry decides, not the spec. Infisical's URL and org id come only from the registry (infisicalUrl, infisicalOrgId, rendered from clusters.yaml's top-level infisical: block, review C9); a record without them fails the render fatally, which leaves every composed object as it is. Never hard-code them in a template.
 
 Contract: `tools/airframe-capabilities verify secretstore`; schema: `xrds/secretstore.yaml`.

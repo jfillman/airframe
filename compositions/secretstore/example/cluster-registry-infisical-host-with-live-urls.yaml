@@ -1,0 +1,13 @@
+# The Infisical-hosting cluster's record with its live review-C9 keys (in-cluster URL, fleet org id).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-dev
+  namespace: crossplane-system
+data:
+  type: dev
+  cicdReady: "true"
+  infisicalHost: "true"
+  tenantsRepo: gitops-cluster-dev-tenants
+  infisicalUrl: http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080/api
+  infisicalOrgId: 820c617c-71a5-45e4-bc19-863a4f88edf8

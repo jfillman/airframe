@@ -67,8 +67,43 @@ def mutations():
     return out
 
 
+def xrd_structural_problems():
+    """The rules the API server applies to a CRD's structural schema that jsonschema does not: Crossplane
+    renders each XRD into a CRD, and a schema the API server refuses leaves the LIVE CRD frozen at its last
+    good generation with nothing but a Warning event on the XRD. That happened to ApplicationEnvironment for
+    nine days (2026-09-30 -> 2026-10-09): `additionalProperties: false` next to `properties` under
+    spec.chart, so spec.chart and status.scaffold never reached the cluster while the XRD said Established."""
+    problems = []
+
+    def walk(node, path, file):
+        if not isinstance(node, dict):
+            return
+        if "properties" in node and "additionalProperties" in node:
+            problems.append(f"{file}: {path}: additionalProperties and properties are mutually exclusive in a CRD schema")
+        if "properties" in node and node.get("type") not in (None, "object"):
+            problems.append(f"{file}: {path}: has properties but type is {node.get('type')!r}")
+        if "items" in node and node.get("type") != "array":
+            problems.append(f"{file}: {path}: has items but type is {node.get('type')!r}, expected array")
+        for k, v in (node.get("properties") or {}).items():
+            walk(v, f"{path}.{k}", file)
+        if isinstance(node.get("items"), dict):
+            walk(node["items"], f"{path}[]", file)
+        if isinstance(node.get("additionalProperties"), dict):
+            walk(node["additionalProperties"], f"{path}.*", file)
+
+    for f in sorted(ROOT.glob("xrds/*.yaml")):
+        for doc in yaml.safe_load_all(f.read_text()):
+            if not doc or doc.get("kind") != "CompositeResourceDefinition":
+                continue
+            for v in doc["spec"]["versions"]:
+                walk(v["schema"]["openAPIV3Schema"], f"{v['name']}", f.name)
+    return problems
+
+
 def main():
     failures = []
+    # 0. every XRD schema is one the API server will accept as a CRD
+    failures += xrd_structural_problems()
     # 1. a good document is ok, with and without the spec.crossplane block Crossplane adds to every XR
     code, problems = check_doc(GOOD)
     if code != 0 or problems:
@@ -110,8 +145,9 @@ def main():
         print("\n".join(failures))
         print(f"\nFAIL: {len(failures)} problem(s)")
         return 1
-    print(f"ok: 1 good document accepted, {n_mut}/{n_mut} mutations rejected with the right rule and hint, "
-          f"{len(examples)} composition examples valid, {len(fleet)} live XR requests valid")
+    n_xrd = sum(1 for f in ROOT.glob("xrds/*.yaml") for d in yaml.safe_load_all(f.read_text()) if d and d.get("kind") == "CompositeResourceDefinition")
+    print(f"ok: {n_xrd} XRD schemas structurally valid, 1 good document accepted, {n_mut}/{n_mut} mutations rejected "
+          f"with the right rule and hint, {len(examples)} composition examples valid, {len(fleet)} live XR requests valid")
     return 0
 
 

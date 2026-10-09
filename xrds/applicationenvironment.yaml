@@ -192,7 +192,12 @@ spec:
                     targetRevision:
                       type: string
                       description: Git ref or chart version to render.
-                  additionalProperties: false
+                  # No `additionalProperties: false` here: a CRD structural schema forbids it next to
+                  # `properties` ("additionalProperties and properties are mutual exclusive"), and Crossplane
+                  # could not apply the generated CRD for 9 days (2026-09-30 -> 2026-10-09, XRD generation 4 vs
+                  # CRD generation 1, only an EstablishComposite warning event on the XRD). Unknown fields under
+                  # chart are pruned by the API server anyway, and `airframe-validate --xr` rejects them
+                  # pre-merge (it strictifies every object itself). tools/test_xr_validate.py now lints for it.
                 configMapGenerator:
                   type: boolean
                   default: false

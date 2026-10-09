@@ -11,6 +11,7 @@ an application developer using an already-running catalog, see
 |---|---|
 | [architecture.md](architecture.md) | You want the current-state system overview: every XRD's inputs/outputs, the composition graph, tiering, and the plumbing underneath. |
 | [governance.md](governance.md) | You are an architect or security reviewer asking where a policy is enforced, or a platform engineer turning one into catalog code: who owns which decision, the enforcement ladder from XRD schema to management policies, what is enforced today versus convention, and how a policy change ships. |
+| [api-versioning.md](api-versioning.md) | You are changing an XRD's schema or adding a version: what v1alpha1 promises, which changes are breaking, how a new version ships without a conversion webhook, and the constraints every kind carries. |
 | [cloud-credentials.md](cloud-credentials.md) | You are creating or rotating the cloud identities behind the cloud targets: the Crossplane provider identity versus the Glidepath deployer in AWS and Azure, the exact IAM policy or Azure role each gets, where each secret lives, who can read it, and what each one can and cannot do. |
 
 The full design history and open decisions live in `hangar`'s own

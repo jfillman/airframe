@@ -21,6 +21,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: postgresqls.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Requested as a components[] entry in an app's values file (the airframe-application chart renders the XR); not a standalone self-service request."
     hangar.io/agent-summary: "A dedicated PostgreSQL database (CloudNativePG), one per application environment."
 spec:
   group: catalog.hangar.io
@@ -29,16 +31,35 @@ spec:
     plural: postgresqls
     singular: postgresql
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: postgresql.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: COMPONENT
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='ComponentReady')].reason"
+          description: "ComponentReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "PostgreSQL: A dedicated PostgreSQL database (CloudNativePG), one per application environment."
           properties:
+            metadata:
+              type: object
+              description: "Standard object metadata. Only name is constrained here (its length)."
+              properties:
+                name:
+                  type: string
+                  maxLength: 54
+                  description: >-
+                    At most 54 characters (review C13). CloudNativePG names its bootstrap Job <name>-1-initdb, and a Job name must fit a 63-character label.
             spec:
               type: object
+              description: "Desired state of the PostgreSQL. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
               properties:

@@ -9,7 +9,9 @@
       "type": "string",
       "description": "This application's name. Used as the Helm release name's basis, the default ServiceAccount name, and the default databaseName for a PostgreSQL component. A DNS-1123 label: lowercase alphanumeric and hyphens, must start and end with an alphanumeric.",
       "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
-      "default": ""
+      "default": "",
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "critical"
     },
     "appType": {
       "type": "string",
@@ -18,22 +20,30 @@
         "infra"
       ],
       "description": "app runs a workload (Rollout); infra provisions components/environments only (naming-conventions.md's existing distinction).",
-      "default": "app"
+      "default": "app",
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "cluster": {
       "type": "string",
       "description": "Which cluster this release runs on. Not in the original service-catalog design's schema block - the chart needs it to know its own identity (e.g. to compare against devClusterName below), and the ApplicationEnvironment composition that commits this file already knows it.",
-      "default": ""
+      "default": "",
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "critical"
     },
     "envName": {
       "type": "string",
       "description": "The environment name (dev, staging, prod, or a PR number). Named envName, not env, because env is already this schema's top-level container env-var list - a same-named field would collide in one flat values map.",
-      "default": ""
+      "default": "",
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "critical"
     },
     "devClusterName": {
       "type": "string",
       "description": "The name of this fleet's dev cluster, compared against `cluster` to decide dev-vs-upper behavior (e.g. secretsScope). Not the literal cluster context name in every case - see docs/admin - override only if a fleet's dev cluster is ever named something other than kind-dev.",
-      "default": "kind-dev"
+      "default": "kind-dev",
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "high"
     },
     "namespace": {
       "type": "object",
@@ -43,6 +53,7 @@
         "labels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "default": {},
@@ -51,12 +62,15 @@
         "annotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
           "description": "Extra annotations on this release's Namespace object."
         }
-      }
+      },
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "medium"
     },
     "release": {
       "description": "Machine-owned: written by the release pipeline (Glidepath) into the release file, never by hand in a human-owned env file. Takes precedence over the deprecated rollout.image. No workload renders (Rollout/Service/ServiceMonitor) until both release.image fields are set.",
@@ -82,7 +96,8 @@
             }
           }
         }
-      }
+      },
+      "x-hangar-risk": "high"
     },
     "releaseTracking": {
       "description": "Opaque escape hatch, deliberately excluded from the strictness rule: written by glidepath's open-release-pr.yaml, never hand-authored. Null when this env hasn't gone through a release pipeline yet. Only releaseId and appNamespace are read (glidepath ADR-0021): releaseId is rendered onto the Rollout as the hangar.io/release-id annotation, with a hangar.io/release-tracked label, so the Argo Rollouts notifications engine can report the release; appNamespace is the dev-cluster namespace of the release record. Older release files also carry relayUrl, relayHostAliasIP, configJsonB64 and other fields for the removed hook Jobs; they are ignored. Setting releaseTracking on a release with no Rollout fails the render.",
@@ -90,7 +105,9 @@
         "object",
         "null"
       ],
-      "default": null
+      "default": null,
+      "x-hangar-owner": "release",
+      "x-hangar-risk": "medium"
     },
     "serviceAccount": {
       "type": "object",
@@ -115,6 +132,7 @@
         "annotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "description": "Escape hatch, e.g. a cloud workload-identity annotation.",
@@ -141,7 +159,9 @@
           }
         }
       },
-      "description": "Kubernetes ServiceAccount for every workload this chart renders."
+      "description": "Kubernetes ServiceAccount for every workload this chart renders.",
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "platformSecretStore": {
       "type": "object",
@@ -162,7 +182,9 @@
           "default": "ClusterSecretStore",
           "description": "The ClusterSecretStore kind."
         }
-      }
+      },
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "low"
     },
     "rollout": {
       "type": [
@@ -331,6 +353,7 @@
         "labels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "default": {},
@@ -339,6 +362,7 @@
         "annotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
@@ -347,6 +371,7 @@
         "podLabels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "default": {},
@@ -355,6 +380,7 @@
         "podAnnotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
@@ -363,6 +389,7 @@
         "serviceLabels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "default": {},
@@ -371,12 +398,15 @@
         "serviceAnnotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
           "description": "Extra annotations on the Service (and the -preview Service for blueGreen)."
         }
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "analysisTemplates": {
       "description": "App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.",
@@ -425,7 +455,9 @@
           }
         },
         "description": "One custom Argo Rollouts AnalysisTemplate."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "env": {
       "description": "Container environment variables for the main workload.",
@@ -545,19 +577,24 @@
         },
         "oneOf": [
           {
+            "description": "Branch 1 of 4: a bare name with no value source, which renders the variable empty.",
             "not": {
+              "description": "None of value, valueFrom or fromComponent is set.",
               "anyOf": [
                 {
+                  "description": "value is set.",
                   "required": [
                     "value"
                   ]
                 },
                 {
+                  "description": "valueFrom is set.",
                   "required": [
                     "valueFrom"
                   ]
                 },
                 {
+                  "description": "fromComponent is set.",
                   "required": [
                     "fromComponent"
                   ]
@@ -566,23 +603,28 @@
             }
           },
           {
+            "description": "Branch 2 of 4: a literal value.",
             "required": [
               "value"
             ]
           },
           {
+            "description": "Branch 3 of 4: a Kubernetes valueFrom (secretKeyRef, configMapKeyRef, fieldRef).",
             "required": [
               "valueFrom"
             ]
           },
           {
+            "description": "Branch 4 of 4: fromComponent, resolved against the component's output contract (xrds/<type>.meta.yaml).",
             "required": [
               "fromComponent"
             ]
           }
         ],
         "description": "One container environment variable. At most one of value/valueFrom/fromComponent."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "configMaps": {
       "description": "ConfigMaps mounted or projected as env vars into the main workload.",
@@ -617,6 +659,7 @@
           "data": {
             "type": "object",
             "additionalProperties": {
+              "description": "One file's content, keyed by file name.",
               "type": "string"
             },
             "description": "Chart-owned ConfigMap content. Mutually exclusive with existingConfigMap."
@@ -627,6 +670,7 @@
           }
         },
         "not": {
+          "description": "data and existingConfigMap are mutually exclusive.",
           "required": [
             "data",
             "existingConfigMap"
@@ -634,18 +678,22 @@
         },
         "anyOf": [
           {
+            "description": "Inline content: the chart renders the ConfigMap from data.",
             "required": [
               "data"
             ]
           },
           {
+            "description": "An existing ConfigMap by name, mounted as-is.",
             "required": [
               "existingConfigMap"
             ]
           }
         ],
         "description": "One ConfigMap."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "secrets": {
       "description": "Secrets, aggregated into one app-secrets Secret via ExternalSecret/ClusterSecretStore, consumed by the main container.",
@@ -688,7 +736,9 @@
           }
         },
         "description": "One secret reference."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "notifications": {
       "type": "object",
@@ -712,7 +762,9 @@
           },
           "description": "Slack notification settings for AI-triage diagnosis."
         }
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "volumes": {
       "description": "PVC-backed volumes for the main workload.",
@@ -765,7 +817,9 @@
           }
         },
         "description": "One PVC-backed volume."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "cronJobs": {
       "description": "Scheduled batch tasks (nightly cleanup, report generation, ...). Share env/secrets/configMaps/volumes with the main container automatically.",
@@ -878,7 +932,9 @@
           }
         },
         "description": "One scheduled batch task."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "jobs": {
       "description": "One-off batch tasks - the common 'run a DB migration before the new Rollout comes up' pattern. Same image/env/secrets/configMaps/volumes defaulting as cronJobs.",
@@ -963,7 +1019,9 @@
           }
         },
         "description": "One one-off batch task."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "autoscaling": {
       "type": "object",
@@ -1000,7 +1058,9 @@
           "description": "Target average CPU utilization percent that triggers scaling."
         }
       },
-      "description": "HorizontalPodAutoscaler settings for the main workload."
+      "description": "HorizontalPodAutoscaler settings for the main workload.",
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "medium"
     },
     "podDisruptionBudget": {
       "type": "object",
@@ -1035,7 +1095,9 @@
           "default": null,
           "description": "Maximum pods that may be unavailable during a voluntary disruption."
         }
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "ingress": {
       "type": "object",
@@ -1080,6 +1142,7 @@
         "annotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
@@ -1097,15 +1160,19 @@
         }
       },
       "if": {
+        "description": "When ingress is enabled ...",
         "properties": {
           "enabled": {
+            "description": "ingress.enabled is true.",
             "const": true
           }
         }
       },
       "then": {
+        "description": "... a host is required.",
         "properties": {
           "host": {
+            "description": "Non-empty hostname.",
             "type": "string",
             "minLength": 1
           }
@@ -1113,7 +1180,9 @@
         "required": [
           "host"
         ]
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "httpRoute": {
       "type": "object",
@@ -1190,6 +1259,7 @@
         "annotations": {
           "type": "object",
           "additionalProperties": {
+            "description": "An annotation value (annotation key -> value).",
             "type": "string"
           },
           "default": {},
@@ -1197,19 +1267,24 @@
         }
       },
       "if": {
+        "description": "When httpRoute is enabled ...",
         "properties": {
           "enabled": {
+            "description": "httpRoute.enabled is true.",
             "const": true
           }
         }
       },
       "then": {
+        "description": "... at least one hostname and one parentRef are required.",
         "properties": {
           "hostnames": {
+            "description": "At least one hostname.",
             "type": "array",
             "minItems": 1
           },
           "parentRefs": {
+            "description": "At least one Gateway parentRef.",
             "type": "array",
             "minItems": 1
           }
@@ -1218,7 +1293,9 @@
           "hostnames",
           "parentRefs"
         ]
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "serviceMonitor": {
       "type": "object",
@@ -1257,12 +1334,15 @@
         "additionalLabels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "description": "Some kube-prometheus-stack installs require a label (e.g. release: <helm-release-name>) for their Prometheus CR to pick this up.",
           "default": {}
         }
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "networkPolicy": {
       "type": "object",
@@ -1337,7 +1417,9 @@
           }
         }
       },
-      "description": "Traffic policy for the main workload's namespace."
+      "description": "Traffic policy for the main workload's namespace.",
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "components": {
       "description": "Attached-tier component instances (Redis, PostgreSQL, RabbitMQ, ...). Each entry's spec is validated against that component's own XRD schema by the compiled schema (airframe_schema.compiled_schema()), not by this file directly - see tools/airframe-validate.",
@@ -1367,7 +1449,9 @@
           }
         },
         "description": "One attached component instance."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "high"
     },
     "slos": {
       "description": "Rendered into the SLO XRD (xrds/slo.yaml), which wraps Sloth. No window/burn-rate fields here - Sloth computes those from just objective.",
@@ -1440,28 +1524,36 @@
             },
             "allOf": [
               {
+                "description": "An availability indicator needs errorFilter.",
                 "if": {
+                  "description": "indicator.type is availability ...",
                   "properties": {
                     "type": {
+                      "description": "The availability indicator type.",
                       "const": "availability"
                     }
                   }
                 },
                 "then": {
+                  "description": "... so errorFilter is required.",
                   "required": [
                     "errorFilter"
                   ]
                 }
               },
               {
+                "description": "A latency indicator needs latencyThreshold.",
                 "if": {
+                  "description": "indicator.type is latency ...",
                   "properties": {
                     "type": {
+                      "description": "The latency indicator type.",
                       "const": "latency"
                     }
                   }
                 },
                 "then": {
+                  "description": "... so latencyThreshold is required.",
                   "required": [
                     "latencyThreshold"
                   ]
@@ -1472,16 +1564,21 @@
           }
         },
         "description": "One SLO."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "low"
     },
     "attachedResourceApiVersion": {
       "type": "string",
       "description": "The apiVersion group used to look up component/SLO XRs by componentKinds. Update here, not per-template, if the group ever changes.",
-      "default": "catalog.hangar.io/v1alpha1"
+      "default": "catalog.hangar.io/v1alpha1",
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "medium"
     },
     "componentKinds": {
       "type": "object",
       "additionalProperties": {
+        "description": "The XR kind for this component type string.",
         "type": "string"
       },
       "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet.",
@@ -1491,7 +1588,9 @@
         "rabbitmq": "RabbitMQ",
         "mongodb": "MongoDB",
         "dex": "Dex"
-      }
+      },
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "medium"
     },
     "extraManifests": {
       "description": "Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is, no labels stamped.",
@@ -1500,7 +1599,9 @@
       "items": {
         "type": "object",
         "description": "One raw Kubernetes object, rendered as-is."
-      }
+      },
+      "x-hangar-owner": "human",
+      "x-hangar-risk": "critical"
     }
   },
   "definitions": {
@@ -1625,6 +1726,7 @@
         "podLabels": {
           "type": "object",
           "additionalProperties": {
+            "description": "A label value (label key -> value).",
             "type": "string"
           },
           "description": "Pod labels to match, ANDed with namespace."
@@ -1645,6 +1747,7 @@
         }
       },
       "not": {
+        "description": "A peer selects by namespace or by CIDR, never both.",
         "required": [
           "namespace",
           "cidr"

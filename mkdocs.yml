@@ -16,6 +16,7 @@ nav:
       - Architecture: admin/architecture.md
       - Governance and security policy: admin/governance.md
       - Cloud credentials: admin/cloud-credentials.md
+      - API versioning: admin/api-versioning.md
 
 plugins:
   - techdocs-core

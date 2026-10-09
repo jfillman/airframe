@@ -20,4 +20,6 @@ verify:
     kind: xrField
     path: status.rolloutPhase
     equals: Healthy
+agentNotes:
+  - "Rendered by function-rollout-watcher (Python, functions/function-rollout-watcher, released by its own workflow). It emits a Normal event only when the observed phase changes, and dispatches at most one diagnosis Job per degraded revision."
 owner: human

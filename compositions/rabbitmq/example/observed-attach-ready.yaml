@@ -33,3 +33,16 @@ metadata:
   namespace: app-flights-dev
   annotations:
     crossplane.io/composition-resource-name: connection
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: flights-mq-broker-usage
+  namespace: app-flights-dev
+  annotations:
+    crossplane.io/composition-resource-name: broker-usage
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Available

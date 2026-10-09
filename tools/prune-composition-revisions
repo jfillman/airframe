@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+"""Prune old CompositionRevisions (review C12). Dry run unless --apply.
+
+Crossplane creates a CompositionRevision for every change to a Composition and never deletes one: kiac-dev
+had 82, up to 9 per Composition. They are immutable snapshots; an XR only ever uses the one its
+spec.crossplane.compositionRevisionRef names (with compositionUpdatePolicy Automatic, the newest). This
+deletes a revision only when BOTH hold:
+
+  - no XR of any catalog kind references it (every XR on the cluster is read, all namespaces), and
+  - it is not among the newest --keep revisions of its Composition (by spec.revision).
+
+    tools/prune-composition-revisions [--context CTX] [--keep 3]           # show what would go
+    tools/prune-composition-revisions [--context CTX] [--keep 3] --apply   # delete it
+
+If any XR list cannot be read the tool stops without deleting: an unread kind could be the one holding a
+revision.
+"""
+import argparse
+import collections
+import json
+import subprocess
+import sys
+
+
+def kubectl(ctx, *args):
+    r = subprocess.run(["kubectl", *(["--context", ctx] if ctx else []), *args], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0:
+        raise SystemExit(f"kubectl {' '.join(args)} failed: {r.stderr.strip()}")
+    return r.stdout
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--context")
+    ap.add_argument("--keep", type=int, default=3, help="newest revisions to keep per Composition (default 3)")
+    ap.add_argument("--apply", action="store_true")
+    a = ap.parse_args()
+    if a.keep < 1:
+        ap.error("--keep must be at least 1")
+
+    revs = json.loads(kubectl(a.context, "get", "compositionrevisions", "-o", "json"))["items"]
+    by_comp = collections.defaultdict(list)
+    for r in revs:
+        comp = (r["metadata"].get("labels") or {}).get("crossplane.io/composition-name") or r["metadata"]["ownerReferences"][0]["name"]
+        by_comp[comp].append(r)
+
+    # every XR of every XRD's kind, all namespaces: which revisions are in use
+    xrds = json.loads(kubectl(a.context, "get", "compositeresourcedefinitions", "-o", "json"))["items"]
+    used = set()
+    n_xrs = 0
+    for x in xrds:
+        plural, group = x["spec"]["names"]["plural"], x["spec"]["group"]
+        items = json.loads(kubectl(a.context, "get", f"{plural}.{group}", "-A", "-o", "json"))["items"]
+        for i in items:
+            n_xrs += 1
+            ref = (((i.get("spec") or {}).get("crossplane") or {}).get("compositionRevisionRef") or {}).get("name") \
+                or ((i.get("spec") or {}).get("compositionRevisionRef") or {}).get("name")
+            if ref:
+                used.add(ref)
+
+    doomed = []
+    for comp, rs in sorted(by_comp.items()):
+        rs.sort(key=lambda r: r["spec"].get("revision", 0), reverse=True)
+        keep = {r["metadata"]["name"] for r in rs[:a.keep]} | {r["metadata"]["name"] for r in rs if r["metadata"]["name"] in used}
+        gone = [r["metadata"]["name"] for r in rs if r["metadata"]["name"] not in keep]
+        print(f"{comp:48s} {len(rs):3d} revisions, keep {len(keep)}, prune {len(gone)}")
+        doomed += gone
+    print(f"\n{len(revs)} revisions, {len(used)} referenced by {n_xrs} XRs, {len(doomed)} to prune (--keep {a.keep})")
+    if not a.apply:
+        print("dry run: pass --apply to delete")
+        return 0
+    for name in doomed:
+        kubectl(a.context, "delete", "compositionrevision", name, "--wait=false")
+    print(f"deleted {len(doomed)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

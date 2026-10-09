@@ -68,6 +68,36 @@ spec:
                   sloth.slok.dev_v1_PrometheusServiceLevel: >-
                     has(object.status) && has(object.status.promOpRulesGenerated) && object.status.promOpRulesGenerated == true
             ---
+            # Attach mode: a Crossplane Usage that blocks deleting the broker RabbitMQ XR while this attacher exists
+            # (review C13). Without it, deleting a broker stranded every attacher: its User, Permission and connection
+            # ConfigMap point at a RabbitmqCluster that is gone, and nothing says so until an app fails to connect.
+            # Same pattern as ApplicationEnvironment's app-usage.yaml; the Usage lives in this XR's namespace and points
+            # across namespaces at the broker (of.resourceRef.namespace, supported by protection.crossplane.io/v1beta1).
+            <<- $xr := .observed.composite.resource >>
+            <<- if and (eq $xr.spec.mode "attach") $xr.spec.brokerRef >>
+            apiVersion: protection.crossplane.io/v1beta1
+            kind: Usage
+            metadata:
+              name: <<$xr.metadata.name>>-broker-usage
+              annotations:
+                <<setResourceNameAnnotation "broker-usage">>
+            spec:
+              of:
+                apiVersion: <<$xr.apiVersion>>
+                kind: RabbitMQ
+                resourceRef:
+                  name: <<$xr.spec.brokerRef.name>>
+                  namespace: <<$xr.spec.brokerRef.namespace | default $xr.metadata.namespace>>
+              by:
+                apiVersion: <<$xr.apiVersion>>
+                kind: RabbitMQ
+                resourceRef:
+                  name: <<$xr.metadata.name>>
+              reason: <<printf "RabbitMQ %s/%s attaches to this broker via spec.brokerRef - delete the attachers first" $xr.metadata.namespace $xr.metadata.name | toJson>>
+              replayDeletion: true
+            ---
+            <<- end >>
+            ---
             # mode: attach - see xrds/rabbitmq.yaml's header. A User + Permission in THIS namespace that
             # reference the broker across namespaces (the broker must list this namespace in its
             # allowedNamespaces), and a ConfigMap of connection details. Nothing renders in broker mode.

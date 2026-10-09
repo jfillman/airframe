@@ -22,6 +22,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: mongodbs.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Requested as a components[] entry in an app's values file (the airframe-application chart renders the XR); not a standalone self-service request."
     hangar.io/agent-summary: "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment."
 spec:
   group: catalog.hangar.io
@@ -30,16 +32,35 @@ spec:
     plural: mongodbs
     singular: mongodb
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: mongodb.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: COMPONENT
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='ComponentReady')].reason"
+          description: "ComponentReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "MongoDB: A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment."
           properties:
+            metadata:
+              type: object
+              description: "Standard object metadata. Only name is constrained here (its length)."
+              properties:
+                name:
+                  type: string
+                  maxLength: 48
+                  description: >-
+                    At most 48 characters (review C13). The operator's arbiter StatefulSet is <name>-arb, and a StatefulSet name plus its 11-character revision hash must fit 63.
             spec:
               type: object
+              description: "Desired state of the MongoDB. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
               properties:

@@ -25,6 +25,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: slos.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Requested through the slos[] list in an app's values file (the chart renders the XR); not a standalone self-service request."
     hangar.io/agent-summary: "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting."
 spec:
   group: catalog.hangar.io
@@ -40,6 +42,9 @@ spec:
     # slos.catalog.hangar.io` (or plain `slos`, which is this resource's actual
     # plural, not a category, and wins unambiguously) instead.
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: slos.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
@@ -47,9 +52,20 @@ spec:
       schema:
         openAPIV3Schema:
           type: object
+          description: "SLO: Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting."
           properties:
+            metadata:
+              type: object
+              description: "Standard object metadata. Only name is constrained here (its length)."
+              properties:
+                name:
+                  type: string
+                  maxLength: 59
+                  description: >-
+                    At most 59 characters (review C13). The PrometheusServiceLevel and its PrometheusRule are named <name>-slo.
             spec:
               type: object
+              description: "Desired state of the SLO. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
                 - service

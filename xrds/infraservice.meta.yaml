@@ -73,4 +73,6 @@ verify:
     condition:
       type: Ready
       status: 'True'
+agentNotes:
+  - "Owns a gitops-infra-<name> repo (README and a cicd.yaml stub, both create-once scaffolds under the ledger) and a TektonCICD child; there is no source repo."
 owner: human

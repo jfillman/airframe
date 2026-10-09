@@ -57,16 +57,30 @@ spec:
     plural: applicationenvironments
     singular: applicationenvironment
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: applicationenvironments.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: CLUSTER
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='ClusterReady')].reason"
+          description: "ClusterReady reason"
+        - name: APP
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='AppResolved')].reason"
+          description: "AppResolved reason"
       schema:
         openAPIV3Schema:
           type: object
+          description: "ApplicationEnvironment: Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded."
           properties:
             status:
               type: object
+              description: "Observed state of the ApplicationEnvironment, written by its Composition (conditions are added by Crossplane)."
               properties:
                 scaffold:
                   type: object
@@ -88,8 +102,13 @@ spec:
                         files without writing them - after which they re-enter this list.
                       items:
                         type: string
+                        description: "A composition-resource-name, e.g. src-repo-readme."
             spec:
               type: object
+              description: "Desired state of the ApplicationEnvironment. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
+              x-kubernetes-validations:
+                - rule: "self.appName.size() + self.env.size() <= 58"
+                  message: "appName and env together are at most 58 characters: the environment's namespace is app-<appName>-<env>, a 63-character name"
               required: ["appName", "env", "cluster"]
               properties:
                 appName:

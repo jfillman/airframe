@@ -108,4 +108,9 @@ verify:
     type: TargetReady
     reasons:
     - AzureContainerAppTargetReady
+agentNotes:
+  - "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md)."
+  - "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them."
+  - "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file."
+  - "With spec.target.enabled the composition also composes an AzureContainerAppTarget named <name>-target; its TargetReady is copied to this XR."
 owner: human

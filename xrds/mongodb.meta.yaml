@@ -67,4 +67,6 @@ verify:
     check: >-
       A replica-set member behind {name}-svc accepts a TCP connection on 27017, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
     run: {kind: tcp, service: "{name}-svc", port: 27017}
+agentNotes:
+  - "The operator merges the statefulSet override field by field (MCK pkg/util/merge), so a probe override only needs the fields it changes. kind-prod pins spec.mongoVersion to 7.0 for a kernel bug."
 owner: human

@@ -32,16 +32,39 @@ spec:
     plural: pythonapplications
     singular: pythonapplication
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: pythonapplications.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: DEVCLUSTER
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='DevClusterReady')].reason"
+          description: "DevClusterReady reason"
+        - name: CICD
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='CicdOnboarded')].reason"
+          description: "CicdOnboarded reason"
       schema:
         openAPIV3Schema:
           type: object
+          description: "PythonApplication: Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD."
           properties:
+            metadata:
+              type: object
+              description: "Standard object metadata. Only name is constrained here (its length)."
+              properties:
+                name:
+                  type: string
+                  maxLength: 52
+                  description: >-
+                    At most 52 characters (review C13). The composed TektonCICD child is <name>-tektoncicd, and its name becomes a 63-character label on everything it composes.
             status:
               type: object
+              description: "Observed state of the PythonApplication, written by its Composition (conditions are added by Crossplane)."
               properties:
                 scaffold:
                   type: object
@@ -63,8 +86,10 @@ spec:
                         files without writing them - after which they re-enter this list.
                       items:
                         type: string
+                        description: "A composition-resource-name, e.g. src-repo-readme."
             spec:
               type: object
+              description: "Desired state of the PythonApplication. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               properties:
                 devCluster:
                   type: string

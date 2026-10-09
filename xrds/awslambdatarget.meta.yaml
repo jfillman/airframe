@@ -39,4 +39,6 @@ verify:
   - id: url-answers
     check: An HTTP GET of status.functionUrl returns a response from the function (any status code; the placeholder returns an error until the first deploy).
     run: {kind: http, url: "{status.functionUrl}"}
+agentNotes:
+  - "The function URL's public-access Permission carries a pinned external-name (FunctionURLAllowPublicAccess); without it the provider retries AddPermission and gets 409 forever."
 owner: human

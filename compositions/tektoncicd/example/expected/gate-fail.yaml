@@ -14,4 +14,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - reason: Available
+    status: 'True'
+    type: Ready
   status: {}

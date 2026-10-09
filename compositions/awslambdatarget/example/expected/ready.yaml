@@ -7,6 +7,7 @@ resources:
       hangar.io/component: aws-lambda-target
       hangar.io/target: smoke-fn
     name: smoke-fn-ecr-bootstrap
+    namespace: app-smoke-fn-cicd
   name: bootstrap-job
   spec:
     backoffLimit: 3.0
@@ -98,6 +99,7 @@ resources:
     annotations:
       crossplane.io/external-name: glidepath-smoke-fn
     name: smoke-fn-repository
+    namespace: app-smoke-fn-cicd
   name: ecr-repository
   spec:
     forProvider:
@@ -116,6 +118,7 @@ resources:
   kind: FunctionURL
   metadata:
     name: smoke-fn-url
+    namespace: app-smoke-fn-cicd
   name: function-url
   spec:
     forProvider:
@@ -132,6 +135,7 @@ resources:
     annotations:
       crossplane.io/external-name: FunctionURLAllowPublicAccess
     name: smoke-fn-url-public
+    namespace: app-smoke-fn-cicd
   name: function-url-permission
   spec:
     forProvider:
@@ -151,6 +155,7 @@ resources:
     annotations:
       crossplane.io/external-name: glidepath-smoke-fn-exec
     name: smoke-fn-exec
+    namespace: app-smoke-fn-cicd
   name: iam-role
   spec:
     forProvider:
@@ -168,6 +173,7 @@ resources:
   kind: RolePolicyAttachment
   metadata:
     name: smoke-fn-exec-logs
+    namespace: app-smoke-fn-cicd
   name: iam-role-policy
   spec:
     forProvider:
@@ -183,6 +189,7 @@ resources:
     annotations:
       crossplane.io/external-name: glidepath-smoke-fn
     name: smoke-fn-function
+    namespace: app-smoke-fn-cicd
   name: lambda-function
   spec:
     forProvider:
@@ -209,6 +216,10 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: function-url-permission, iam-role-policy'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Lambda function glidepath-smoke-fn exists in us-east-1 with an ECR image; Glidepath can deploy to it (status.cicd
       has the deploy block).
     reason: AwsLambdaTargetReady

@@ -4,6 +4,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: thumb-py-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -27,6 +28,7 @@ resources:
     annotations:
       crossplane.io/external-name: thumb-py
     name: thumb-py-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -55,6 +57,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:cicd.yaml:'
     name: thumb-py-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -82,6 +85,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:Containerfile:'
     name: thumb-py-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -105,6 +109,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:function_app.py:'
     name: thumb-py-src-function-app
+    namespace: demo-apps
   name: src-repo-function-app
   spec:
     forProvider:
@@ -128,6 +133,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:.gitignore:'
     name: thumb-py-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -159,6 +165,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:host.json:'
     name: thumb-py-src-host-json
+    namespace: demo-apps
   name: src-repo-host-json
   spec:
     forProvider:
@@ -181,6 +188,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:README.md:'
     name: thumb-py-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -236,6 +244,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-py:requirements.txt:'
     name: thumb-py-src-requirements
+    namespace: demo-apps
   name: src-repo-requirements
   spec:
     forProvider:
@@ -257,6 +266,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: thumb-py-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: thumb-py
@@ -274,4 +284,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-function-app,
+      src-repo-gitignore, src-repo-host-json, src-repo-readme, src-repo-requirements, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

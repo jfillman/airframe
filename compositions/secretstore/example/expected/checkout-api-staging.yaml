@@ -4,6 +4,7 @@ resources:
   kind: ProjectEnvironment
   metadata:
     name: checkout-api-kind-prod-staging
+    namespace: app-checkout-api-secrets
   name: infisical-environment
   spec:
     forProvider:
@@ -23,6 +24,7 @@ resources:
   kind: Object
   metadata:
     name: checkout-api-kind-prod-staging
+    namespace: app-checkout-api-secrets
   name: per-env-cluster-secret-store
   spec:
     forProvider:
@@ -55,5 +57,9 @@ resources:
     managementPolicies:
     - '*'
 xr:
-  conditions: []
+  conditions:
+  - message: 'Unready resources: infisical-environment, per-env-cluster-secret-store'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

@@ -4,6 +4,7 @@ resources:
   kind: Object
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: cluster-secret-store
   spec:
     forProvider:
@@ -39,6 +40,7 @@ resources:
   kind: Identity
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: infisical-identity
   spec:
     forProvider:
@@ -52,6 +54,7 @@ resources:
   kind: IdentityUniversalAuth
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: infisical-identity-ua
   spec:
     forProvider:
@@ -64,6 +67,7 @@ resources:
   kind: IdentityUniversalAuthClientSecret
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: infisical-identity-ua-client-secret
   spec:
     forProvider:
@@ -79,6 +83,7 @@ resources:
   kind: Project
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: infisical-project
   spec:
     forProvider:
@@ -97,6 +102,7 @@ resources:
   kind: ProjectIdentity
   metadata:
     name: checkout-api-kind-dev
+    namespace: app-checkout-api-cicd
   name: infisical-project-identity
   spec:
     forProvider:
@@ -114,6 +120,7 @@ resources:
   kind: ProjectEnvironment
   metadata:
     name: checkout-api-kind-dev-shared
+    namespace: app-checkout-api-cicd
   name: infisical-project-shared-env
   spec:
     forProvider:
@@ -130,5 +137,10 @@ resources:
       kind: ClusterProviderConfig
       name: default
 xr:
-  conditions: []
+  conditions:
+  - message: 'Unready resources: cluster-secret-store, infisical-identity, infisical-identity-ua, infisical-identity-ua-client-secret,
+      infisical-project, infisical-project-identity, infisical-project-shared-env'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

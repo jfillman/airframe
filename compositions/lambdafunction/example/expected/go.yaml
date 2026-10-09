@@ -4,6 +4,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: resize-go-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -27,6 +28,7 @@ resources:
     annotations:
       crossplane.io/external-name: resize-go
     name: resize-go-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -55,6 +57,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:cicd.yaml:'
     name: resize-go-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -83,6 +86,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:Containerfile:'
     name: resize-go-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -119,6 +123,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:.gitignore:'
     name: resize-go-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -150,6 +155,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:go.mod:'
     name: resize-go-src-go-mod
+    namespace: demo-apps
   name: src-repo-go-mod
   spec:
     forProvider:
@@ -179,6 +185,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:main.go:'
     name: resize-go-src-main-go
+    namespace: demo-apps
   name: src-repo-main-go
   spec:
     forProvider:
@@ -205,6 +212,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-go:README.md:'
     name: resize-go-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -260,6 +268,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: resize-go-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: resize-go
@@ -277,4 +286,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore, src-repo-go-mod,
+      src-repo-main-go, src-repo-readme, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

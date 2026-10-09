@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-az-fn
     name: smoke-az-fn-app
+    namespace: app-smoke-az-fn-cicd
   name: container-app
   spec:
     forProvider:
@@ -60,6 +61,7 @@ resources:
   kind: Environment
   metadata:
     name: smoke-az-fn-env
+    namespace: app-smoke-az-fn-cicd
   name: environment
   spec:
     forProvider:
@@ -81,6 +83,7 @@ resources:
       hangar-component: azure-container-app-target
       hangar-target: smoke-az-fn
     name: smoke-az-fn-registry-secret-name
+    namespace: app-smoke-az-fn-cicd
   name: registry-secret-name
   stringData:
     name: registry-password
@@ -91,6 +94,7 @@ resources:
     annotations:
       crossplane.io/external-name: hangar-smoke
     name: smoke-az-fn-rg
+    namespace: app-smoke-az-fn-cicd
   name: resource-group
   spec:
     forProvider:
@@ -104,6 +108,10 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: container-app, environment, resource-group'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Waiting for resource group hangar-smoke, its Container Apps environment and the app smoke-az-fn to be observed
       (environments take a few minutes; or the Azure provider has no credentials yet).
     reason: AzureContainerAppTargetProvisioning

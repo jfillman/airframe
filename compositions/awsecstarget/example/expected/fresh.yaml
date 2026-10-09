@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs
     name: smoke-ecs-cluster
+    namespace: app-smoke-ecs-cicd
   name: ecs-cluster
   spec:
     forProvider:
@@ -24,6 +25,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs-dev
     name: smoke-ecs-service
+    namespace: app-smoke-ecs-cicd
   name: ecs-service
   spec:
     forProvider:
@@ -62,6 +64,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs-dev-ecs-exec
     name: smoke-ecs-exec
+    namespace: app-smoke-ecs-cicd
   name: iam-role
   spec:
     forProvider:
@@ -86,6 +89,7 @@ resources:
   kind: RolePolicyAttachment
   metadata:
     name: smoke-ecs-exec-policy
+    namespace: app-smoke-ecs-cicd
   name: iam-role-policy
   spec:
     forProvider:
@@ -99,6 +103,7 @@ resources:
   kind: InternetGateway
   metadata:
     name: smoke-ecs-igw
+    namespace: app-smoke-ecs-cicd
   name: internet-gateway
   spec:
     forProvider:
@@ -118,6 +123,7 @@ resources:
   kind: Route
   metadata:
     name: smoke-ecs-default-route
+    namespace: app-smoke-ecs-cicd
   name: route
   spec:
     forProvider:
@@ -134,6 +140,7 @@ resources:
   kind: RouteTable
   metadata:
     name: smoke-ecs-rt
+    namespace: app-smoke-ecs-cicd
   name: route-table
   spec:
     forProvider:
@@ -153,6 +160,7 @@ resources:
   kind: RouteTableAssociation
   metadata:
     name: smoke-ecs-rta
+    namespace: app-smoke-ecs-cicd
   name: route-table-association
   spec:
     forProvider:
@@ -168,6 +176,7 @@ resources:
   kind: SecurityGroup
   metadata:
     name: smoke-ecs-sg
+    namespace: app-smoke-ecs-cicd
   name: security-group
   spec:
     forProvider:
@@ -189,6 +198,7 @@ resources:
   kind: SecurityGroupRule
   metadata:
     name: smoke-ecs-sg-egress
+    namespace: app-smoke-ecs-cicd
   name: security-group-egress
   spec:
     forProvider:
@@ -209,6 +219,7 @@ resources:
   kind: SecurityGroupRule
   metadata:
     name: smoke-ecs-sg-ingress
+    namespace: app-smoke-ecs-cicd
   name: security-group-ingress
   spec:
     forProvider:
@@ -229,6 +240,7 @@ resources:
   kind: Subnet
   metadata:
     name: smoke-ecs-subnet
+    namespace: app-smoke-ecs-cicd
   name: subnet
   spec:
     forProvider:
@@ -251,6 +263,7 @@ resources:
   kind: TaskDefinition
   metadata:
     name: smoke-ecs-taskdef
+    namespace: app-smoke-ecs-cicd
   name: task-definition
   spec:
     forProvider:
@@ -285,6 +298,7 @@ resources:
   kind: VPC
   metadata:
     name: smoke-ecs-vpc
+    namespace: app-smoke-ecs-cicd
   name: vpc
   spec:
     forProvider:
@@ -303,6 +317,11 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: ecs-cluster, ecs-service, iam-role, iam-role-policy, internet-gateway, route, route-table,
+      route-table-association, security-group, security-group-egress, security-group-ingress, subnet, task-definition, vpc'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Waiting for the network, execution role, cluster and task definition to be observed (just created, or the AWS
       provider has no credentials yet).
     reason: AwsEcsTargetProvisioning

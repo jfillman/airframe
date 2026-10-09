@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs
     name: smoke-ecs-cluster
+    namespace: app-smoke-ecs-cicd
   name: ecs-cluster
   spec:
     forProvider:
@@ -24,6 +25,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs-dev
     name: smoke-ecs-service
+    namespace: app-smoke-ecs-cicd
   name: ecs-service
   spec:
     forProvider:
@@ -62,6 +64,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-ecs-dev-ecs-exec
     name: smoke-ecs-exec
+    namespace: app-smoke-ecs-cicd
   name: iam-role
   spec:
     forProvider:
@@ -86,6 +89,7 @@ resources:
   kind: RolePolicyAttachment
   metadata:
     name: smoke-ecs-exec-policy
+    namespace: app-smoke-ecs-cicd
   name: iam-role-policy
   spec:
     forProvider:
@@ -99,6 +103,7 @@ resources:
   kind: TaskDefinition
   metadata:
     name: smoke-ecs-taskdef
+    namespace: app-smoke-ecs-cicd
   name: task-definition
   spec:
     forProvider:
@@ -131,6 +136,10 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: ecs-cluster, ecs-service, iam-role, iam-role-policy, task-definition'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Waiting for the network, execution role, cluster and task definition to be observed (just created, or the AWS
       provider has no credentials yet).
     reason: AwsEcsTargetProvisioning

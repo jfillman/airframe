@@ -4,6 +4,7 @@ resources:
   kind: AwsLambdaTarget
   metadata:
     name: thumb-fn-target
+    namespace: demo-apps
   name: aws-lambda-target
   spec:
     architecture: arm64
@@ -15,6 +16,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: thumb-fn-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -38,6 +40,7 @@ resources:
     annotations:
       crossplane.io/external-name: thumb-fn
     name: thumb-fn-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -66,6 +69,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:app.py:'
     name: thumb-fn-src-app-py
+    namespace: demo-apps
   name: src-repo-app-py
   spec:
     forProvider:
@@ -89,6 +93,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:cicd.yaml:'
     name: thumb-fn-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -118,6 +123,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:Containerfile:'
     name: thumb-fn-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -149,6 +155,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:.gitignore:'
     name: thumb-fn-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -180,6 +187,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:README.md:'
     name: thumb-fn-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -237,6 +245,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:requirements.txt:'
     name: thumb-fn-src-requirements
+    namespace: demo-apps
   name: src-repo-requirements
   spec:
     forProvider:
@@ -258,6 +267,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: thumb-fn-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: thumb-fn
@@ -275,6 +285,11 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-app-py, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore,
+      src-repo-readme, src-repo-requirements, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Lambda function glidepath-thumb-fn exists in us-east-1 with an ECR image; Glidepath can deploy to it (status.cicd
       has the deploy block).
     reason: AwsLambdaTargetReady

@@ -28,6 +28,7 @@ resources:
     labels:
       grafana_dashboard: '1'
     name: checkout-availability-slo-dashboard
+    namespace: demo-apps
   name: dashboard-configmap
 - apiVersion: sloth.slok.dev/v1
   kind: PrometheusServiceLevel
@@ -35,6 +36,7 @@ resources:
     labels:
       release: kube-prometheus-stack
     name: checkout-availability-slo
+    namespace: demo-apps
   name: prometheusservicelevel
   spec:
     service: checkout-api
@@ -48,5 +50,9 @@ resources:
           errorQuery: (sum(rate(http_requests_total{service="checkout-api",code=~"5.."}[{{.window}}]))) or vector(0)
           totalQuery: sum(rate(http_requests_total{service="checkout-api"}[{{.window}}]))
 xr:
-  conditions: []
+  conditions:
+  - message: 'Unready resources: dashboard-configmap, prometheusservicelevel'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

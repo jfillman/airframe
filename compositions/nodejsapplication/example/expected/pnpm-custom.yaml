@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: gitops-checkout-api
     name: checkout-api-gitops
+    namespace: demo-apps
   name: gitops-repo
   spec:
     forProvider:
@@ -30,6 +31,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: checkout-api-gitops-readme
+    namespace: demo-apps
   name: gitops-repo-readme
   spec:
     forProvider:
@@ -62,6 +64,7 @@ resources:
     annotations:
       crossplane.io/external-name: checkout-api
     name: checkout-api-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -90,6 +93,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:cicd.yaml:'
     name: checkout-api-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -115,6 +119,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:Containerfile:'
     name: checkout-api-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -138,6 +143,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:.gitignore:'
     name: checkout-api-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -165,6 +171,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:index.js:'
     name: checkout-api-src-index-js
+    namespace: demo-apps
   name: src-repo-index-js
   spec:
     forProvider:
@@ -190,6 +197,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:package.json:'
     name: checkout-api-src-package-json
+    namespace: demo-apps
   name: src-repo-package-json
   spec:
     forProvider:
@@ -213,6 +221,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-api:README.md:'
     name: checkout-api-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -260,6 +269,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: checkout-api-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: checkout-api
@@ -278,4 +288,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore,
+      src-repo-index-js, src-repo-package-json, src-repo-readme, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

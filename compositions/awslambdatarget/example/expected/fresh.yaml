@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: glidepath-smoke-fn
     name: smoke-fn-repository
+    namespace: app-smoke-fn-cicd
   name: ecr-repository
   spec:
     forProvider:
@@ -26,6 +27,7 @@ resources:
     annotations:
       crossplane.io/external-name: glidepath-smoke-fn-exec
     name: smoke-fn-exec
+    namespace: app-smoke-fn-cicd
   name: iam-role
   spec:
     forProvider:
@@ -43,6 +45,7 @@ resources:
   kind: RolePolicyAttachment
   metadata:
     name: smoke-fn-exec-logs
+    namespace: app-smoke-fn-cicd
   name: iam-role-policy
   spec:
     forProvider:
@@ -54,6 +57,10 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: ecr-repository, iam-role, iam-role-policy'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Waiting for the ECR repository and execution role to be observed (just created, or the AWS provider has no credentials
       yet).
     reason: AwsLambdaTargetProvisioning

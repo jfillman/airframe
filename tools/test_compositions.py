@@ -48,6 +48,11 @@ DROP_ANNOTATIONS = {"crossplane.io/composition-resource-name", "crossplane.io/co
                     "crossplane.io/external-create-failed"}
 DROP_LABELS = {"crossplane.io/composite", "crossplane.io/claim-name", "crossplane.io/claim-namespace"}
 STATUS_WORDS = {"STATUS_CONDITION_TRUE": "True", "STATUS_CONDITION_FALSE": "False", "STATUS_CONDITION_UNKNOWN": "Unknown"}
+# Conditions `crossplane render` synthesizes identically for every render (not part of what a
+# composition says about itself): dropped from both renderers' output. Ready is kept: it carries
+# function-auto-ready's verdict ("Unready resources: ...") and the pipeline renderer rebuilds it the
+# same way Crossplane does.
+SYNTHETIC_CONDITIONS = {"Synced", "Responsive"}
 
 
 class RenderError(Exception):
@@ -109,15 +114,29 @@ def run_render_pipeline(comp_dir: Path, case: dict) -> dict:
     if r.returncode != 0 or not r.stdout.strip():
         raise RenderError(f"render-pipeline failed: {(r.stderr or r.stdout).strip()[-800:]}")
     out = json.loads(r.stdout)
+    xr_in = yaml.safe_load((ex / case["xr"]).read_text()) or {}
+    xr_ns = (xr_in.get("metadata") or {}).get("namespace")
     xr = {"status": dict(out.get("composite_status") or {})}
     conds = [{"type": c["type"], "status": STATUS_WORDS.get(c["status"], c["status"]), "reason": c.get("reason", ""),
               "message": c.get("message", "")} for c in out.get("conditions", [])]
-    xr["status"]["conditions"] = conds
-    resources = []
+    # What Crossplane's composer adds on top of the functions' output, so both renderers agree:
+    # the XR's namespace on every composed resource of a namespaced XR, and the Ready condition
+    # from function-auto-ready's per-resource verdicts (Creating + "Unready resources: a, b").
+    resources, unready = [], []
     for name, entry in out.get("resources", {}).items():
         res = copy.deepcopy(entry.get("resource") or {})
-        res.setdefault("metadata", {}).setdefault("annotations", {})["crossplane.io/composition-resource-name"] = name
+        md = res.setdefault("metadata", {})
+        md.setdefault("annotations", {})["crossplane.io/composition-resource-name"] = name
+        if xr_ns and not md.get("namespace"):
+            md["namespace"] = xr_ns
+        if entry.get("ready") != "READY_TRUE":
+            unready.append(name)
         resources.append(res)
+    if unready:
+        conds.append({"type": "Ready", "status": "False", "reason": "Creating", "message": "Unready resources: " + ", ".join(sorted(unready))})
+    else:
+        conds.append({"type": "Ready", "status": "True", "reason": "Available", "message": ""})
+    xr["status"]["conditions"] = conds
     return {"xr": xr, "resources": resources, "results": out.get("results", [])}
 
 
@@ -147,7 +166,9 @@ def normalize(rendered: dict) -> dict:
     status = copy.deepcopy(xr.get("status") or {})
     conds = []
     for c in status.pop("conditions", []) or []:
-        conds.append({k: c.get(k) for k in ("type", "status", "reason", "message") if c.get(k) is not None})
+        if c.get("type") in SYNTHETIC_CONDITIONS:
+            continue
+        conds.append({k: c.get(k) for k in ("type", "status", "reason", "message") if c.get(k) not in (None, "")})
     for k in ("observedGeneration", "lastTransitionTime"):
         status.pop(k, None)
     resources = sorted((norm_resource(r) for r in rendered.get("resources", [])), key=lambda r: (r["name"], r["kind"]))

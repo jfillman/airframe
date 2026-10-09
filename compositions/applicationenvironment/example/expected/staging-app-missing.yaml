@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/identity.yaml:'
     name: widget-service-kind-prod-staging-cluster-identity-yaml
+    namespace: demo-apps
   name: cluster-identity-yaml
   spec:
     forProvider:
@@ -29,6 +30,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/xr-requests/secretstore-staging.yaml:'
     name: widget-service-kind-prod-staging-secretstore-env-xr
+    namespace: demo-apps
   name: secretstore-env-xr
   spec:
     forProvider:
@@ -52,6 +54,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/xr-requests/secretstore-shared.yaml:'
     name: widget-service-kind-prod-staging-secretstore-shared-xr
+    namespace: demo-apps
   name: secretstore-shared-xr
   spec:
     forProvider:
@@ -75,6 +78,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/staging/identity.yaml:'
     name: widget-service-kind-prod-staging-tenant-identity-yaml
+    namespace: demo-apps
   name: tenant-identity-yaml
   spec:
     forProvider:
@@ -105,6 +109,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-widget-service:kind-prod/staging/values.yaml:'
     name: widget-service-kind-prod-staging-values-yaml
+    namespace: demo-apps
   name: values-yaml
   spec:
     forProvider:
@@ -143,4 +148,8 @@ xr:
     reason: ClusterEligible
     status: 'True'
     type: ClusterReady
+  - message: 'Unready resources: cluster-identity-yaml, secretstore-env-xr, secretstore-shared-xr, tenant-identity-yaml, values-yaml'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

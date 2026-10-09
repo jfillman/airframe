@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: gitops-widget-service
     name: widget-service-gitops
+    namespace: demo-apps
   name: gitops-repo
   spec:
     forProvider:
@@ -30,6 +31,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: widget-service-gitops-readme
+    namespace: demo-apps
   name: gitops-repo-readme
   spec:
     forProvider:
@@ -62,6 +64,7 @@ resources:
     annotations:
       crossplane.io/external-name: widget-service
     name: widget-service-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -90,6 +93,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:cicd.yaml:'
     name: widget-service-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -115,6 +119,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:Containerfile:'
     name: widget-service-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -138,6 +143,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:.gitignore:'
     name: widget-service-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -165,6 +171,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:index.js:'
     name: widget-service-src-index-js
+    namespace: demo-apps
   name: src-repo-index-js
   spec:
     forProvider:
@@ -190,6 +197,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:package.json:'
     name: widget-service-src-package-json
+    namespace: demo-apps
   name: src-repo-package-json
   spec:
     forProvider:
@@ -213,6 +221,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:README.md:'
     name: widget-service-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -260,6 +269,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: widget-service-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: widget-service
@@ -278,4 +288,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore,
+      src-repo-index-js, src-repo-package-json, src-repo-readme, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

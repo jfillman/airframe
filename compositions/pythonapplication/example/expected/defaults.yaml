@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: gitops-widget-service
     name: widget-service-gitops
+    namespace: demo-apps
   name: gitops-repo
   spec:
     forProvider:
@@ -30,6 +31,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: widget-service-gitops-readme
+    namespace: demo-apps
   name: gitops-repo-readme
   spec:
     forProvider:
@@ -60,6 +62,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: widget-service-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -83,6 +86,7 @@ resources:
     annotations:
       crossplane.io/external-name: widget-service
     name: widget-service-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -111,6 +115,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:cicd.yaml:'
     name: widget-service-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -136,6 +141,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:requirements.txt:'
     name: widget-service-src-requirements-txt
+    namespace: demo-apps
   name: src-repo-dependency-file
   spec:
     forProvider:
@@ -159,6 +165,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:Containerfile:'
     name: widget-service-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -196,6 +203,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:.gitignore:'
     name: widget-service-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -225,6 +233,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:main.py:'
     name: widget-service-src-main-py
+    namespace: demo-apps
   name: src-repo-main-py
   spec:
     forProvider:
@@ -253,6 +262,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:README.md:'
     name: widget-service-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -302,6 +312,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'widget-service:VERSION:'
     name: widget-service-src-version-file
+    namespace: demo-apps
   name: src-repo-version-file
   spec:
     forProvider:
@@ -323,6 +334,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: widget-service-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: widget-service
@@ -341,4 +353,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dependency-file,
+      src-repo-dockerfile, src-repo-gitignore, src-repo-main-py, src-repo-readme, src-repo-version-file, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

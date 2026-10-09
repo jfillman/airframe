@@ -4,6 +4,7 @@ resources:
   kind: AzureContainerAppTarget
   metadata:
     name: thumb-fn-target
+    namespace: demo-apps
   name: azure-container-app-target
   spec:
     appName: thumb-fn
@@ -15,6 +16,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: thumb-fn-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -38,6 +40,7 @@ resources:
     annotations:
       crossplane.io/external-name: thumb-fn
     name: thumb-fn-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -66,6 +69,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:cicd.yaml:'
     name: thumb-fn-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -94,6 +98,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:Containerfile:'
     name: thumb-fn-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -117,6 +122,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:function_app.py:'
     name: thumb-fn-src-function-app
+    namespace: demo-apps
   name: src-repo-function-app
   spec:
     forProvider:
@@ -140,6 +146,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:.gitignore:'
     name: thumb-fn-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -171,6 +178,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:host.json:'
     name: thumb-fn-src-host-json
+    namespace: demo-apps
   name: src-repo-host-json
   spec:
     forProvider:
@@ -193,6 +201,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:README.md:'
     name: thumb-fn-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -248,6 +257,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'thumb-fn:requirements.txt:'
     name: thumb-fn-src-requirements
+    namespace: demo-apps
   name: src-repo-requirements
   spec:
     forProvider:
@@ -269,6 +279,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: thumb-fn-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: thumb-fn
@@ -286,6 +297,11 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: azure-container-app-target, secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dockerfile,
+      src-repo-function-app, src-repo-gitignore, src-repo-host-json, src-repo-readme, src-repo-requirements, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: spec.target.enabled is set; waiting on the composed AzureContainerAppTarget child (thumb-fn-target) to report
       its own TargetReady condition - resolves itself once it does.
     reason: TargetPending

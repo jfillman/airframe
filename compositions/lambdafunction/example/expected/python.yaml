@@ -4,6 +4,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: resize-py-secretstore-xr
+    namespace: demo-apps
   name: secretstore-xr
   spec:
     forProvider:
@@ -27,6 +28,7 @@ resources:
     annotations:
       crossplane.io/external-name: resize-py
     name: resize-py-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -55,6 +57,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:app.py:'
     name: resize-py-src-app-py
+    namespace: demo-apps
   name: src-repo-app-py
   spec:
     forProvider:
@@ -78,6 +81,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:cicd.yaml:'
     name: resize-py-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -107,6 +111,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:Containerfile:'
     name: resize-py-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -138,6 +143,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:.gitignore:'
     name: resize-py-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -169,6 +175,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:README.md:'
     name: resize-py-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -226,6 +233,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'resize-py:requirements.txt:'
     name: resize-py-src-requirements
+    namespace: demo-apps
   name: src-repo-requirements
   spec:
     forProvider:
@@ -247,6 +255,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: resize-py-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: resize-py
@@ -264,4 +273,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-app-py, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore,
+      src-repo-readme, src-repo-requirements, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

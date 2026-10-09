@@ -15,4 +15,7 @@ xr:
     reason: ClusterNotEligible
     status: 'False'
     type: ClusterReady
+  - reason: Available
+    status: 'True'
+    type: Ready
   status: {}

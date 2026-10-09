@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: gitops-checkout-payments
     name: checkout-payments-gitops
+    namespace: demo-apps
   name: gitops-repo
   spec:
     forProvider:
@@ -30,6 +31,7 @@ resources:
   kind: RepositoryFile
   metadata:
     name: checkout-payments-gitops-readme
+    namespace: demo-apps
   name: gitops-repo-readme
   spec:
     forProvider:
@@ -62,6 +64,7 @@ resources:
     annotations:
       crossplane.io/external-name: checkout-payments
     name: checkout-payments-src
+    namespace: demo-apps
   name: src-repo
   spec:
     forProvider:
@@ -90,6 +93,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:src/main/java/com/example/storefront/Application.java:'
     name: checkout-payments-src-application-java
+    namespace: demo-apps
   name: src-repo-application-java
   spec:
     forProvider:
@@ -115,6 +119,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:src/main/resources/application.properties:'
     name: checkout-payments-src-application-properties
+    namespace: demo-apps
   name: src-repo-application-properties
   spec:
     forProvider:
@@ -142,6 +147,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:build.gradle:'
     name: checkout-payments-src-build-gradle
+    namespace: demo-apps
   name: src-repo-build-file
   spec:
     forProvider:
@@ -167,6 +173,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:cicd.yaml:'
     name: checkout-payments-src-cicd-yaml
+    namespace: demo-apps
   name: src-repo-cicd-yaml
   spec:
     forProvider:
@@ -192,6 +199,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:Containerfile:'
     name: checkout-payments-src-dockerfile
+    namespace: demo-apps
   name: src-repo-dockerfile
   spec:
     forProvider:
@@ -238,6 +246,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:.gitignore:'
     name: checkout-payments-src-gitignore
+    namespace: demo-apps
   name: src-repo-gitignore
   spec:
     forProvider:
@@ -267,6 +276,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'checkout-payments:README.md:'
     name: checkout-payments-src-readme
+    namespace: demo-apps
   name: src-repo-readme
   spec:
     forProvider:
@@ -315,6 +325,7 @@ resources:
   kind: TektonCICD
   metadata:
     name: checkout-payments-tektoncicd
+    namespace: demo-apps
   name: tektoncicd
   spec:
     appName: checkout-payments
@@ -333,4 +344,9 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, src-repo-application-java, src-repo-application-properties,
+      src-repo-build-file, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore, src-repo-readme, tektoncicd'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

@@ -27,6 +27,7 @@ resources:
     labels:
       grafana_dashboard: '1'
     name: checkout-latency-slo-dashboard
+    namespace: demo-apps
   name: dashboard-configmap
 - apiVersion: sloth.slok.dev/v1
   kind: PrometheusServiceLevel
@@ -34,6 +35,7 @@ resources:
     labels:
       release: kube-prometheus-stack
     name: checkout-latency-slo
+    namespace: demo-apps
   name: prometheusservicelevel
   spec:
     service: checkout-api
@@ -47,5 +49,9 @@ resources:
           errorQuery: sum(rate(http_request_duration_seconds_count{service="checkout-api"}[{{.window}}])) - sum(rate(http_request_duration_seconds_bucket{service="checkout-api",le="0.3"}[{{.window}}]))
           totalQuery: sum(rate(http_request_duration_seconds_count{service="checkout-api"}[{{.window}}]))
 xr:
-  conditions: []
+  conditions:
+  - message: 'Unready resources: dashboard-configmap, prometheusservicelevel'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

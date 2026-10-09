@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-az-fn
     name: smoke-az-fn-app
+    namespace: app-smoke-az-fn-cicd
   name: container-app
   spec:
     forProvider:
@@ -49,6 +50,7 @@ resources:
   kind: Environment
   metadata:
     name: smoke-az-fn-env
+    namespace: app-smoke-az-fn-cicd
   name: environment
   spec:
     forProvider:
@@ -68,6 +70,7 @@ resources:
     annotations:
       crossplane.io/external-name: smoke-az-fn-rg
     name: smoke-az-fn-rg
+    namespace: app-smoke-az-fn-cicd
   name: resource-group
   spec:
     forProvider:
@@ -81,6 +84,10 @@ resources:
       name: default
 xr:
   conditions:
+  - message: 'Unready resources: environment, resource-group'
+    reason: Creating
+    status: 'False'
+    type: Ready
   - message: Container App smoke-az-fn in smoke-az-fn-rg answers at https://smoke-az-fn.wittyriver-12345678.eastus.azurecontainerapps.io;
       Glidepath can deploy to it (status.cicd has the deploy block).
     reason: AzureContainerAppTargetReady

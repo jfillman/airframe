@@ -6,6 +6,7 @@ resources:
     annotations:
       crossplane.io/external-name: 'gitops-cluster-dev-tenants:tenants/widget-service/identity.yaml:'
     name: widget-service-cicd-identity-yaml
+    namespace: demo-apps
   name: cicd-identity-yaml
   spec:
     forProvider:
@@ -36,4 +37,8 @@ xr:
     reason: DevClusterReady
     status: 'True'
     type: DevClusterReady
+  - message: 'Unready resources: cicd-identity-yaml'
+    reason: Creating
+    status: 'False'
+    type: Ready
   status: {}

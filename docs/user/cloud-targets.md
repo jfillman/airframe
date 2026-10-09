@@ -75,7 +75,8 @@ spec:
 
 Then watch the XR: `TargetReady` goes `True` with a reason from a closed set (each
 `xrds/<kind>.meta.yaml` lists them with their meaning), and the XR's status carries everything the
-app's `cicd.yaml` needs, including the deploy block as text:
+app's `cicd.yaml` needs, including the deploy block as text. `tools/airframe-verify awslambdatarget
+app-smoke-fn-cicd/smoke-fn` checks the condition, the function (read-only `aws lambda get-function`) and its URL:
 
 ```
 $ kubectl get awslambdatarget smoke-fn -n app-smoke-fn-cicd -o jsonpath='{.status.cicd}'

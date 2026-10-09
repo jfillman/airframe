@@ -7,7 +7,7 @@ summary: >-
   Disposable: delete the XR to remove all of it.
 # Not a component: nothing in a values.yaml references it, so it stays out of the chart's
 # fromComponent table and the contract's `components`; it is published under `targets` instead.
-component: false
+role: target
 outputs: {}
 conditions:
   - type: TargetReady
@@ -24,8 +24,15 @@ conditions:
 verify:
   - id: xr-ready
     check: The AwsEcsTarget XR's TargetReady condition has reason AwsEcsTargetReady.
+    run: {kind: condition, type: TargetReady, reasons: [AwsEcsTargetReady]}
   - id: service-stable
     check: aws ecs describe-services --cluster {cluster} --services {service} reports runningCount == desiredCount.
+    run:
+      kind: cloudCli
+      cli: aws
+      args: [ecs, describe-services, --cluster, "{status.cluster}", --services, "{status.service}", --region, "{status.region}"]
+      expect: {path: "services[0].runningCount", equalsPath: "services[0].desiredCount"}
   - id: port-answers
     check: An HTTP GET of http://<task public IP>:{containerPort}/ (the IP from aws ecs describe-tasks and describe-network-interfaces) returns a response.
+    run: {kind: manual}
 owner: human

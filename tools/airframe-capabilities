@@ -8,6 +8,10 @@ exists.
     tools/airframe-capabilities component <TYPE>            one component's outputs, verify checks, owner
     tools/airframe-capabilities targets                    list every cloud target type and its summary
     tools/airframe-capabilities target <TYPE>               one cloud target's conditions, verify checks, owner
+    tools/airframe-capabilities kinds                      list every other kind with a contract (app stacks,
+                                                           environments, platform, observability), role and summary
+    tools/airframe-capabilities kind <TYPE>                 one such kind's outputs, conditions, verify checks
+    tools/airframe-capabilities verify <TYPE>               the executable verify steps of any kind (airframe-verify runs them)
     tools/airframe-capabilities xrds                        list every XRD, kind, apiVersion, summary
     tools/airframe-capabilities xrd <KIND>                  one XRD's summary and description coverage
     tools/airframe-capabilities field <NAME>                one chart field's type/description/default
@@ -66,6 +70,26 @@ def main():
             print(f"error: no such cloud target type {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', targets)}", file=sys.stderr)
             return 1
         print(json.dumps(targets[rest[0]], indent=2))
+        return 0
+
+    if cmd == "kinds":
+        print(json.dumps({k: {"role": v["role"], "summary": v["summary"]} for k, v in c.get("kinds", {}).items()}, indent=2))
+        return 0
+
+    if cmd == "kind":
+        kinds = c.get("kinds", {})
+        if not rest or rest[0] not in kinds:
+            print(f"error: no such kind {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', kinds)}", file=sys.stderr)
+            return 1
+        print(json.dumps(kinds[rest[0]], indent=2))
+        return 0
+
+    if cmd == "verify":
+        every = {**c["components"], **c.get("targets", {}), **c.get("kinds", {})}
+        if not rest or rest[0] not in every:
+            print(f"error: no contract for {rest[0] if rest else ''!r}. {_hint(rest[0] if rest else '', every)}", file=sys.stderr)
+            return 1
+        print(json.dumps(every[rest[0]].get("verify", []), indent=2))
         return 0
 
     if cmd == "xrds":

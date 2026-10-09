@@ -278,19 +278,89 @@
         }
       },
       "owner": "human",
+      "role": "component",
+      "sources": [
+        {
+          "checkedBy": "functions/function-dex/tests/test_fn.py::test_sidecar_secret_and_service_match_the_function",
+          "createdBy": "function",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-oauth-credentials"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
+        },
+        {
+          "checkedBy": "functions/function-dex/tests/test_fn.py::test_sidecar_secret_and_service_match_the_function",
+          "createdBy": "function",
+          "object": {
+            "kind": "Service",
+            "name": "{name}"
+          },
+          "when": {
+            "equals": "server",
+            "field": "spec.mode"
+          }
+        }
+      ],
       "summary": "attach mode: a confidential OAuth2 client on an existing shared Dex server, for machine-to-machine client_credentials auth. server mode (no outputs below apply): the shared OIDC server itself.",
       "verify": [
         {
           "check": "The Dex XR's ComponentReady condition has reason DexAttachReady (attach) or DexServerReady (server).",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DexAttachReady",
+              "DexServerReady"
+            ],
+            "type": "ComponentReady"
+          }
         },
         {
           "check": "Secret {name}-oauth-credentials exists in the app namespace with non-empty client-id and client-secret keys.",
-          "id": "secret-exists"
+          "id": "secret-exists",
+          "run": {
+            "keys": [
+              "client-id",
+              "client-secret"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-oauth-credentials"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
         },
         {
-          "check": "POST {tokenUrl} with grant_type=client_credentials and the client-id/client-secret from the Secret returns a real access_token whose signature validates against {jwksUrl}.",
-          "id": "token-issuance"
+          "check": "POST {tokenUrl} with grant_type=client_credentials and the client-id/client-secret from the Secret returns a real access_token whose signing key is published at {jwksUrl} (reached through kubectl port-forward to the Dex server's Service).",
+          "id": "token-issuance",
+          "run": {
+            "kind": "oauthClientCredentials",
+            "secret": "{name}-oauth-credentials"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
+        },
+        {
+          "check": "The Dex server's {name} Service answers GET /dex/.well-known/openid-configuration with 200 on 5556 (through kubectl port-forward).",
+          "id": "server-discovery",
+          "run": {
+            "expectStatus": 200,
+            "kind": "http",
+            "path": "/dex/.well-known/openid-configuration",
+            "port": 5556,
+            "service": "{name}"
+          },
+          "when": {
+            "equals": "server",
+            "field": "spec.mode"
+          }
         }
       ]
     },
@@ -348,19 +418,69 @@
         }
       },
       "owner": "human",
+      "role": "component",
+      "sources": [
+        {
+          "createdBy": "operator",
+          "from": {
+            "equals": "{name}-app",
+            "field": "spec.users[].connectionStringSecretName",
+            "kind": "MongoDBCommunity",
+            "name": "{name}"
+          },
+          "note": "The MongoDB Kubernetes operator writes each user's connection strings into the Secret named by users[].connectionStringSecretName.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-app"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "kind": "MongoDBCommunity",
+            "name": "{name}"
+          },
+          "note": "The operator creates the headless <name>-svc Service for the replica set's StatefulSet.",
+          "object": {
+            "kind": "Service",
+            "name": "{name}-svc"
+          }
+        }
+      ],
       "summary": "A dedicated MongoDB replica set, one per application environment.",
       "verify": [
         {
           "check": "The MongoDB XR's ComponentReady condition has reason MongoDBReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "MongoDBReady"
+            ],
+            "type": "ComponentReady"
+          }
         },
         {
-          "check": "Secret {name}-app exists in the app namespace and has non-empty username/password keys.",
-          "id": "secret-exists"
+          "check": "Secret {name}-app exists in the app namespace and has non-empty username, password and connectionString.standard keys.",
+          "id": "secret-exists",
+          "run": {
+            "keys": [
+              "username",
+              "password",
+              "connectionString.standard"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-app"
+          }
         },
         {
-          "check": "A TCP connect to {name}-0.{name}-svc:27017 succeeds from the app namespace.",
-          "id": "reachable"
+          "check": "A replica-set member behind {name}-svc accepts a TCP connection on 27017, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.",
+          "id": "reachable",
+          "run": {
+            "kind": "tcp",
+            "port": 27017,
+            "service": "{name}-svc"
+          }
         }
       ]
     },
@@ -427,19 +547,67 @@
         }
       },
       "owner": "human",
+      "role": "component",
+      "sources": [
+        {
+          "createdBy": "operator",
+          "from": {
+            "field": "spec.bootstrap.initdb",
+            "kind": "Cluster",
+            "name": "{name}"
+          },
+          "note": "CloudNativePG creates <Cluster>-app (owner role, generated password, uri, jdbc-uri) from bootstrap.initdb.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-app"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "kind": "Cluster",
+            "name": "{name}"
+          },
+          "note": "CloudNativePG creates <Cluster>-rw (primary), -ro and -r Services for every Cluster.",
+          "object": {
+            "kind": "Service",
+            "name": "{name}-rw"
+          }
+        }
+      ],
       "summary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
       "verify": [
         {
           "check": "The PostgreSQL XR's ComponentReady condition has reason PostgreSQLReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "PostgreSQLReady"
+            ],
+            "type": "ComponentReady"
+          }
         },
         {
-          "check": "Secret {name}-app exists in the app namespace and has a non-empty password key.",
-          "id": "secret-exists"
+          "check": "Secret {name}-app exists in the app namespace and has non-empty password and uri keys.",
+          "id": "secret-exists",
+          "run": {
+            "keys": [
+              "password",
+              "uri"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-app"
+          }
         },
         {
-          "check": "A TCP connect to {name}-rw:5432 succeeds from the app namespace (CNPG's read-write Service).",
-          "id": "reachable"
+          "check": "{name}-rw accepts a TCP connection on 5432 (CNPG's read-write Service), through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.",
+          "id": "reachable",
+          "run": {
+            "kind": "tcp",
+            "port": 5432,
+            "service": "{name}-rw"
+          }
         }
       ]
     },
@@ -500,19 +668,111 @@
         }
       },
       "owner": "human",
+      "role": "component",
+      "sources": [
+        {
+          "createdBy": "operator",
+          "from": {
+            "kind": "User",
+            "name": "{name}"
+          },
+          "note": "The RabbitMQ messaging-topology operator writes a generated username/password to <User>-user-credentials.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-user-credentials"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "ConfigMap",
+            "name": "{name}-connection"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "kind": "RabbitmqCluster",
+            "name": "{name}"
+          },
+          "note": "The RabbitMQ cluster operator creates a client Service named after the RabbitmqCluster.",
+          "object": {
+            "kind": "Service",
+            "name": "{name}"
+          },
+          "when": {
+            "equals": "broker",
+            "field": "spec.mode"
+          }
+        }
+      ],
       "summary": "attach mode: a user + permissions on an existing shared broker, scoped to this app's own queue prefix and exchanges. broker mode (no outputs below apply): the shared broker itself.",
       "verify": [
         {
           "check": "The RabbitMQ XR's ComponentReady condition has reason RabbitMQAttachReady (attach) or RabbitMQBrokerReady (broker).",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "RabbitMQAttachReady",
+              "RabbitMQBrokerReady"
+            ],
+            "type": "ComponentReady"
+          }
         },
         {
-          "check": "Secret {name}-user-credentials exists in the app namespace and has a non-empty password key.",
-          "id": "secret-exists"
+          "check": "Secret {name}-user-credentials exists in the app namespace and has non-empty username and password keys.",
+          "id": "secret-exists",
+          "run": {
+            "keys": [
+              "username",
+              "password"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-user-credentials"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
         },
         {
           "check": "ConfigMap {name}-connection exists in the app namespace with host/port/vhost keys.",
-          "id": "configmap-exists"
+          "id": "configmap-exists",
+          "run": {
+            "configMap": "{name}-connection",
+            "keys": [
+              "host",
+              "port",
+              "vhost"
+            ],
+            "kind": "configMapKeys"
+          },
+          "when": {
+            "equals": "attach",
+            "field": "spec.mode"
+          }
+        },
+        {
+          "check": "The broker's {name} Service accepts an AMQP TCP connection on 5672, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.",
+          "id": "broker-reachable",
+          "run": {
+            "kind": "tcp",
+            "port": 5672,
+            "service": "{name}"
+          },
+          "when": {
+            "equals": "broker",
+            "field": "spec.mode"
+          }
         }
       ]
     },
@@ -568,27 +828,1456 @@
         }
       },
       "owner": "human",
+      "role": "component",
+      "sources": [
+        {
+          "createdBy": "crossplane",
+          "from": {
+            "equals": "{name}-connection",
+            "field": "spec.writeConnectionSecretToRef.name",
+            "kind": "Release",
+            "name": "{name}"
+          },
+          "keysFrom": "spec.connectionDetails[].toConnectionSecretKey",
+          "note": "provider-helm writes the Release's connectionDetails into its writeConnectionSecretToRef Secret.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-connection"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "equals": "{name}",
+            "field": "spec.forProvider.values.fullnameOverride",
+            "kind": "Release",
+            "name": "{name}"
+          },
+          "note": "The Bitnami chart names the master Service <fullname>-master; the composition sets fullnameOverride to the XR name.",
+          "object": {
+            "kind": "Service",
+            "name": "{name}-master"
+          }
+        }
+      ],
       "summary": "A Redis cache or shared-counter store, dedicated to one application environment.",
       "verify": [
         {
           "check": "The Redis XR's ComponentReady condition has reason RedisReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "RedisReady"
+            ],
+            "type": "ComponentReady"
+          }
         },
         {
           "check": "Secret {name}-connection exists in the app namespace and has a non-empty password key.",
-          "id": "secret-exists"
+          "id": "secret-exists",
+          "run": {
+            "keys": [
+              "password"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-connection"
+          }
         },
         {
-          "check": "A TCP connect to {name}-master:6379 succeeds from the app namespace.",
-          "id": "reachable"
+          "check": "{name}-master accepts a TCP connection on 6379, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.",
+          "id": "reachable",
+          "run": {
+            "kind": "tcp",
+            "port": 6379,
+            "service": "{name}-master"
+          }
         }
       ]
     }
   },
   "generated_by": "tools/gen_contract.py",
+  "kinds": {
+    "applicationenvironment": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "spec.cluster is in the cluster registry with a tenants repo; files are composed.",
+              "reason": "ClusterEligible",
+              "status": "True"
+            },
+            {
+              "meaning": "spec.cluster is missing from the registry or not eligible; nothing is composed.",
+              "reason": "ClusterNotEligible",
+              "status": "False"
+            }
+          ],
+          "type": "ClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The app named in spec.appName was found as one of the application kinds; a Usage protects it.",
+              "reason": "AppResolved",
+              "status": "True"
+            },
+            {
+              "meaning": "The app lookup has not returned yet (first reconcile).",
+              "reason": "AppLookupPending",
+              "status": "False"
+            },
+            {
+              "meaning": "No application XR named spec.appName exists in this namespace; check the name.",
+              "reason": "AppNotFound",
+              "status": "False"
+            }
+          ],
+          "type": "AppResolved"
+        }
+      ],
+      "kind": "ApplicationEnvironment",
+      "outputs": {
+        "envIdentityFile": {
+          "at": {
+            "field": "spec.forProvider.file",
+            "kind": "RepositoryFile"
+          },
+          "description": "The file in the target cluster's tenants repo that the tenant-onboarding ApplicationSet renders the environment's Application from.",
+          "kind": "literal",
+          "value": "tenants/{spec.appName}/{spec.env}/identity.yaml"
+        },
+        "valuesFile": {
+          "at": {
+            "field": "spec.forProvider.file",
+            "kind": "RepositoryFile"
+          },
+          "description": "Path of the environment's values file in the app's gitops repo (scaffolded once, then the developer's).",
+          "kind": "literal",
+          "value": "{spec.cluster}/{spec.env}/values.yaml"
+        }
+      },
+      "owner": "human",
+      "role": "environment",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "RepositoryFile",
+            "name": "{name}-tenant-identity-yaml"
+          }
+        }
+      ],
+      "summary": "Adds a deploy environment (staging, prod) on a target cluster for an onboarded app: the env's identity.yaml in that cluster's tenants repo, SecretStore requests, and a one-time values.yaml scaffold in the app's gitops repo.",
+      "verify": [
+        {
+          "check": "ClusterReady is True (ClusterEligible).",
+          "id": "cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "ClusterEligible"
+            ],
+            "type": "ClusterReady"
+          }
+        },
+        {
+          "check": "AppResolved is True.",
+          "id": "app-resolved",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AppResolved"
+            ],
+            "type": "AppResolved"
+          }
+        },
+        {
+          "check": "The RepositoryFile {name}-tenant-identity-yaml is Ready, so the environment's identity.yaml exists in the tenants repo.",
+          "id": "env-identity-file",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-tenant-identity-yaml",
+            "resource": "repositoryfiles.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "azurefunction": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "spec.target.enabled is set and the composed target child has not reported TargetReady yet.",
+              "reason": "TargetPending",
+              "status": "False"
+            },
+            {
+              "meaning": "The Container App exists and serves (passed through from the AzureContainerAppTarget child).",
+              "reason": "AzureContainerAppTargetReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The child's Azure resources are still being created.",
+              "reason": "AzureContainerAppTargetProvisioning",
+              "status": "False"
+            }
+          ],
+          "type": "TargetReady"
+        }
+      ],
+      "kind": "AzureFunction",
+      "outputs": {
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "target": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "AzureContainerAppTarget"
+          },
+          "description": "The composed AzureContainerAppTarget child XR when spec.target.enabled; its status carries the cloud names (function, URL).",
+          "kind": "literal",
+          "value": "{name}-target",
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "AzureContainerAppTarget",
+            "name": "{name}-target"
+          },
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        }
+      ],
+      "summary": "Onboards an Azure Functions app: a source repo with a container scaffold for the chosen runtime, a SecretStore request, the TektonCICD child, and with spec.target.enabled the AzureContainerAppTarget it deploys to.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "With spec.target.enabled, the XR's TargetReady condition has reason AzureContainerAppTargetReady.",
+          "id": "target-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AzureContainerAppTargetReady"
+            ],
+            "type": "TargetReady"
+          },
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        }
+      ]
+    },
+    "goapplication": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "GoApplication",
+      "outputs": {
+        "gitopsRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository Argo CD deploys this app from (values per cluster and environment).",
+          "kind": "literal",
+          "value": "gitops-{name}"
+        },
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-gitops"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        }
+      ],
+      "summary": "Onboards a Go service: a source repo with a runnable scaffold, a gitops-<name> repo, a SecretStore request and the TektonCICD child that registers it with the dev cluster's pipelines.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-gitops is Ready, so the GitHub gitops repository exists.",
+          "id": "gitops-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-gitops",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "infraservice": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "InfraService",
+      "outputs": {
+        "gitopsRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository Argo CD deploys this app from (values per cluster and environment).",
+          "kind": "literal",
+          "value": "gitops-infra-{name}"
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-gitops-infra"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        }
+      ],
+      "summary": "Onboards a shared infrastructure service (a broker, an identity server): its gitops-infra-<name> repo with a cicd.yaml stub, a SecretStore request and the TektonCICD child.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-gitops-infra is Ready, so the GitHub gitops repository exists.",
+          "id": "gitops-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-gitops-infra",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "lambdafunction": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "spec.target.enabled is set and the composed target child has not reported TargetReady yet.",
+              "reason": "TargetPending",
+              "status": "False"
+            },
+            {
+              "meaning": "The Lambda function, its ECR repository and URL exist (passed through from the AwsLambdaTarget child).",
+              "reason": "AwsLambdaTargetReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The child's AWS resources are still being created.",
+              "reason": "AwsLambdaTargetProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "The child is seeding the placeholder image the function needs before it can exist.",
+              "reason": "AwsLambdaTargetBootstrapping",
+              "status": "False"
+            },
+            {
+              "meaning": "Seeding the placeholder image failed; see the child's events.",
+              "reason": "AwsLambdaTargetBootstrapFailed",
+              "status": "False"
+            }
+          ],
+          "type": "TargetReady"
+        }
+      ],
+      "kind": "LambdaFunction",
+      "outputs": {
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "target": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "AwsLambdaTarget"
+          },
+          "description": "The composed AwsLambdaTarget child XR when spec.target.enabled; its status carries the cloud names (function, URL).",
+          "kind": "literal",
+          "value": "{name}-target",
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "AwsLambdaTarget",
+            "name": "{name}-target"
+          },
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        }
+      ],
+      "summary": "Onboards an AWS Lambda function app: a source repo with a container-image scaffold for the chosen runtime, a SecretStore request, the TektonCICD child, and with spec.target.enabled the AwsLambdaTarget it deploys to.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "With spec.target.enabled, the XR's TargetReady condition has reason AwsLambdaTargetReady.",
+          "id": "target-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AwsLambdaTargetReady"
+            ],
+            "type": "TargetReady"
+          },
+          "when": {
+            "equals": true,
+            "field": "spec.target.enabled"
+          }
+        }
+      ]
+    },
+    "nodejsapplication": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "NodeJSApplication",
+      "outputs": {
+        "gitopsRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository Argo CD deploys this app from (values per cluster and environment).",
+          "kind": "literal",
+          "value": "gitops-{name}"
+        },
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-gitops"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        }
+      ],
+      "summary": "Onboards a Node.js service: a source repo with a runnable scaffold, a gitops-<name> repo, a SecretStore request and the TektonCICD child that registers it with the dev cluster's pipelines.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-gitops is Ready, so the GitHub gitops repository exists.",
+          "id": "gitops-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-gitops",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "pythonapplication": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "PythonApplication",
+      "outputs": {
+        "gitopsRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository Argo CD deploys this app from (values per cluster and environment).",
+          "kind": "literal",
+          "value": "gitops-{name}"
+        },
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-gitops"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        }
+      ],
+      "summary": "Onboards a Python service: a source repo with a runnable scaffold, a gitops-<name> repo, a SecretStore request and the TektonCICD child that registers it with the dev cluster's pipelines.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-gitops is Ready, so the GitHub gitops repository exists.",
+          "id": "gitops-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-gitops",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "rolloutwatch": {
+      "conditions": [],
+      "kind": "RolloutWatch",
+      "outputs": {},
+      "owner": "human",
+      "role": "observability",
+      "summary": "Watches one app environment's Argo Rollout; on Degraded it dispatches a HolmesGPT diagnosis Job (at most once per revision) and records the phase in status.",
+      "verify": [
+        {
+          "check": "The RolloutWatch XR is Ready.",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "Available"
+            ],
+            "type": "Ready"
+          }
+        },
+        {
+          "check": "status.rolloutPhase is Healthy: the watched Rollout's last observed phase.",
+          "id": "rollout-healthy",
+          "run": {
+            "equals": "Healthy",
+            "kind": "xrField",
+            "path": "status.rolloutPhase"
+          }
+        }
+      ]
+    },
+    "secretstore": {
+      "conditions": [],
+      "kind": "SecretStore",
+      "outputs": {
+        "clusterSecretStore": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "ClusterSecretStore"
+          },
+          "description": "The ClusterSecretStore an ExternalSecret's secretStoreRef names (kind ClusterSecretStore).",
+          "kind": "literal",
+          "value": "{name}"
+        }
+      },
+      "owner": "human",
+      "role": "platform",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "note": "Composed through a provider-kubernetes Object.",
+          "object": {
+            "kind": "ClusterSecretStore",
+            "name": "{name}"
+          }
+        }
+      ],
+      "summary": "An Infisical project plus a machine identity for one app (and environment), wrapped into an External Secrets ClusterSecretStore that ExternalSecrets in the app's namespaces read from.",
+      "verify": [
+        {
+          "check": "The SecretStore XR is Ready (every Infisical resource and the store are up).",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "Available"
+            ],
+            "type": "Ready"
+          }
+        },
+        {
+          "check": "ClusterSecretStore {name} reports Ready True: External Secrets authenticated to Infisical with the identity.",
+          "id": "store-valid",
+          "run": {
+            "clusterScoped": true,
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}",
+            "resource": "clustersecretstores.external-secrets.io"
+          }
+        }
+      ]
+    },
+    "slo": {
+      "conditions": [],
+      "kind": "SLO",
+      "outputs": {
+        "dashboard": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "ConfigMap"
+          },
+          "description": "The ConfigMap Grafana's dashboard sidecar loads.",
+          "kind": "literal",
+          "value": "{name}-slo-dashboard"
+        },
+        "prometheusServiceLevel": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "PrometheusServiceLevel"
+          },
+          "description": "The Sloth PrometheusServiceLevel in the XR's namespace.",
+          "kind": "literal",
+          "value": "{name}-slo"
+        }
+      },
+      "owner": "human",
+      "role": "observability",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "PrometheusServiceLevel",
+            "name": "{name}-slo"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "ConfigMap",
+            "name": "{name}-slo-dashboard"
+          }
+        }
+      ],
+      "summary": "A service-level objective for one app environment: a Sloth PrometheusServiceLevel (recording and burn-rate alert rules) plus a Grafana dashboard ConfigMap.",
+      "verify": [
+        {
+          "check": "The SLO XR is Ready.",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "Available"
+            ],
+            "type": "Ready"
+          }
+        },
+        {
+          "check": "Sloth reports status.promOpRulesGenerated true on {name}-slo: the PrometheusRule exists.",
+          "id": "rules-generated",
+          "run": {
+            "equals": true,
+            "field": "status.promOpRulesGenerated",
+            "kind": "resource",
+            "name": "{name}-slo",
+            "resource": "prometheusservicelevels.sloth.slok.dev"
+          }
+        }
+      ]
+    },
+    "springbootapplication": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "SpringBootApplication",
+      "outputs": {
+        "gitopsRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository Argo CD deploys this app from (values per cluster and environment).",
+          "kind": "literal",
+          "value": "gitops-{name}"
+        },
+        "sourceRepo": {
+          "at": {
+            "field": "spec.forProvider.name",
+            "kind": "Repository"
+          },
+          "description": "The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.",
+          "kind": "literal",
+          "value": "{name}"
+        },
+        "tektonCicd": {
+          "at": {
+            "field": "metadata.name",
+            "kind": "TektonCICD"
+          },
+          "description": "The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied from it.",
+          "kind": "literal",
+          "value": "{name}-tektoncicd"
+        }
+      },
+      "owner": "human",
+      "role": "bootstrap",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-src"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "Repository",
+            "name": "{name}-gitops"
+          }
+        },
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "TektonCICD",
+            "name": "{name}-tektoncicd"
+          }
+        }
+      ],
+      "summary": "Onboards a Spring Boot service: a source repo with a runnable scaffold, a gitops-<name> repo, a SecretStore request and the TektonCICD child that registers it with the dev cluster's pipelines.",
+      "verify": [
+        {
+          "check": "The XR's DevClusterReady condition is True (DevClusterReady).",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "The XR's CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app's identity.yaml.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.",
+          "id": "source-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-src",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        },
+        {
+          "check": "The Repository managed resource {name}-gitops is Ready, so the GitHub gitops repository exists.",
+          "id": "gitops-repo",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{name}-gitops",
+            "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "tektoncicd": {
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.",
+              "reason": "DevClusterReady",
+              "status": "True"
+            },
+            {
+              "meaning": "The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed until it is.",
+              "reason": "DevClusterNotReady",
+              "status": "False"
+            }
+          ],
+          "type": "DevClusterReady"
+        },
+        {
+          "reasons": [
+            {
+              "meaning": "The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard it.",
+              "reason": "CicdOnboarded",
+              "status": "True"
+            },
+            {
+              "meaning": "identity.yaml has not been observed Ready yet (normal for a minute after creation).",
+              "reason": "CicdOnboardingPending",
+              "status": "False"
+            }
+          ],
+          "type": "CicdOnboarded"
+        }
+      ],
+      "kind": "TektonCICD",
+      "outputs": {
+        "identityFile": {
+          "at": {
+            "field": "spec.forProvider.file",
+            "kind": "RepositoryFile"
+          },
+          "description": "The file in the cluster's tenants repo that onboards the app.",
+          "kind": "literal",
+          "value": "tenants/{spec.appName}/identity.yaml"
+        }
+      },
+      "owner": "human",
+      "role": "platform",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "RepositoryFile",
+            "name": "{spec.appName}-cicd-identity-yaml"
+          }
+        }
+      ],
+      "summary": "Registers one app with the dev cluster's CI: writes tenants/<app>/identity.yaml to the tenants repo, which the dev cluster's tenant ApplicationSets read to create the app's cicd namespace, Pipelines-as-Code repository and RBAC.",
+      "verify": [
+        {
+          "check": "DevClusterReady is True.",
+          "id": "dev-cluster-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "DevClusterReady"
+            ],
+            "type": "DevClusterReady"
+          }
+        },
+        {
+          "check": "CicdOnboarded is True.",
+          "id": "cicd-onboarded",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "CicdOnboarded"
+            ],
+            "type": "CicdOnboarded"
+          }
+        },
+        {
+          "check": "The RepositoryFile {spec.appName}-cicd-identity-yaml is Ready, so tenants/<app>/identity.yaml exists in the tenants repo.",
+          "id": "identity-file",
+          "run": {
+            "condition": {
+              "status": "True",
+              "type": "Ready"
+            },
+            "kind": "resource",
+            "name": "{spec.appName}-cicd-identity-yaml",
+            "resource": "repositoryfiles.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    }
+  },
   "targets": {
     "awsecstarget": {
-      "component": false,
       "conditions": [
         {
           "reasons": [
@@ -613,24 +2302,52 @@
       ],
       "kind": "AwsEcsTarget",
       "owner": "human",
+      "role": "target",
       "summary": "The minimum AWS infrastructure a container deploys into on ECS Fargate - cluster, task definition, service, execution role and, by default, a small dedicated public network. Disposable: delete the XR to remove all of it.",
       "verify": [
         {
           "check": "The AwsEcsTarget XR's TargetReady condition has reason AwsEcsTargetReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AwsEcsTargetReady"
+            ],
+            "type": "TargetReady"
+          }
         },
         {
           "check": "aws ecs describe-services --cluster {cluster} --services {service} reports runningCount == desiredCount.",
-          "id": "service-stable"
+          "id": "service-stable",
+          "run": {
+            "args": [
+              "ecs",
+              "describe-services",
+              "--cluster",
+              "{status.cluster}",
+              "--services",
+              "{status.service}",
+              "--region",
+              "{status.region}"
+            ],
+            "cli": "aws",
+            "expect": {
+              "equalsPath": "services[0].desiredCount",
+              "path": "services[0].runningCount"
+            },
+            "kind": "cloudCli"
+          }
         },
         {
           "check": "An HTTP GET of http://<task public IP>:{containerPort}/ (the IP from aws ecs describe-tasks and describe-network-interfaces) returns a response.",
-          "id": "port-answers"
+          "id": "port-answers",
+          "run": {
+            "kind": "manual"
+          }
         }
       ]
     },
     "awslambdatarget": {
-      "component": false,
       "conditions": [
         {
           "reasons": [
@@ -660,24 +2377,51 @@
       ],
       "kind": "AwsLambdaTarget",
       "owner": "human",
+      "role": "target",
       "summary": "The minimum AWS infrastructure a container-image Lambda function deploys into - ECR repository, execution role, the function itself seeded with a public base image, and a public Function URL. Disposable: delete the XR to remove all of it.",
       "verify": [
         {
           "check": "The AwsLambdaTarget XR's TargetReady condition has reason AwsLambdaTargetReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AwsLambdaTargetReady"
+            ],
+            "type": "TargetReady"
+          }
         },
         {
           "check": "aws lambda get-function --function-name {functionName} reports PackageType Image and an ECR image URI.",
-          "id": "function-exists"
+          "id": "function-exists",
+          "run": {
+            "args": [
+              "lambda",
+              "get-function",
+              "--function-name",
+              "{status.functionName}",
+              "--region",
+              "{status.region}"
+            ],
+            "cli": "aws",
+            "expect": {
+              "equals": "Image",
+              "path": "Configuration.PackageType"
+            },
+            "kind": "cloudCli"
+          }
         },
         {
           "check": "An HTTP GET of status.functionUrl returns a response from the function (any status code; the placeholder returns an error until the first deploy).",
-          "id": "url-answers"
+          "id": "url-answers",
+          "run": {
+            "kind": "http",
+            "url": "{status.functionUrl}"
+          }
         }
       ]
     },
     "azurecontainerapptarget": {
-      "component": false,
       "conditions": [
         {
           "reasons": [
@@ -697,19 +2441,47 @@
       ],
       "kind": "AzureContainerAppTarget",
       "owner": "human",
+      "role": "target",
       "summary": "The minimum Azure infrastructure a container deploys into on Container Apps - a resource group, a Container Apps environment and the app with public ingress, seeded with a placeholder image. Disposable: delete the XR to remove all of it.",
       "verify": [
         {
           "check": "The AzureContainerAppTarget XR's TargetReady condition has reason AzureContainerAppTargetReady.",
-          "id": "xr-ready"
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "AzureContainerAppTargetReady"
+            ],
+            "type": "TargetReady"
+          }
         },
         {
           "check": "az containerapp show --name {appName} --resource-group {resourceGroup} reports properties.runningStatus Running.",
-          "id": "app-running"
+          "id": "app-running",
+          "run": {
+            "args": [
+              "containerapp",
+              "show",
+              "--name",
+              "{status.appName}",
+              "--resource-group",
+              "{status.resourceGroup}"
+            ],
+            "cli": "az",
+            "expect": {
+              "equals": "Running",
+              "path": "properties.runningStatus"
+            },
+            "kind": "cloudCli"
+          }
         },
         {
           "check": "An HTTP GET of status.url returns a response (the Azure Functions placeholder serves its landing page).",
-          "id": "url-answers"
+          "id": "url-answers",
+          "run": {
+            "kind": "http",
+            "url": "{status.url}"
+          }
         }
       ]
     }

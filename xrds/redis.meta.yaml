@@ -4,6 +4,7 @@
 # keys, so this vocabulary lives beside the XRD instead, keyed by output name; tools/component_outputs.py
 # reads every `xrds/*.meta.yaml` and the chart's `fromComponent` feature resolves against it.
 kind: Redis
+role: component
 summary: A Redis cache or shared-counter store, dedicated to one application environment.
 outputs:
   # {name} is the components[] entry's own `name` field; {namespace} is the release namespace.
@@ -28,6 +29,16 @@ outputs:
       The Crossplane-composed connection Secret (writeConnectionSecretToRef), not the raw Bitnami chart
       Secret (which also exists, named `{name}`, key `redis-password` - the connection Secret copies the
       same value here so every component type has one canonical `<name>-connection` output surface).
+sources:
+  - object: {kind: Secret, name: "{name}-connection"}
+    createdBy: crossplane
+    from: {kind: Release, name: "{name}", field: spec.writeConnectionSecretToRef.name, equals: "{name}-connection"}
+    keysFrom: "spec.connectionDetails[].toConnectionSecretKey"
+    note: provider-helm writes the Release's connectionDetails into its writeConnectionSecretToRef Secret.
+  - object: {kind: Service, name: "{name}-master"}
+    createdBy: operator
+    from: {kind: Release, name: "{name}", field: spec.forProvider.values.fullnameOverride, equals: "{name}"}
+    note: The Bitnami chart names the master Service <fullname>-master; the composition sets fullnameOverride to the XR name.
 conditions:
   # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
   # see compositions/redis/templates/status.yaml. Closed set; each reason has a stable meaning an
@@ -49,8 +60,12 @@ conditions:
 verify:
   - id: xr-ready
     check: The Redis XR's ComponentReady condition has reason RedisReady.
+    run: {kind: condition, type: ComponentReady, reasons: [RedisReady]}
   - id: secret-exists
     check: Secret {name}-connection exists in the app namespace and has a non-empty password key.
+    run: {kind: secretKeys, secret: "{name}-connection", keys: [password]}
   - id: reachable
-    check: A TCP connect to {name}-master:6379 succeeds from the app namespace.
+    check: >-
+      {name}-master accepts a TCP connection on 6379, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
+    run: {kind: tcp, service: "{name}-master", port: 6379}
 owner: human

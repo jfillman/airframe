@@ -6,9 +6,9 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## Start here
 1. [`llms.txt`](llms.txt): the index - what to read first, in what order, for a cold start.
-2. `contract/airframe-contract.json` (AF-1b): every chart field, every XRD's shape and summary, every component's real outputs, in one generated file. Query it with `tools/airframe-capabilities <components|component|targets|target|xrds|xrd|field|output> ...` instead of grepping source - that's the whole point of the bundle. Regenerate with `python3 tools/gen_contract.py` after changing any of its sources (never hand-edit it); CI's `--check` fails if it drifts.
+2. `contract/airframe-contract.json` (AF-1b): every chart field, every XRD's shape and summary, every component's real outputs, in one generated file. Query it with `tools/airframe-capabilities <components|component|targets|target|kinds|kind|verify|xrds|xrd|field|output> ...` instead of grepping source - that's the whole point of the bundle. Regenerate with `python3 tools/gen_contract.py` after changing any of its sources (never hand-edit it); CI's `--check` fails if it drifts.
 3. `charts/airframe-application/values.schema.json`: the single source of truth for every chart field, its type, default and description (AF-2). `values.yaml` is GENERATED from it - never hand-edit `values.yaml`; edit the schema and run `python3 tools/gen_airframe_schema.py --write-values`. CI runs the same generator with `--check` and fails if `values.yaml` would change.
-4. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas, each carrying a `hangar.io/agent-summary` annotation (AF-1b). `xrds/<type>.meta.yaml` (redis, postgresql, rabbitmq, mongodb today, AF-3/SP-3) declares that component's real outputs - Secret/ConfigMap names and keys, or a literal - for `fromComponent` to resolve against.
+4. `xrds/*.yaml`: the XRDs (bootstrap tier, environments, components) with their schemas, each carrying a `hangar.io/agent-summary` annotation (AF-1b). Every XRD has an `xrds/<kind>.meta.yaml` sidecar (AF-3, review A3; format in `tools/sidecars.py`): its outputs (Secret/ConfigMap names and keys, or literals), where each named object comes from (`sources`: composed, operator-created, connection secret, function), its custom conditions' closed reason sets, and executable `verify` steps. They are sidecars because a CRD's structural schema rejects x- extension keys on the XRD itself. Components' outputs feed `fromComponent`; `tools/test_sidecars.py` holds every sidecar against its composition's renders.
 5. `docs/user/`: the Skyport quickstarts, worked end to end.
 6. `tools/airframe-validate` (built: schema + discriminated `components[]` union + `tools/deadend_rules.py`'s AF-4b convention/policy rules, in one pass; `--format json` for tooling). *(planned)* `airframe.plan`, `airframe.explain`.
 
@@ -50,8 +50,12 @@ and `release.image.tag` are set (the deprecated `rollout.image` still counts). A
 
 ## Verify
 A green pipeline is not verification; the service is. Check that pods are Ready and the endpoint answers,
-and quote what you saw. *(planned: `airframe.verify` runs each component's verify contract.)*
-- Redis, PostgreSQL and RabbitMQ each carry a custom `ComponentReady` condition (AF-6a), separate from
+and quote what you saw. `tools/airframe-verify <kind> <namespace>/<name> [--context CTX] [--format json]` runs
+an XR's verify contract read-only: conditions, Secret/ConfigMap keys (never their values), named resources,
+TCP/HTTP through `kubectl port-forward`, a Dex client_credentials token, and read-only aws/az CLI calls.
+A port-forward reaches the pod directly: a pass proves the server listens, not that the app's namespace
+can reach it through NetworkPolicy.
+- Every component (Redis, PostgreSQL, RabbitMQ, MongoDB, Dex) carries a custom `ComponentReady` condition (AF-6a), separate from
   Crossplane's own generic `Ready`/`Synced` - `kubectl get <kind> <name> -o jsonpath='{.status.conditions}'`
   gives a closed-set `reason` (e.g. `RedisReady`, `PostgreSQLDegraded`, `RabbitMQAttachProvisioning`) with a
   stable meaning, listed in that component's `xrds/<type>.meta.yaml` under `conditions`. Prefer this over

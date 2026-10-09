@@ -1,0 +1,66 @@
+# Sidecar contract for TektonCICD (review A3; format in tools/sidecars.py). Checked against
+# compositions/tektoncicd/ renders by tools/test_sidecars.py. Composed by every app stack as <app>-tektoncicd;
+# its two conditions are what the parent copies.
+kind: TektonCICD
+role: platform
+summary: 'Registers one app with the dev cluster''s CI: writes tenants/<app>/identity.yaml to the tenants repo,
+  which the dev cluster''s tenant ApplicationSets read to create the app''s cicd namespace, Pipelines-as-Code repository
+  and RBAC.'
+outputs:
+  identityFile:
+    kind: literal
+    value: tenants/{spec.appName}/identity.yaml
+    description: The file in the cluster's tenants repo that onboards the app.
+    at:
+      kind: RepositoryFile
+      field: spec.forProvider.file
+sources:
+- object:
+    kind: RepositoryFile
+    name: '{spec.appName}-cicd-identity-yaml'
+  createdBy: composition
+conditions:
+- type: DevClusterReady
+  reasons:
+  - reason: DevClusterReady
+    status: 'True'
+    meaning: The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.
+  - reason: DevClusterNotReady
+    status: 'False'
+    meaning: The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed
+      until it is.
+- type: CicdOnboarded
+  reasons:
+  - reason: CicdOnboarded
+    status: 'True'
+    meaning: The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard
+      it.
+  - reason: CicdOnboardingPending
+    status: 'False'
+    meaning: identity.yaml has not been observed Ready yet (normal for a minute after creation).
+verify:
+- id: dev-cluster-ready
+  check: DevClusterReady is True.
+  run:
+    kind: condition
+    type: DevClusterReady
+    reasons:
+    - DevClusterReady
+- id: cicd-onboarded
+  check: CicdOnboarded is True.
+  run:
+    kind: condition
+    type: CicdOnboarded
+    reasons:
+    - CicdOnboarded
+- id: identity-file
+  check: The RepositoryFile {spec.appName}-cicd-identity-yaml is Ready, so tenants/<app>/identity.yaml exists in
+    the tenants repo.
+  run:
+    kind: resource
+    resource: repositoryfiles.repo.github.m.upbound.io
+    name: '{spec.appName}-cicd-identity-yaml'
+    condition:
+      type: Ready
+      status: 'True'
+owner: human

@@ -95,6 +95,17 @@ def main():
                    any(c.get("type") == "TargetReady" and c.get("reasons") for c in lambda_target.get("conditions", []))
                    and bool(lambda_target.get("verify"))))
 
+    # Q13: Can an agent learn how to check ANY kind works, not just the components (A3)?
+    every = {**ask("components"), **targets, **ask("kinds")}
+    checks.append(("Q13 every XRD kind has a verify contract", len(every) == len(xrds)))
+    steps = ask("verify", "postgresql")
+    checks.append(("Q14 verify steps are executable, not prose",
+                   all(s.get("run", {}).get("kind") for s in steps) and any(s["run"]["kind"] == "tcp" for s in steps)))
+    # Q15: Where does the Secret behind an output come from (operator vs composition)?
+    pg = ask("component", "postgresql")
+    checks.append(("Q15 output Secrets name their producer",
+                   any(s["object"]["name"] == "{name}-app" and s["createdBy"] == "operator" for s in pg.get("sources", []))))
+
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:
         print(("PASS" if ok else "FAIL") + f"  {name}")

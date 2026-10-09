@@ -1,4 +1,4 @@
-"""AF-3: the component outputs contract.
+"""AF-3: the component outputs contract (the sidecar format itself is documented in tools/sidecars.py).
 
 Each component type with a real XRD documents what it produces in a sidecar meta file,
 `xrds/<kind-lowercase-plural-or-singular-matching-the-xrd-file>.meta.yaml` (matches the XRD file's own
@@ -12,33 +12,31 @@ gen_component_outputs_yaml() renders charts/airframe-application/files/component
 chart-bundled copy `templates/_lib/fromcomponent.tpl` reads via `.Files.Get` to resolve `fromComponent`
 - generated, not hand-copied, so the chart can't drift from these meta files.
 """
-import json
 from pathlib import Path
 
 import yaml
+
+from sidecars import load_sidecars
 
 ROOT = Path(__file__).resolve().parent.parent
 XRDS = ROOT / "xrds"
 GENERATED_PATH = ROOT / "charts" / "airframe-application" / "files" / "component-outputs.yaml"
 
-VALID_OUTPUT_KINDS = {"literal", "secretKeyRef", "configMapKeyRef"}
+
+def _public(d):
+    return {k: v for k, v in d.items() if not k.startswith("_")}
 
 
 def load_all(targets=False):
-    """Components only by default. A sidecar with `component: false` (a cloud target: its XR is
-    requested on its own, nothing in a values.yaml references it) is skipped here and published by
-    contract.py under `targets`; targets=True returns those instead."""
-    out = {}
-    for f in XRDS.glob("*.meta.yaml"):
-        d = yaml.safe_load(f.read_text())
-        if bool(d.get("component", True)) == targets:
-            continue
-        kind = d["kind"].lower()
-        for name, spec in d.get("outputs", {}).items():
-            if spec.get("kind") not in VALID_OUTPUT_KINDS:
-                raise ValueError(f"{f}: output '{name}' has invalid kind {spec.get('kind')!r}")
-        out[kind] = d
-    return out
+    """Components (role: component) by default; targets=True returns the cloud targets (role: target)
+    instead. Every sidecar is validated on load (tools/sidecars.py). Other roles (bootstrap,
+    environment, platform, observability) come from load_by_role()."""
+    want = "target" if targets else "component"
+    return {k: _public(d) for k, d in load_sidecars().items() if d["role"] == want}
+
+
+def load_by_role(*roles):
+    return {k: _public(d) for k, d in load_sidecars().items() if d["role"] in roles}
 
 
 def gen_component_outputs_yaml():

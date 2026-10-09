@@ -21,6 +21,7 @@ COPY xrds /opt/airframe/xrds
 COPY tools/airframe-validate /opt/airframe/tools/airframe-validate
 COPY tools/airframe_schema.py /opt/airframe/tools/airframe_schema.py
 COPY tools/component_outputs.py /opt/airframe/tools/component_outputs.py
+COPY tools/sidecars.py /opt/airframe/tools/sidecars.py
 COPY tools/deadend_rules.py /opt/airframe/tools/deadend_rules.py
 # Glidepath's values-check gate runs `validate-values [--app NAME] FILE...`; that name is the whole contract.
 RUN ln -s /opt/airframe/tools/airframe-validate /usr/local/bin/validate-values && adduser -D -u 10001 validator

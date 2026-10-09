@@ -8,7 +8,7 @@ summary: >-
   Disposable: delete the XR to remove all of it.
 # Not a component: nothing in a values.yaml references it, so it stays out of the chart's
 # fromComponent table and the contract's `components`; it is published under `targets` instead.
-component: false
+role: target
 outputs: {}
 conditions:
   - type: TargetReady
@@ -28,8 +28,15 @@ conditions:
 verify:
   - id: xr-ready
     check: The AwsLambdaTarget XR's TargetReady condition has reason AwsLambdaTargetReady.
+    run: {kind: condition, type: TargetReady, reasons: [AwsLambdaTargetReady]}
   - id: function-exists
     check: aws lambda get-function --function-name {functionName} reports PackageType Image and an ECR image URI.
+    run:
+      kind: cloudCli
+      cli: aws
+      args: [lambda, get-function, --function-name, "{status.functionName}", --region, "{status.region}"]
+      expect: {path: Configuration.PackageType, equals: Image}
   - id: url-answers
     check: An HTTP GET of status.functionUrl returns a response from the function (any status code; the placeholder returns an error until the first deploy).
+    run: {kind: http, url: "{status.functionUrl}"}
 owner: human

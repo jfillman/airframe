@@ -1,0 +1,16 @@
+# A Redis XR as the airframe-application chart writes it (fixture for tools/test_compositions.py).
+# crossplane render does not run XRD defaulting, so size/persistence are spelled out.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: Redis
+metadata:
+  name: cache
+  namespace: app-boarding-api-dev
+  labels:
+    hangar.io/app: boarding-api
+    hangar.io/env: dev
+    hangar.io/component-type: redis
+spec:
+  environmentRef:
+    name: boarding-api-kind-dev-dev
+  size: small
+  persistence: false

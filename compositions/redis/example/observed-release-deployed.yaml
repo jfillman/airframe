@@ -1,0 +1,18 @@
+# The composed Release as provider-helm reports it once the Bitnami chart is installed.
+apiVersion: helm.m.crossplane.io/v1beta1
+kind: Release
+metadata:
+  name: cache
+  namespace: app-boarding-api-dev
+  annotations:
+    crossplane.io/composition-resource-name: release
+status:
+  atProvider:
+    state: deployed
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Available
+    - type: Synced
+      status: "True"
+      reason: ReconcileSuccess

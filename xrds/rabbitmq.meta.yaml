@@ -2,6 +2,7 @@
 # compositions/rabbitmq/templates/attach.yaml. Broker mode has no consumer-facing outputs (it's the shared
 # infrastructure other apps attach to, not something an app's own env references via fromComponent).
 kind: RabbitMQ
+role: component
 summary: >-
   attach mode: a user + permissions on an existing shared broker, scoped to this app's own queue prefix
   and exchanges. broker mode (no outputs below apply): the shared broker itself.
@@ -26,6 +27,20 @@ outputs:
     kind: configMapKeyRef
     configMap: "{name}-connection"
     key: vhost
+sources:
+  - object: {kind: Secret, name: "{name}-user-credentials"}
+    createdBy: operator
+    from: {kind: User, name: "{name}"}
+    when: {field: spec.mode, equals: attach}
+    note: The RabbitMQ messaging-topology operator writes a generated username/password to <User>-user-credentials.
+  - object: {kind: ConfigMap, name: "{name}-connection"}
+    createdBy: composition
+    when: {field: spec.mode, equals: attach}
+  - object: {kind: Service, name: "{name}"}
+    createdBy: operator
+    from: {kind: RabbitmqCluster, name: "{name}"}
+    when: {field: spec.mode, equals: broker}
+    note: The RabbitMQ cluster operator creates a client Service named after the RabbitmqCluster.
 conditions:
   # AF-6a: a custom ComponentReady condition, in addition to Crossplane's own generic Ready/Synced -
   # see compositions/rabbitmq/templates/status.yaml. One reason set per mode; both live under the same
@@ -47,8 +62,18 @@ conditions:
 verify:
   - id: xr-ready
     check: The RabbitMQ XR's ComponentReady condition has reason RabbitMQAttachReady (attach) or RabbitMQBrokerReady (broker).
+    run: {kind: condition, type: ComponentReady, reasons: [RabbitMQAttachReady, RabbitMQBrokerReady]}
   - id: secret-exists
-    check: Secret {name}-user-credentials exists in the app namespace and has a non-empty password key.
+    check: Secret {name}-user-credentials exists in the app namespace and has non-empty username and password keys.
+    when: {field: spec.mode, equals: attach}
+    run: {kind: secretKeys, secret: "{name}-user-credentials", keys: [username, password]}
   - id: configmap-exists
     check: ConfigMap {name}-connection exists in the app namespace with host/port/vhost keys.
+    when: {field: spec.mode, equals: attach}
+    run: {kind: configMapKeys, configMap: "{name}-connection", keys: [host, port, vhost]}
+  - id: broker-reachable
+    check: >-
+      The broker's {name} Service accepts an AMQP TCP connection on 5672, through kubectl port-forward, so it proves the server is listening, not that the app namespace's NetworkPolicy admits the app.
+    when: {field: spec.mode, equals: broker}
+    run: {kind: tcp, service: "{name}", port: 5672}
 owner: human

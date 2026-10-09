@@ -1,0 +1,117 @@
+# Sidecar contract for LambdaFunction (review A3; format in tools/sidecars.py). Checked against
+# compositions/lambdafunction/ renders by tools/test_sidecars.py. Role bootstrap: the XR onboards an app; nothing in a
+# values.yaml references it, so it is not in the chart's fromComponent table.
+kind: LambdaFunction
+role: bootstrap
+summary: 'Onboards an AWS Lambda function app: a source repo with a container-image scaffold for the chosen runtime,
+  a SecretStore request, the TektonCICD child, and with spec.target.enabled the AwsLambdaTarget it deploys to.'
+outputs:
+  sourceRepo:
+    kind: literal
+    value: '{name}'
+    description: The GitHub repository holding the app's source and its scaffold, under the platform's GitHub owner.
+    at:
+      kind: Repository
+      field: spec.forProvider.name
+  tektonCicd:
+    kind: literal
+    value: '{name}-tektoncicd'
+    description: The composed TektonCICD child XR in the same namespace; DevClusterReady and CicdOnboarded are copied
+      from it.
+    at:
+      kind: TektonCICD
+      field: metadata.name
+  target:
+    kind: literal
+    value: '{name}-target'
+    when: &id001
+      field: spec.target.enabled
+      equals: true
+    description: The composed AwsLambdaTarget child XR when spec.target.enabled; its status carries the cloud names
+      (function, URL).
+    at:
+      kind: AwsLambdaTarget
+      field: metadata.name
+sources:
+- object:
+    kind: Repository
+    name: '{name}-src'
+  createdBy: composition
+- object:
+    kind: TektonCICD
+    name: '{name}-tektoncicd'
+  createdBy: composition
+- object:
+    kind: AwsLambdaTarget
+    name: '{name}-target'
+  createdBy: composition
+  when: *id001
+conditions:
+- type: DevClusterReady
+  reasons:
+  - reason: DevClusterReady
+    status: 'True'
+    meaning: The dev cluster named in spec.devCluster is registered with type dev and cicdReady true.
+  - reason: DevClusterNotReady
+    status: 'False'
+    meaning: The dev cluster is not in the cluster registry, not type dev, or not cicdReady yet; nothing is composed
+      until it is.
+- type: CicdOnboarded
+  reasons:
+  - reason: CicdOnboarded
+    status: 'True'
+    meaning: The tenants repo carries this app's identity.yaml, so the dev cluster's tenant ApplicationSets onboard
+      it.
+  - reason: CicdOnboardingPending
+    status: 'False'
+    meaning: identity.yaml has not been observed Ready yet (normal for a minute after creation).
+- type: TargetReady
+  reasons:
+  - reason: TargetPending
+    status: 'False'
+    meaning: spec.target.enabled is set and the composed target child has not reported TargetReady yet.
+  - reason: AwsLambdaTargetReady
+    status: 'True'
+    meaning: The Lambda function, its ECR repository and URL exist (passed through from the AwsLambdaTarget child).
+  - reason: AwsLambdaTargetProvisioning
+    status: 'False'
+    meaning: The child's AWS resources are still being created.
+  - reason: AwsLambdaTargetBootstrapping
+    status: 'False'
+    meaning: The child is seeding the placeholder image the function needs before it can exist.
+  - reason: AwsLambdaTargetBootstrapFailed
+    status: 'False'
+    meaning: Seeding the placeholder image failed; see the child's events.
+verify:
+- id: dev-cluster-ready
+  check: The XR's DevClusterReady condition is True (DevClusterReady).
+  run:
+    kind: condition
+    type: DevClusterReady
+    reasons:
+    - DevClusterReady
+- id: cicd-onboarded
+  check: 'The XR''s CicdOnboarded condition is True (CicdOnboarded): the tenants repo carries the app''s identity.yaml.'
+  run:
+    kind: condition
+    type: CicdOnboarded
+    reasons:
+    - CicdOnboarded
+- id: source-repo
+  check: The Repository managed resource {name}-src is Ready, so the GitHub source repository exists.
+  run:
+    kind: resource
+    resource: repositories.repo.github.m.upbound.io
+    name: '{name}-src'
+    condition:
+      type: Ready
+      status: 'True'
+- id: target-ready
+  check: With spec.target.enabled, the XR's TargetReady condition has reason AwsLambdaTargetReady.
+  when: *id001
+  run:
+    kind: condition
+    type: TargetReady
+    reasons:
+    - AwsLambdaTargetReady
+owner: human

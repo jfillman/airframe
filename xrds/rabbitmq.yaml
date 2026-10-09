@@ -31,6 +31,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: rabbitmqs.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Requested as a components[] entry in an app's values file (the airframe-application chart renders the XR); not a standalone self-service request."
     hangar.io/agent-summary: "A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach)."
 spec:
   group: catalog.hangar.io
@@ -39,16 +41,29 @@ spec:
     plural: rabbitmqs
     singular: rabbitmq
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: rabbitmq.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: COMPONENT
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='ComponentReady')].reason"
+          description: "ComponentReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "RabbitMQ: A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach)."
+          x-kubernetes-validations:
+            - rule: "self.spec.mode != 'broker' || self.metadata.name.size() <= 45"
+              message: "a broker's name is at most 45 characters: the operator's StatefulSet is <name>-server, and it plus an 11-character revision hash must fit 63"
           properties:
             spec:
               type: object
+              description: "Desired state of the RabbitMQ. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
                 - mode

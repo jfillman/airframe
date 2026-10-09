@@ -222,6 +222,10 @@
   },
   "components": {
     "dex": {
+      "agentNotes": [
+        "Rendered by function-dex (Python, functions/function-dex), not go-templating. Build and push per its README; it has unit tests in CI.",
+        "Attach mode adopts the secret the server already holds on already_exists and never prunes a live credentials Secret on a transient failure (review C1). It composes a Usage that blocks deleting the server while attachers exist."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -365,6 +369,9 @@
       ]
     },
     "mongodb": {
+      "agentNotes": [
+        "The operator merges the statefulSet override field by field (MCK pkg/util/merge), so a probe override only needs the fields it changes. kind-prod pins spec.mongoVersion to 7.0 for a kernel bug."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -485,6 +492,9 @@
       ]
     },
     "postgresql": {
+      "agentNotes": [
+        "CloudNativePG, not this composition, creates {name}-app and the {name}-rw Service. Its admission webhook fails closed: an operator outage shows as Synced=False with CNPGWebhookUnavailable, the database is unaffected."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -622,6 +632,10 @@
       ]
     },
     "rabbitmq": {
+      "agentNotes": [
+        "Never end a Go-template comment with a right-trim marker right before apiVersion: v0.3.128 shipped a RabbitmqCluster with no apiVersion that way.",
+        "Attach mode composes a Usage that blocks deleting the broker while attachers exist. The topology operator's webhook fails closed: an outage shows as Synced=False with RabbitMQTopologyWebhookUnavailable."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -797,6 +811,10 @@
       ]
     },
     "redis": {
+      "agentNotes": [
+        "The image is pinned to bitnamilegacy; the upstream Bitnami images moved. Use hasKey, not default, for booleans: Sprig's default turns an explicit false into the default.",
+        "The {name}-connection Secret comes from the Release's connectionDetails; an output key that is not a connection key is caught by tools/test_sidecars.py."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -919,6 +937,11 @@
   "generated_by": "tools/gen_contract.py",
   "kinds": {
     "applicationenvironment": {
+      "agentNotes": [
+        "values.yaml in the app's gitops repo is a create-once scaffold (ledgered and retired); the identity files and SecretStore requests stay Update-managed because only this composition writes them.",
+        "Nothing is composed until spec.cluster is in the cluster registry (ClusterReady). A Usage protects the app XR named by spec.appName while the environment exists.",
+        "spec.appName plus spec.env is capped at 58 characters: the environment's namespace is app-<appName>-<env>."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1028,6 +1051,12 @@
       ]
     },
     "azurefunction": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file.",
+        "With spec.target.enabled the composition also composes an AzureContainerAppTarget named <name>-target; its TargetReady is copied to this XR."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1198,6 +1227,11 @@
       ]
     },
     "goapplication": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1338,6 +1372,9 @@
       ]
     },
     "infraservice": {
+      "agentNotes": [
+        "Owns a gitops-infra-<name> repo (README and a cicd.yaml stub, both create-once scaffolds under the ledger) and a TektonCICD child; there is no source repo."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1449,6 +1486,12 @@
       ]
     },
     "lambdafunction": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file.",
+        "With spec.target.enabled the composition also composes an AwsLambdaTarget named <name>-target; its TargetReady is copied to this XR."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1629,6 +1672,11 @@
       ]
     },
     "nodejsapplication": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1769,6 +1817,11 @@
       ]
     },
     "pythonapplication": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -1909,6 +1962,9 @@
       ]
     },
     "rolloutwatch": {
+      "agentNotes": [
+        "Rendered by function-rollout-watcher (Python, functions/function-rollout-watcher, released by its own workflow). It emits a Normal event only when the observed phase changes, and dispatches at most one diagnosis Job per degraded revision."
+      ],
       "conditions": [],
       "kind": "RolloutWatch",
       "outputs": {},
@@ -1939,6 +1995,10 @@
       ]
     },
     "secretstore": {
+      "agentNotes": [
+        "Credentials never pass through the function pipeline: provider-kubernetes Objects copy the reviewer token and the universal-auth client secret server-side (references.patchesFrom). Keep it that way (review C2).",
+        "Kubernetes auth on the Infisical-hosting cluster, universal auth elsewhere; the cluster registry decides, not the spec."
+      ],
       "conditions": [],
       "kind": "SecretStore",
       "outputs": {
@@ -1994,6 +2054,10 @@
       ]
     },
     "slo": {
+      "agentNotes": [
+        "Availability queries wrap the error rate in `or vector(0)`: with no errors the bare rate is an empty vector and every ratio evaluates to no data.",
+        "Readiness is Sloth's status.promOpRulesGenerated, a CEL rule in compositions/_shared/readiness-context.yaml."
+      ],
       "conditions": [],
       "kind": "SLO",
       "outputs": {
@@ -2061,6 +2125,11 @@
       ]
     },
     "springbootapplication": {
+      "agentNotes": [
+        "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
+        "Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.",
+        "Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -2201,6 +2270,9 @@
       ]
     },
     "tektoncicd": {
+      "agentNotes": [
+        "Writes tenants/<appName>/identity.yaml to the dev cluster's tenants repo; that file is what onboards the app's CI. It is Update-managed (the composition is its only writer)."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -2298,6 +2370,9 @@
   },
   "targets": {
     "awsecstarget": {
+      "agentNotes": [
+        "terraform-provider-aws revokes AWS's default egress rule when it creates a security group, so the composition adds an explicit egress SecurityGroupRule."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -2368,6 +2443,9 @@
       ]
     },
     "awslambdatarget": {
+      "agentNotes": [
+        "The function URL's public-access Permission carries a pinned external-name (FunctionURLAllowPublicAccess); without it the provider retries AddPermission and gets 409 forever."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -2442,6 +2520,9 @@
       ]
     },
     "azurecontainerapptarget": {
+      "agentNotes": [
+        "Azure forbids '/' in tag names: tags here are hangar-target / hangar-component / hangar-app, not the hangar.io/* labels used on Kubernetes and AWS."
+      ],
       "conditions": [
         {
           "reasons": [
@@ -2510,7 +2591,7 @@
     "ApplicationEnvironment": {
       "agentSummary": "Adds a deploy environment (e.g. staging, prod) on a target cluster for an app that's already been onboarded.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 10,
+      "fieldsDescribed": 11,
       "fieldsTotal": 11,
       "file": "applicationenvironment.yaml",
       "group": "catalog.hangar.io",
@@ -2519,7 +2600,7 @@
     "AwsEcsTarget": {
       "agentSummary": "Stand up the AWS infrastructure a container deploys into on ECS Fargate (cluster, task definition, service, execution role and a small public network) - disposable, for an app's deploy.target: aws-ecs.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 17,
+      "fieldsDescribed": 18,
       "fieldsTotal": 18,
       "file": "awsecstarget.yaml",
       "group": "catalog.hangar.io",
@@ -2528,7 +2609,7 @@
     "AwsLambdaTarget": {
       "agentSummary": "Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 8,
+      "fieldsDescribed": 9,
       "fieldsTotal": 9,
       "file": "awslambdatarget.yaml",
       "group": "catalog.hangar.io",
@@ -2537,7 +2618,7 @@
     "AzureContainerAppTarget": {
       "agentSummary": "Stand up the Azure infrastructure a container deploys into on Container Apps (resource group, environment, app with public ingress) - disposable, for an app's deploy.target: azure-container-apps.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 14,
+      "fieldsDescribed": 15,
       "fieldsTotal": 15,
       "file": "azurecontainerapptarget.yaml",
       "group": "catalog.hangar.io",
@@ -2546,7 +2627,7 @@
     "AzureFunction": {
       "agentSummary": "Onboard a new Azure Functions app (container image) - creates its source repo with an HTTP function and CI/CD that deploys to an existing Container App.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 9,
+      "fieldsDescribed": 10,
       "fieldsTotal": 10,
       "file": "azurefunction.yaml",
       "group": "catalog.hangar.io",
@@ -2555,7 +2636,7 @@
     "Dex": {
       "agentSummary": "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach).",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 12,
+      "fieldsDescribed": 14,
       "fieldsTotal": 14,
       "file": "dex.yaml",
       "group": "catalog.hangar.io",
@@ -2564,7 +2645,7 @@
     "GoApplication": {
       "agentSummary": "Onboard a new Go service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 5,
+      "fieldsDescribed": 6,
       "fieldsTotal": 6,
       "file": "goapplication.yaml",
       "group": "catalog.hangar.io",
@@ -2573,7 +2654,7 @@
     "InfraService": {
       "agentSummary": "Provisions standalone shared infrastructure (e.g. a cache or datastore another app depends on) - just an empty GitOps deploy repo, no application source code.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 3,
+      "fieldsDescribed": 4,
       "fieldsTotal": 4,
       "file": "infraservice.yaml",
       "group": "catalog.hangar.io",
@@ -2582,7 +2663,7 @@
     "LambdaFunction": {
       "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 10,
+      "fieldsDescribed": 11,
       "fieldsTotal": 11,
       "file": "lambdafunction.yaml",
       "group": "catalog.hangar.io",
@@ -2591,7 +2672,7 @@
     "MongoDB": {
       "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
+      "fieldsDescribed": 7,
       "fieldsTotal": 7,
       "file": "mongodb.yaml",
       "group": "catalog.hangar.io",
@@ -2600,7 +2681,7 @@
     "NodeJSApplication": {
       "agentSummary": "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 8,
+      "fieldsDescribed": 9,
       "fieldsTotal": 9,
       "file": "nodejsapplication.yaml",
       "group": "catalog.hangar.io",
@@ -2609,7 +2690,7 @@
     "PostgreSQL": {
       "agentSummary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
+      "fieldsDescribed": 7,
       "fieldsTotal": 7,
       "file": "postgresql.yaml",
       "group": "catalog.hangar.io",
@@ -2618,7 +2699,7 @@
     "PythonApplication": {
       "agentSummary": "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
+      "fieldsDescribed": 7,
       "fieldsTotal": 7,
       "file": "pythonapplication.yaml",
       "group": "catalog.hangar.io",
@@ -2627,7 +2708,7 @@
     "RabbitMQ": {
       "agentSummary": "A shared RabbitMQ broker (mode: broker) or a scoped user/permission on an existing one (mode: attach).",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 19,
+      "fieldsDescribed": 20,
       "fieldsTotal": 20,
       "file": "rabbitmq.yaml",
       "group": "catalog.hangar.io",
@@ -2636,7 +2717,7 @@
     "Redis": {
       "agentSummary": "A Redis cache or shared-counter store, dedicated to one application environment.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 4,
+      "fieldsDescribed": 5,
       "fieldsTotal": 5,
       "file": "redis.yaml",
       "group": "catalog.hangar.io",
@@ -2645,7 +2726,7 @@
     "RolloutWatch": {
       "agentSummary": "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 9,
+      "fieldsDescribed": 10,
       "fieldsTotal": 10,
       "file": "rolloutwatch.yaml",
       "group": "catalog.hangar.io",
@@ -2654,7 +2735,7 @@
     "SLO": {
       "agentSummary": "Declares a service-level objective, rendered into Sloth for multi-window burn-rate alerting.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 10,
+      "fieldsDescribed": 11,
       "fieldsTotal": 11,
       "file": "slo.yaml",
       "group": "catalog.hangar.io",
@@ -2663,7 +2744,7 @@
     "SecretStore": {
       "agentSummary": "Creates or extends this app's Infisical-backed secret store (project, identity, ClusterSecretStore) for one cluster.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 4,
+      "fieldsDescribed": 5,
       "fieldsTotal": 5,
       "file": "secretstore.yaml",
       "group": "catalog.hangar.io",
@@ -2672,7 +2753,7 @@
     "SpringBootApplication": {
       "agentSummary": "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 7,
+      "fieldsDescribed": 8,
       "fieldsTotal": 8,
       "file": "springbootapplication.yaml",
       "group": "catalog.hangar.io",
@@ -2681,7 +2762,7 @@
     "TektonCICD": {
       "agentSummary": "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 8,
+      "fieldsDescribed": 9,
       "fieldsTotal": 9,
       "file": "tektoncicd.yaml",
       "group": "catalog.hangar.io",

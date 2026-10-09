@@ -326,6 +326,37 @@ async def get_dex_client(grpc_address, client_id):
         return await stub.GetClient(dexpb.GetClientReq(id=client_id), timeout=DEX_CALL_TIMEOUT_SECONDS)
 
 
+def server_usage(xr, server_ref):
+    """A Crossplane Usage that blocks deleting the Dex server XR while this attacher exists (review
+    C13). Without it, deleting a server stranded every attacher: its credentials Secret points at an
+    issuer that is gone. Declared on every attach reconcile, before any server call, so a Dex
+    outage never prunes it. Cross-namespace via of.resourceRef.namespace."""
+    xr_name = safe_get(xr, "metadata", "name")
+    xr_namespace = safe_get(xr, "metadata", "namespace")
+    api_version = safe_get(xr, "apiVersion") or "catalog.hangar.io/v1alpha1"
+    return {
+        "apiVersion": "protection.crossplane.io/v1beta1",
+        "kind": "Usage",
+        "metadata": {"name": f"{xr_name}-server-usage", "namespace": xr_namespace},
+        "spec": {
+            "of": {
+                "apiVersion": api_version,
+                "kind": "Dex",
+                "resourceRef": {
+                    "name": safe_get(server_ref, "name"),
+                    "namespace": safe_get(server_ref, "namespace") or xr_namespace,
+                },
+            },
+            "by": {"apiVersion": api_version, "kind": "Dex", "resourceRef": {"name": xr_name}},
+            "reason": (
+                f"Dex {xr_namespace}/{xr_name} attaches to this server via spec.serverRef"
+                " - delete the attachers first"
+            ),
+            "replayDeletion": True,
+        },
+    }
+
+
 def credentials_secret(xr_name, xr_namespace, labels, *, data=None, string_data=None):
     """The composed Secret manifest. `string_data` renders fresh values; `data` re-declares an
     observed Secret byte-for-byte (used to keep it alive through a transient server failure -
@@ -391,6 +422,8 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             observed_secret = observed_client_secret(observed)
             client_secret = observed_secret or pysecrets.token_urlsafe(32)
             outcome = "created"
+            if safe_get(server_ref, "name"):
+                rsp.desired.resources["server-usage"].resource.update(server_usage(xr, server_ref))
 
             def fail(reason, message):
                 # Fail closed on the CONDITION, but never prune a Secret an app is already

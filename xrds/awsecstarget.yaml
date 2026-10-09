@@ -36,16 +36,26 @@ spec:
     plural: awsecstargets
     singular: awsecstarget
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: awsecstargets.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: TARGET
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='TargetReady')].reason"
+          description: "TargetReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "AwsEcsTarget: Stand up the AWS infrastructure a container deploys into on ECS Fargate (cluster, task definition, service, execution role and a small public network) - disposable, for an app's deploy.target: aws-ecs."
           properties:
             spec:
               type: object
+              description: "Desired state of the AwsEcsTarget. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               properties:
                 appName:
                   type: string

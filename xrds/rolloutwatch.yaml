@@ -29,6 +29,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: rolloutwatches.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Rendered by the airframe-application chart for every app environment; never requested directly."
     hangar.io/agent-summary: "Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary."
 spec:
   group: catalog.hangar.io
@@ -37,16 +39,26 @@ spec:
     plural: rolloutwatches
     singular: rolloutwatch
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: rolloutwatches.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: PHASE
+          type: string
+          jsonPath: ".status.rolloutPhase"
+          description: "Last observed Rollout phase"
       schema:
         openAPIV3Schema:
           type: object
+          description: "RolloutWatch: Watches an app's Argo Rollout and runs AI-triage diagnosis on a failed canary."
           properties:
             spec:
               type: object
+              description: "Desired state of the RolloutWatch. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
                 - appName

@@ -38,6 +38,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: tektoncicds.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Composed by every application kind as <app>-tektoncicd; never requested directly."
     hangar.io/agent-summary: "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding."
 spec:
   group: catalog.hangar.io
@@ -46,16 +48,33 @@ spec:
     plural: tektoncicds
     singular: tektoncicd
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: tektoncicds.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: DEVCLUSTER
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='DevClusterReady')].reason"
+          description: "DevClusterReady reason"
+        - name: CICD
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='CicdOnboarded')].reason"
+          description: "CicdOnboarded reason"
       schema:
         openAPIV3Schema:
           type: object
+          description: "TektonCICD: Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding."
           properties:
             spec:
               type: object
+              description: "Desired state of the TektonCICD. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
+              x-kubernetes-validations:
+                - rule: "self.appName.size() <= 54"
+                  message: "appName is at most 54 characters: the app's CI namespace is app-<appName>-cicd, a 63-character name"
               required:
                 - appName
                 - appRepoUrl

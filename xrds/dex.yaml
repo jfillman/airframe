@@ -28,6 +28,8 @@ kind: CompositeResourceDefinition
 metadata:
   name: dexes.catalog.hangar.io
   annotations:
+    terasky.backstage.io/add-to-catalog: "false"
+    hangar.io/catalog-exclusion: "Requested as a components[] entry in an app's values file (the airframe-application chart renders the XR); not a standalone self-service request."
     hangar.io/agent-summary: "A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach)."
 spec:
   group: catalog.hangar.io
@@ -36,16 +38,26 @@ spec:
     plural: dexes
     singular: dex
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: dexes.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: COMPONENT
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='ComponentReady')].reason"
+          description: "ComponentReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "Dex: A shared Dex OIDC server (mode: server) or a machine-to-machine OAuth2 client on an existing one (mode: attach)."
           properties:
             spec:
               type: object
+              description: "Desired state of the Dex. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               required:
                 - environmentRef
                 - mode
@@ -115,6 +127,7 @@ spec:
                     scope-gate per client; recorded here so a future policy layer has it.
                   items:
                     type: string
+                    description: "One OAuth scope the client may request."
               x-kubernetes-validations:
                 - rule: "self.mode != 'attach' || has(self.serverRef)"
                   message: "serverRef is required when mode == attach"

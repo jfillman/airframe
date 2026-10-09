@@ -37,16 +37,26 @@ spec:
     plural: awslambdatargets
     singular: awslambdatarget
   scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: awslambdatargets.catalog.hangar.io
   versions:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: TARGET
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='TargetReady')].reason"
+          description: "TargetReady reason (closed set in xrds/<kind>.meta.yaml)"
       schema:
         openAPIV3Schema:
           type: object
+          description: "AwsLambdaTarget: Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda."
           properties:
             spec:
               type: object
+              description: "Desired state of the AwsLambdaTarget. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
               properties:
                 functionName:
                   type: string

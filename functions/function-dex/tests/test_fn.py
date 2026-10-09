@@ -193,6 +193,21 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
             self.assertIn("my-dex", server.servicer.created)
             self.assertFalse(server.servicer.created["my-dex"].public)
 
+    async def test_attach_declares_a_server_usage_even_when_the_server_is_down(self):
+        # C13: deleting the server must be blocked while an attacher exists; the Usage is declared
+        # before any gRPC call, so an unreachable server never prunes it.
+        for reachable in (True, False):
+            if reachable:
+                async with FakeDexServer() as server:
+                    rsp = await run_attach(server)
+            else:
+                rsp = await run_attach(None, address="127.0.0.1:1")
+            usage = resource.struct_to_dict(rsp.desired.resources["server-usage"].resource)
+            self.assertEqual(usage["kind"], "Usage")
+            self.assertEqual(usage["spec"]["of"]["resourceRef"], {"name": "srv", "namespace": "srv-ns"})
+            self.assertEqual(usage["spec"]["by"]["resourceRef"], {"name": "my-dex"})
+            self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
+
     async def test_sidecar_secret_and_service_match_the_function(self):
         # xrds/dex.meta.yaml is what the chart's fromComponent, the contract bundle and airframe-verify
         # trust for this kind's names; tools/test_sidecars.py points its `checkedBy` here because this

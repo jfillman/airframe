@@ -57,7 +57,7 @@ jobs:
           docker ps --format '{{.Names}} {{.Status}}'
       - run: python3 tools/test_compositions.py --renderer crossplane
         env:
-          AIRFRAME_RENDER_TARGETS: function-go-templating=localhost:9443,function-auto-ready=localhost:9444
+          AIRFRAME_RENDER_TARGETS: function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444
 
   scorecard:
     runs-on: ubuntu-latest

@@ -24,7 +24,7 @@ Two renderers produce the same normalized output:
 Pick one with --renderer; the output names which one ran, and `--update` records it in the file.
 Either way function-auto-ready must run with --feature-gates=CELHealthcheckCustomizations=true: the
 catalog's readiness rules (compositions/_shared/readiness-context.yaml) are CEL. With crossplane render
-set AIRFRAME_RENDER_TARGETS=function-go-templating=localhost:9443,function-auto-ready=localhost:9444 and
+set AIRFRAME_RENDER_TARGETS=function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444 and
 start both functions yourself (see the CI job); the Docker runtime cannot pass the flag.
 
     python3 tools/test_compositions.py               # all compositions, check mode
@@ -84,7 +84,7 @@ def run_crossplane_render(comp_dir: Path, case: dict) -> dict:
         raise RenderError(f"{comp_dir.name}: example/functions.yaml is required for crossplane render")
     # crossplane render's Docker runtime pulls every function image on every run by default
     # ("Always"); 42 cases × 2 images timed out on a cold CI runner. Reuse what is already local.
-    # AIRFRAME_RENDER_TARGETS="function-go-templating=localhost:9443,function-auto-ready=localhost:9444"
+    # AIRFRAME_RENDER_TARGETS="function-go-templating=127.0.0.1:9443,function-auto-ready=127.0.0.1:9444" (an IP, not localhost: on a runner localhost resolves to ::1 first and the dial hangs to the timeout)
     # points crossplane render at functions already running (its Development runtime) instead of
     # letting it start Docker containers: CI starts them itself so function-auto-ready can run with
     # --feature-gates=CELHealthcheckCustomizations=true, which the Docker runtime cannot pass.

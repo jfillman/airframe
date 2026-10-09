@@ -138,8 +138,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: cluster-secret-store, infisical-identity, infisical-identity-ua, infisical-identity-ua-client-secret,
-      infisical-project, infisical-project-identity, infisical-project-shared-env'
+  - message: 'Unready resources: cluster-secret-store, infisical-identity, infisical-identity-ua, and 4 more'
     reason: Creating
     status: 'False'
     type: Ready

@@ -9,7 +9,7 @@ resources:
   spec:
     appName: thumb-fn
     bootstrapImage: mcr.microsoft.com/azure-functions/python:4-python3.12
-    containerPort: 80.0
+    containerPort: 80
     location: westus2
     resourceGroup: glidepath-thumb-fn-rg
 - apiVersion: repo.github.m.upbound.io/v1alpha1
@@ -297,8 +297,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: azure-container-app-target, secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dockerfile,
-      src-repo-function-app, src-repo-gitignore, src-repo-host-json, src-repo-readme, src-repo-requirements, tektoncicd'
+  - message: 'Unready resources: azure-container-app-target, secretstore-xr, src-repo, and 8 more'
     reason: Creating
     status: 'False'
     type: Ready

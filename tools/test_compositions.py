@@ -143,7 +143,9 @@ def run_render_pipeline(comp_dir: Path, case: dict) -> dict:
             unready.append(name)
         resources.append(res)
     if unready:
-        conds.append({"type": "Ready", "status": "False", "reason": "Creating", "message": "Unready resources: " + ", ".join(sorted(unready))})
+        names = sorted(unready)   # Crossplane names the first three and counts the rest
+        listed = ", ".join(names[:3]) + (f", and {len(names) - 3} more" if len(names) > 3 else "")
+        conds.append({"type": "Ready", "status": "False", "reason": "Creating", "message": "Unready resources: " + listed})
     else:
         conds.append({"type": "Ready", "status": "True", "reason": "Available", "message": ""})
     xr["status"]["conditions"] = conds
@@ -171,7 +173,20 @@ def norm_resource(r: dict) -> dict:
     return out
 
 
+def integral_floats_to_int(obj):
+    """The gRPC harness receives protobuf Structs, whose numbers are all doubles (8080.0); crossplane
+    render prints the YAML the function emitted (8080). Both mean the same object."""
+    if isinstance(obj, float) and obj.is_integer():
+        return int(obj)
+    if isinstance(obj, dict):
+        return {k: integral_floats_to_int(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [integral_floats_to_int(v) for v in obj]
+    return obj
+
+
 def normalize(rendered: dict) -> dict:
+    rendered = integral_floats_to_int(rendered)
     xr = rendered.get("xr") or {}
     status = copy.deepcopy(xr.get("status") or {})
     conds = []

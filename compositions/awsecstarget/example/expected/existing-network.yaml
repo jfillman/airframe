@@ -31,7 +31,7 @@ resources:
     forProvider:
       clusterRef:
         name: smoke-ecs-cluster
-      desiredCount: 1.0
+      desiredCount: 1
       forceDelete: true
       launchType: FARGATE
       networkConfiguration:
@@ -136,7 +136,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: ecs-cluster, ecs-service, iam-role, iam-role-policy, task-definition'
+  - message: 'Unready resources: ecs-cluster, ecs-service, iam-role, and 2 more'
     reason: Creating
     status: 'False'
     type: Ready
@@ -150,7 +150,7 @@ xr:
       \    region: us-east-1\n"
     cluster: smoke-ecs
     containerName: smoke-ecs
-    containerPort: 8080.0
+    containerPort: 8080
     region: us-east-1
     securityGroupIds:
     - sg-0123456789abcdef0

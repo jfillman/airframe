@@ -282,8 +282,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore, src-repo-hello-js,
-      src-repo-host-json, src-repo-package-json, src-repo-readme, tektoncicd'
+  - message: 'Unready resources: secretstore-xr, src-repo, src-repo-cicd-yaml, and 7 more'
     reason: Creating
     status: 'False'
     type: Ready

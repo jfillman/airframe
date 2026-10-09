@@ -260,8 +260,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: src-repo, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore, src-repo-hello-js,
-      src-repo-host-json, src-repo-package-json, src-repo-readme, tektoncicd'
+  - message: 'Unready resources: src-repo, src-repo-cicd-yaml, src-repo-dockerfile, and 6 more'
     reason: Creating
     status: 'False'
     type: Ready

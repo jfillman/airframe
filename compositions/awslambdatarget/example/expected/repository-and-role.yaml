@@ -10,7 +10,7 @@ resources:
     namespace: app-smoke-fn-cicd
   name: bootstrap-job
   spec:
-    backoffLimit: 3.0
+    backoffLimit: 3
     template:
       metadata:
         labels:

@@ -347,8 +347,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, src-repo-application-java, src-repo-application-properties,
-      src-repo-build-file, src-repo-cicd-yaml, src-repo-dockerfile, src-repo-gitignore, src-repo-readme, tektoncicd'
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, and 8 more'
     reason: Creating
     status: 'False'
     type: Ready

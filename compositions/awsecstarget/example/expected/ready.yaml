@@ -31,7 +31,7 @@ resources:
     forProvider:
       clusterRef:
         name: smoke-ecs-cluster
-      desiredCount: 1.0
+      desiredCount: 1
       forceDelete: true
       launchType: FARGATE
       networkConfiguration:
@@ -205,12 +205,12 @@ resources:
       cidrBlocks:
       - 0.0.0.0/0
       description: smoke-ecs-dev outbound (image pull, logs, the app's own calls)
-      fromPort: 0.0
+      fromPort: 0
       protocol: '-1'
       region: us-east-1
       securityGroupIdRef:
         name: smoke-ecs-sg
-      toPort: 0.0
+      toPort: 0
       type: egress
     providerConfigRef:
       kind: ClusterProviderConfig
@@ -226,12 +226,12 @@ resources:
       cidrBlocks:
       - 0.0.0.0/0
       description: smoke-ecs-dev containerPort
-      fromPort: 8080.0
+      fromPort: 8080
       protocol: tcp
       region: us-east-1
       securityGroupIdRef:
         name: smoke-ecs-sg
-      toPort: 8080.0
+      toPort: 8080
       type: ingress
     providerConfigRef:
       kind: ClusterProviderConfig
@@ -317,8 +317,7 @@ resources:
       name: default
 xr:
   conditions:
-  - message: 'Unready resources: iam-role, iam-role-policy, internet-gateway, route, route-table, route-table-association,
-      security-group-egress, security-group-ingress, vpc'
+  - message: 'Unready resources: iam-role, iam-role-policy, internet-gateway, and 6 more'
     reason: Creating
     status: 'False'
     type: Ready
@@ -332,7 +331,7 @@ xr:
       \    region: us-east-1\n"
     cluster: smoke-ecs
     containerName: smoke-ecs
-    containerPort: 8080.0
+    containerPort: 8080
     region: us-east-1
     securityGroupIds:
     - sg-0bbbbbbbbbbbbbbbb

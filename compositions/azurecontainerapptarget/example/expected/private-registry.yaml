@@ -15,10 +15,10 @@ resources:
       ingress:
         allowInsecureConnections: false
         externalEnabled: true
-        targetPort: 80.0
+        targetPort: 80
         trafficWeight:
         - latestRevision: true
-          percentage: 100.0
+          percentage: 100
         transport: auto
       registry:
       - passwordSecretName: registry-password
@@ -47,8 +47,8 @@ resources:
           image: mcr.microsoft.com/azure-functions/node:4-node20
           memory: 1Gi
           name: smoke-az-fn
-        maxReplicas: 1.0
-        minReplicas: 0.0
+        maxReplicas: 1
+        minReplicas: 0
     managementPolicies:
     - Observe
     - Create

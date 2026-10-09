@@ -148,7 +148,7 @@ xr:
     reason: ClusterEligible
     status: 'True'
     type: ClusterReady
-  - message: 'Unready resources: cluster-identity-yaml, secretstore-env-xr, secretstore-shared-xr, tenant-identity-yaml, values-yaml'
+  - message: 'Unready resources: cluster-identity-yaml, secretstore-env-xr, secretstore-shared-xr, and 2 more'
     reason: Creating
     status: 'False'
     type: Ready

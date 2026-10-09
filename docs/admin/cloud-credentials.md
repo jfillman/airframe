@@ -339,7 +339,8 @@ pipeline; widening it is a security-team decision ([governance.md](governance.md
 ## Azure: `hangar-crossplane` (Crossplane)
 
 **Created by:** a subscription owner, once per subscription. The Azure CLI needs an interactive login
-for this tenant (security defaults), so these run on a workstation, not from a pipeline.
+for this tenant (security defaults block cached and non-interactive sessions), so these run on a
+workstation after `az login`, not from a pipeline.
 **Used by:** `provider-family-azure` and `provider-azure-containerapp` through `ClusterProviderConfig
 default` (`azure.m.upbound.io/v1beta1`, `provider-azure-config.yaml` in the same directory).
 
@@ -354,57 +355,78 @@ and nothing else.
 ### The role and the service principal
 
 A custom role at subscription scope, because resource groups are created at that scope. Everything
-inside the group is `Microsoft.App`. `listSecrets` is included because the provider reads the app's
-secrets back on every observe; the deployer below does not get it.
+inside the group is `Microsoft.App`. `containerApps/*` includes `listSecrets`, which the provider
+needs because it reads the app's secrets back on every observe; the deployer below does not get it.
+The `locations/...` reads are how the provider polls Azure's long-running create and delete
+operations. The action names are the ones Azure publishes for `Microsoft.App` (case-insensitive).
+
+The service principal is created without a role, then the role is assigned by object id: assigning
+in the same `create-for-rbac` call races both directory replication and the custom role's own
+propagation, and the error it produces ("role not found" or "principal not found") looks like a typo.
 
 ```bash
 SUB=$(az account show --query id -o tsv)
+TENANT=$(az account show --query tenantId -o tsv)
 
 cat > hangar-crossplane-role.json <<EOF
 {
   "Name": "Hangar Crossplane Cloud Targets",
   "Description": "Crossplane provider-azure on the Hangar dev cluster: resource groups, Container Apps environments and apps that AzureContainerAppTarget composes",
   "Actions": [
+    "Microsoft.Resources/subscriptions/read",
     "Microsoft.Resources/subscriptions/resourceGroups/read",
     "Microsoft.Resources/subscriptions/resourceGroups/write",
     "Microsoft.Resources/subscriptions/resourceGroups/delete",
+    "Microsoft.Resources/subscriptions/resourceGroups/resources/read",
     "Microsoft.App/managedEnvironments/*",
     "Microsoft.App/containerApps/*",
-    "Microsoft.App/locations/*/read"
+    "Microsoft.App/locations/managedEnvironmentOperationStatuses/read",
+    "Microsoft.App/locations/managedEnvironmentOperationResults/read",
+    "Microsoft.App/locations/containerAppOperationStatuses/read",
+    "Microsoft.App/locations/containerAppOperationResults/read",
+    "Microsoft.App/locations/operationStatuses/read",
+    "Microsoft.App/locations/operationResults/read",
+    "Microsoft.App/operations/read"
   ],
   "NotActions": [],
   "AssignableScopes": ["/subscriptions/${SUB}"]
 }
 EOF
+az role definition create --role-definition @hangar-crossplane-role.json --output none
 
-az role definition create --role-definition @hangar-crossplane-role.json
+# no --role: the CLI then creates the app registration and service principal with no assignment
+az ad sp create-for-rbac --name hangar-crossplane --years 1 --output json > hangar-crossplane-sp.json
+APP_ID=$(jq -r .appId hangar-crossplane-sp.json)
+OBJ_ID=$(az ad sp show --id "${APP_ID}" --query id -o tsv)
 
-az ad sp create-for-rbac --name hangar-crossplane \
-  --role "Hangar Crossplane Cloud Targets" --scopes "/subscriptions/${SUB}" --output json
-# -> appId (clientId), password (clientSecret), tenant (tenantId)
+# retried: a new role definition can take a minute to become assignable
+until az role assignment create --assignee-object-id "${OBJ_ID}" --assignee-principal-type ServicePrincipal \
+        --role "Hangar Crossplane Cloud Targets" --scope "/subscriptions/${SUB}" --output none; do sleep 15; done
+
+az role assignment list --assignee "${APP_ID}" --all --query "[].{role:roleDefinitionName,scope:scope}" -o table
 ```
 
-The subscription must have the `Microsoft.App` resource provider registered (`az provider register
---namespace Microsoft.App`, once, by an owner); a subscription that already runs a Container App has it.
+`hangar-crossplane-sp.json` holds the secret (`password`); delete it once the value is in Infisical.
+The subscription must have the `Microsoft.App` resource provider registered; a subscription that
+already runs a Container App has it (`az provider show --namespace Microsoft.App --query
+registrationState`), otherwise an owner runs `az provider register --namespace Microsoft.App` once.
 
 ### The secret
 
 The provider reads a JSON document with these four fields (the shape `az ad sp create-for-rbac
---sdk-auth` used to print; assemble it by hand, the flag is deprecated):
+--sdk-auth` used to print; the flag is deprecated, so build it from the file above):
 
-```json
-{
-  "clientId": "<appId>",
-  "clientSecret": "<password>",
-  "tenantId": "<tenant>",
-  "subscriptionId": "<SUB>"
-}
+```bash
+jq -n --arg id "${APP_ID}" --arg secret "$(jq -r .password hangar-crossplane-sp.json)" \
+      --arg tenant "${TENANT}" --arg sub "${SUB}" \
+      '{clientId:$id, clientSecret:$secret, tenantId:$tenant, subscriptionId:$sub}'
 ```
 
-Plant it as `provider-azure-creds` in `platform-cicd-kind-dev` (`shared`, `/`). It reaches
+Plant that output as `provider-azure-creds` in `platform-cicd-kind-dev` (`shared`, `/`). It reaches
 `crossplane-system` as Secret `provider-azure-creds`, key `credentials`, through
 `provider-azure-creds-external-secret.yaml`; confirm it the same way as the AWS secret, with the Azure
-names.
+names. A wrong value shows up as `ClientSecretCredential authentication failed` on the first Azure
+managed resource's `Synced` condition.
 
 ## Azure: `glidepath-deployer` (Glidepath)
 
@@ -412,11 +434,14 @@ names.
 `az login --service-principal` and runs `az containerapp update --image`, `az containerapp show` and
 `az containerapp revision show` until the new revision is `Running`.
 
-A custom role scoped to the resource group that holds the app (one assignment per target resource
-group; `hangar` for the existing smoke app):
+A custom role scoped to the resource group that holds the app: one assignment per resource group a
+deploy target lives in (`hangar` for the existing smoke app; a target created by
+`AzureContainerAppTarget` lives in its own `<appName>-rg`, which needs its own assignment). The
+`locations/...` reads are what `az containerapp update` polls while the new revision is created.
 
 ```bash
 SUB=$(az account show --query id -o tsv)
+TENANT=$(az account show --query tenantId -o tsv)
 RG=hangar
 
 cat > glidepath-container-app-deployer-role.json <<EOF
@@ -427,28 +452,40 @@ cat > glidepath-container-app-deployer-role.json <<EOF
     "Microsoft.App/containerApps/read",
     "Microsoft.App/containerApps/write",
     "Microsoft.App/containerApps/revisions/read",
-    "Microsoft.App/locations/*/read"
+    "Microsoft.App/locations/containerAppOperationStatuses/read",
+    "Microsoft.App/locations/containerAppOperationResults/read",
+    "Microsoft.App/locations/operationStatuses/read",
+    "Microsoft.App/locations/operationResults/read"
   ],
   "NotActions": [],
   "AssignableScopes": ["/subscriptions/${SUB}"]
 }
 EOF
+az role definition create --role-definition @glidepath-container-app-deployer-role.json --output none
 
-az role definition create --role-definition @glidepath-container-app-deployer-role.json
+az ad sp create-for-rbac --name glidepath-deployer --years 1 --output json > glidepath-deployer-sp.json
+APP_ID=$(jq -r .appId glidepath-deployer-sp.json)
+OBJ_ID=$(az ad sp show --id "${APP_ID}" --query id -o tsv)
 
-az ad sp create-for-rbac --name glidepath-deployer \
-  --role "Glidepath Container App Deployer" \
-  --scopes "/subscriptions/${SUB}/resourceGroups/${RG}" --output json
+until az role assignment create --assignee-object-id "${OBJ_ID}" --assignee-principal-type ServicePrincipal \
+        --role "Glidepath Container App Deployer" --scope "/subscriptions/${SUB}/resourceGroups/${RG}" --output none; do sleep 15; done
+
+# prove it does exactly the deploy step's calls, as that principal, then drop the session
+az login --service-principal -u "${APP_ID}" -p "$(jq -r .password glidepath-deployer-sp.json)" --tenant "${TENANT}" --output none
+az containerapp show -g "${RG}" -n dev --query properties.latestRevisionName -o tsv
+az logout
 ```
 
-If a deploy fails on `Microsoft.App/containerApps/listSecrets/action`, the CLI version in the Task
-needed to read secrets to build its update; add that one action rather than switching to the built-in
+If a deploy fails on `Microsoft.App/containerApps/listSecrets/action`, that CLI version needed to read
+secrets to build its update; add that one action rather than switching to the built-in
 `Container Apps Contributor`, which also grants create and delete. The built-in role is the acceptable
 shortcut only for a throwaway subscription.
 
-Plant `azure-client-id`, `azure-client-secret` and `azure-tenant-id` in the app's own Infisical project,
-as its `cicd.yaml` `secrets:` list names them. The exposure is the AWS deployer's, narrowed further: the
-key can change the image of Container Apps in one resource group and nothing else.
+Plant the three values in the app's own Infisical project (`smoke-az-fn-kind-dev` for the smoke app,
+`shared` environment), named exactly as its `cicd.yaml` `secrets:` list names them: `azure-client-id`
+(`appId`), `azure-client-secret` (`password`) and `azure-tenant-id`. The next push to the app picks
+them up; delete `glidepath-deployer-sp.json` afterwards. The exposure is the AWS deployer's, narrowed
+further: the key can change the image of Container Apps in one resource group and nothing else.
 
 ## Rotation
 

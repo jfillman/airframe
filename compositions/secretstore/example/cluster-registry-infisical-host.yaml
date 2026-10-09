@@ -1,4 +1,5 @@
-# The cluster registry entry for the cluster that hosts Infisical: infisicalHost flips the SecretStore
+# A pre-C9 registry record (no infisicalUrl/infisicalOrgId): the registry-keys-missing case proves the render fails
+# fatally instead of guessing. Was: the cluster registry entry for the cluster that hosts Infisical; infisicalHost flips the SecretStore
 # composition onto its kubernetes-auth branch (00-infisical-host-gate.yaml).
 apiVersion: v1
 kind: ConfigMap

@@ -86,17 +86,16 @@ spec:
               <<- $registryInfisicalOrgId = index $cm.data "infisicalOrgId" | default "" >>
             <<- end >>
             <<- /* Review C9: where Infisical lives is a fleet fact in clusters.yaml (top-level infisical: block), rendered by
-                   the cluster-registry chart into this cluster's record as infisicalUrl and infisicalOrgId. MIGRATION
-                   FALLBACK: until both clusters' registries carry those keys, the values below are exactly what the
-                   templates hard-coded before, so this release changes no rendered object; the next release removes them. */>>
-            <<- $infisicalUrl := $registryInfisicalUrl >>
-            <<- if not $infisicalUrl >>
-              <<- $infisicalUrl = "http://dev.kiac.local:31800/api" >>
-              <<- if $isInfisicalHost >>
-                <<- $infisicalUrl = "http://infisical-infisical-standalone-infisical.infisical.svc.cluster.local:8080/api" >>
-              <<- end >>
+                   the cluster-registry chart into this cluster's record as infisicalUrl and infisicalOrgId. No fallback: a
+                   record without them fails the render with a fatal result, which leaves every composed object as it is and
+                   surfaces the cause in Synced=False (knownFailures InfisicalRegistryKeysMissing in xrds/secretstore.meta.yaml). */>>
+            <<- /* Only once Crossplane has answered the lookup: the first pass of every reconcile runs before it has, and only
+                   the final pass's output is applied, so failing there would fail every reconcile. */>>
+            <<- if and (hasKey $allExtra "cluster-registry-entry") (not (and $registryInfisicalUrl $registryInfisicalOrgId)) >>
+              <<- fail (printf "cluster registry record %q has no infisicalUrl/infisicalOrgId: add the infisical: block to the hub's clusters.yaml and sync this cluster's cluster-registry Application" $spec.cluster) >>
             <<- end >>
-            <<- $infisicalOrgId := $registryInfisicalOrgId | default "820c617c-71a5-45e4-bc19-863a4f88edf8" >>
+            <<- $infisicalUrl := $registryInfisicalUrl >>
+            <<- $infisicalOrgId := $registryInfisicalOrgId >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
             requirements:

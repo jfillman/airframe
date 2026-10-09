@@ -1,6 +1,6 @@
 # No container of the app was OOM-killed.
 #
-# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's idp-service-catalog Application,
+# A ClusterAnalysisTemplate: one copy per cluster, installed by that cluster's analysis-catalog Application,
 # referenced from an app's values with `clusterScope: true`:
 #
 #   rollout:

@@ -69,6 +69,11 @@ ids and fix hints, so an agent can retry against them deterministically:
 - Chart guards: a developer label that would override a chart-owned identity label, a `podSpec`
   that replaces the container list, `releaseTracking` on a release with no Rollout, each fail the
   render with a message naming the key.
+- `AF-XR-001/002/003` and `AF-SCHEMA-001/002` in `--xr` mode: an XR request in a tenants repo with a
+  retired API group, an unknown kind, no name, a misspelled field or a value outside the XRD's schema
+  fails. The API server would otherwise prune the misspelled field silently (Argo CD's client-side
+  apply sends no field-validation directive); the xr-requests Applications also apply server-side,
+  which rejects the same typo at sync time, so the check exists at both ends.
 
 The strict values schema (`additionalProperties: false` everywhere but the documented
 passthroughs) is itself policy: the chart accepts exactly the fields the catalog describes.

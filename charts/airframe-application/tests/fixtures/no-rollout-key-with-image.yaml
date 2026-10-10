@@ -1,0 +1,4 @@
+# No rollout: key at all - the chart defaults apply (a service), and the image makes it render.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}

@@ -179,6 +179,7 @@ in Skyport has to run on both:
   the state moves to MongoDB (phase 3).
 - **First deploy.** Configure an app before it has an image with `rollout: null` on chart versions before
   v0.3.91; from v0.3.91 the chart renders no workload until an image exists, so ordinary rollout config is safe.
+  Since v0.3.140 `rollout.enabled: false` (not `rollout: null`) says an environment runs no service.
 - **Component charts.** Every image a wrapped upstream chart pulls has to be a
   multi-arch index. Checked for Redis (Bitnami `redis:latest`: amd64 and arm64);
   **check each new component before it ships** — this is the easiest thing to get

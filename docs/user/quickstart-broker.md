@@ -87,7 +87,7 @@ For an `InfraService` that repo is `gitops-infra-skyport-broker` itself. Create
 ```yaml
 appType: infra
 envName: dev
-rollout: null            # no workload of our own: the broker is the component below
+rollout: { enabled: false }   # no workload of our own: the broker is the component below
 
 components:
   - type: rabbitmq

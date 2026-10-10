@@ -1,0 +1,7 @@
+# rollout.enabled: false - no service in this environment, even with an image and other rollout settings.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  enabled: false
+  replicas: 4

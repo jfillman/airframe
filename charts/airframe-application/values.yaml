@@ -66,6 +66,12 @@ platformSecretStore: {kind: ClusterSecretStore, name: platform-secret-store}
 # The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a
 # standalone component-only env).
 rollout:
+  # Whether this environment runs a long-running service at all. false means only Jobs, CronJobs and
+  # components: no Rollout, Service, HPA or PDB, and Glidepath refuses to release an image to it. The
+  # rest of rollout: is kept, so turning it back on restores the same settings. Whether anything is
+  # deployed yet is not this field: that is release.image (the release file). rollout: null still means
+  # false, for older files.
+  enabled: true
   # DEPRECATED: use release.image instead. Still read when release.image is not set.
   image:
     # Image repository without a tag.

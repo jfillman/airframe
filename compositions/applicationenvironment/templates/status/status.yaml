@@ -18,7 +18,7 @@
 #                  through a transient empty lookup, so this mirrors it).
 #
 # WorkloadDeployed is gone. It was computed from "values.yaml was seeded with
-# rollout: null" and never from the live Rollout - which runs on ANOTHER cluster, so
+# rollout: null" (the bootstrap no longer seeds that either) and never from the live Rollout - which runs on ANOTHER cluster, so
 # this Composition cannot observe it - and therefore stayed False forever: every live
 # env reported WorkloadDeployed=False while its app was serving traffic, and the
 # architecture doc claimed the opposite. A condition that can only ever be False

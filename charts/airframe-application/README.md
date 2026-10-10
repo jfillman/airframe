@@ -26,8 +26,23 @@ The chart renders no `Rollout`, `RolloutWatch`, `Service` or `ServiceMonitor` un
 `release.image.repository` and `release.image.tag` (`airframe-application.image` resolves it). The deprecated
 `rollout.image` is still read when `release.image` is not fully set, and `release.image` wins when both are.
 The shipped defaults leave both empty, so a newly created app that is configured but not yet built renders
-nothing that runs, instead of a Rollout whose image is `":"`. `rollout: null` still means "no workload at all"
-(the `appType: infra` case). Namespace, ServiceAccount, NetworkPolicy and the Attached-tier XRs render either way.
+nothing that runs, instead of a Rollout whose image is `":"`. Namespace, ServiceAccount, NetworkPolicy and the
+Attached-tier XRs render either way.
+
+## Two facts, two places (2026-10-10)
+
+| Fact | Where | Who |
+|---|---|---|
+| Does this environment run a service at all? | `rollout.enabled` (default `true`) in the human values files | people, Tower's config toggle |
+| Has anything been released to it? | `release.image` in the release file | Glidepath only |
+
+A Rollout renders only when both say yes. `rollout.enabled: false` is the deliberate "Jobs, CronJobs and
+components only" choice (the `appType: infra` case): the rest of `rollout:` is kept, so turning it back on restores
+the settings, and `releaseTracking` on such an environment fails the render (Glidepath refuses to open the release
+in the first place). `rollout: null` still means `enabled: false`, for older files. A file with no `rollout:` key
+gets the chart default, a service: the ApplicationEnvironment bootstrap now writes no `rollout:` at all, where it
+used to write `rollout: null` to mean "not deployed yet" - which, once the image moved to its own release file,
+blocked every new Flight environment's first release.
 `jobs:` and `cronJobs:` entries with no `image:` of their own run the same release image.
 
 `release` is machine-owned: the release pipeline writes it (and `releaseTracking`), people and agents do not. See

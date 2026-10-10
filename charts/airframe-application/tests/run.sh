@@ -138,8 +138,14 @@ done
 # Rollout fails the render instead of silently reporting nothing.
 helm template t . -f tests/fixtures/release-tracking-id.yaml | grep -q 'platform-outcome\|argocd.argoproj.io/hook' && { echo "FAIL: an outcome hook Job rendered"; fail=1; }
 out=$(helm template t . -f tests/fixtures/release-tracking-no-rollout.yaml 2>&1)
-echo "$out" | grep -q 'releaseTracking is set but this release has no Rollout' || { echo "FAIL: releaseTracking without a Rollout must fail the render"; fail=1; }
+echo "$out" | grep -q 'releaseTracking is set but this environment runs no workload' || { echo "FAIL: releaseTracking on a rollout: null environment must fail the render"; fail=1; }
 helm template t . -f tests/fixtures/rollout-null.yaml >/dev/null 2>&1 || { echo "FAIL: a rollout-null release with no releaseTracking must still render"; fail=1; }
+
+# rollout.enabled (2026-10-10): false means no service even with an image; no rollout: key means the chart
+# default (a service); releaseTracking on a disabled environment fails with a message naming the setting.
+expect_absent  workload-disabled          Rollout RolloutWatch Service ServiceMonitor
+expect_present no-rollout-key-with-image  Rollout RolloutWatch Service
+helm template t . -f tests/fixtures/workload-disabled-tracking.yaml 2>&1 | grep -q 'runs no workload (rollout.enabled: false' || { echo "FAIL: releaseTracking with rollout.enabled: false must fail the render, naming the setting"; fail=1; }
 
 # Fast-track rollback (glidepath ADR-0021 phase 4): on by default with the last 3 revisions, off with null.
 ro release-image | grep -A1 '^  rollbackWindow:' | grep -q 'revisions: 3' || { echo "FAIL: rollbackWindow {revisions: 3} is not the default"; fail=1; }

@@ -91,6 +91,11 @@ metadata:
   {{- end }}
 spec:
   replicas: {{ .Values.rollout.replicas }}
+  {{- /* Fast-track rollback (Argo Rollouts): going back to one of the last N revisions skips steps and analysis. */}}
+  {{- with .Values.rollout.rollbackWindow }}
+  rollbackWindow:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "airframe-application.selectorLabels" . | nindent 6 }}

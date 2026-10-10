@@ -141,4 +141,8 @@ out=$(helm template t . -f tests/fixtures/release-tracking-no-rollout.yaml 2>&1)
 echo "$out" | grep -q 'releaseTracking is set but this release has no Rollout' || { echo "FAIL: releaseTracking without a Rollout must fail the render"; fail=1; }
 helm template t . -f tests/fixtures/rollout-null.yaml >/dev/null 2>&1 || { echo "FAIL: a rollout-null release with no releaseTracking must still render"; fail=1; }
 
+# Fast-track rollback (glidepath ADR-0021 phase 4): on by default with the last 3 revisions, off with null.
+ro release-image | grep -A1 '^  rollbackWindow:' | grep -q 'revisions: 3' || { echo "FAIL: rollbackWindow {revisions: 3} is not the default"; fail=1; }
+ro rollback-window-off | grep -q 'rollbackWindow' && { echo "FAIL: rollbackWindow: null did not turn it off"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok" || exit 1

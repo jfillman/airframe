@@ -259,6 +259,24 @@
           "type": "object",
           "default": {}
         },
+        "rollbackWindow": {
+          "description": "spec.rollbackWindow: a change back to one of the Rollout's last `revisions` revisions skips the canary steps and analysis and goes straight to 100% (Argo Rollouts' fast-track rollback). That revision already ran here; a Glidepath rollback (ADR-0021 phase 4) is exactly that case. null turns it off (an empty object does not: Helm merges it with this default).",
+          "type": [
+            "object",
+            "null"
+          ],
+          "default": {
+            "revisions": 3
+          },
+          "additionalProperties": false,
+          "properties": {
+            "revisions": {
+              "description": "How many earlier revisions count as a rollback target. Needs at least that many old ReplicaSets kept (Argo Rollouts keeps 10 by default).",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
         "command": {
           "type": "array",
           "items": {

@@ -143,8 +143,6 @@ resources:
 
         envName: staging
 
-        rollout: null
-
         '
       file: kind-prod/staging/values.yaml
       overwriteOnCreate: true

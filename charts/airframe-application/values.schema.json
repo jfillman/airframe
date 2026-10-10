@@ -194,6 +194,11 @@
       "additionalProperties": false,
       "description": "The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a standalone component-only env).",
       "properties": {
+        "enabled": {
+          "description": "Whether this environment runs a long-running service at all. false means only Jobs, CronJobs and components: no Rollout, Service, HPA or PDB, and Glidepath refuses to release an image to it. The rest of rollout: is kept, so turning it back on restores the same settings. Whether anything is deployed yet is not this field: that is release.image (the release file). rollout: null still means false, for older files.",
+          "type": "boolean",
+          "default": true
+        },
         "image": {
           "description": "DEPRECATED: use release.image instead. Still read when release.image is not set.",
           "type": "object",

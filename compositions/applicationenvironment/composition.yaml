@@ -683,12 +683,13 @@ spec:
             # instead, same "structural backstop, refuse rather than partially succeed" instinct
             # already used for the ClusterReady condition (status/status.yaml).
             #
-            # rollout: null - the initial bootstrap scaffold only, not an ongoing default. This
-            # platform's CICD pipeline (and a developer directly) is expected to edit this file's
-            # real content afterward (image tag, ports, ...) as normal GitOps - see
-            # airframe-application's chart for what rollout: null itself fixture-tests cleanly (no
-            # Rollout/Service/HPA/PDB rendered, just NetworkPolicy/ServiceAccount) as the safe
-            # starting state before any of that happens.
+            # Identity only, no rollout: key (2026-10-10). The environment gets the chart's default
+            # workload (a service), and nothing renders until a release names an image (release.yaml,
+            # written by Glidepath). This used to seed rollout: null as "nothing deployed yet", but that
+            # value means "this environment runs no service": with the release file split, release.yaml
+            # could not undo it, so the first release rendered no Rollout and the chart's release-tracking
+            # guard failed (sky-marshall staging, 2026-10-10). "No service here" is now an explicit
+            # rollout.enabled: false that a person sets; "not deployed yet" is the absence of a release.
             #
             # managementPolicies (no "Update", and - 2026-09-16 - no "Delete" either):
             #
@@ -766,7 +767,6 @@ spec:
                   appType: <<$appType>>
                   cluster: <<$cluster>>
                   envName: <<$env>>
-                  rollout: null
                 commitMessage: <<printf "Bootstrap %s environment: add %s/%s/values.yaml" $env $cluster $env | toJson>>
             <<- end >>
             <<- end >>
@@ -837,7 +837,7 @@ spec:
             #                  through a transient empty lookup, so this mirrors it).
             #
             # WorkloadDeployed is gone. It was computed from "values.yaml was seeded with
-            # rollout: null" and never from the live Rollout - which runs on ANOTHER cluster, so
+            # rollout: null" (the bootstrap no longer seeds that either) and never from the live Rollout - which runs on ANOTHER cluster, so
             # this Composition cannot observe it - and therefore stayed False forever: every live
             # env reported WorkloadDeployed=False while its app was serving traffic, and the
             # architecture doc claimed the opposite. A condition that can only ever be False

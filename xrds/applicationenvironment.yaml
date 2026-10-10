@@ -26,8 +26,8 @@
 #
 # No spec.rollout / image seed: this platform's CICD control plane isn't running on
 # kind-dev yet (same gap NodeJSApplication already reports via CicdOnboarded), so
-# there's no real image to deploy at XR-creation time. The Composition bootstraps
-# values.yaml with rollout: null (the chart renders no workload for it) - see
+# there's no real image to deploy at XR-creation time. The Composition bootstraps an
+# identity-only values.yaml (the chart renders no workload until a release sets an image) - see
 # compositions/applicationenvironment/templates/status/status.yaml for the conditions this
 # XR does report (ClusterReady, AppResolved); whether a workload is up is the target
 # cluster's Rollout, which this XR cannot observe - rather than rendering a Rollout that

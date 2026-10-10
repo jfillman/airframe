@@ -124,8 +124,8 @@ dependency-lock graph cluster-wide) plus a `function-auto-ready` step.
    `xr-requests` for the shared-mode Infisical store.
 4. `DevClusterReady` and `CicdOnboarded` surface as custom conditions.
 5. An `ApplicationEnvironment` request follows the same `xr-requests` pattern,
-   gated by `ClusterReady`. It commits `<cluster>/<env>/values.yaml` (initially
-   `rollout: null`) and a tenant-onboarding entry into the target cluster's own
+   gated by `ClusterReady`. It commits `<cluster>/<env>/values.yaml` (identity only;
+   nothing renders until a release sets an image) and a tenant-onboarding entry into the target cluster's own
    tenants repo — no cross-cluster credential ever used.
 6. The target cluster's own tenant-onboarding `ApplicationSet` picks up the
    entry and creates the namespace/`Application`/`AppProject` on its own.

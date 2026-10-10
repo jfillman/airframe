@@ -164,8 +164,7 @@ environment's values, exactly like Redis in [part 1, section 08](quickstart.md#0
 **Step 1 — declare the environment.** Create `platform/envs/dev.yaml`:
 
 ```yaml
-envName: dev
-rollout: null            # explicit; the deploy stage fills in the image later
+envName: dev             # no image yet: nothing runs until the deploy stage sets one
 
 components:
   - type: postgresql
@@ -188,7 +187,7 @@ networkPolicy:
 
 Two things worth knowing:
 
-- **The database is created before the app runs.** With `rollout: null` there's no workload yet, so
+- **The database is created before the app runs.** Until the first deploy sets an image there's no workload yet, so
   the first thing this file produces is the `PostgreSQL` XR and its cluster. Within about a
   minute you'll see them:
 
@@ -376,7 +375,7 @@ Merge the `.tekton/` PR it opens.
 
 **Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-prod-staging`,
 `Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `prod`, `env` `staging`.
-Merge the PR. The flight environment starts as `rollout: null`, so **the database is created
+Merge the PR. The flight environment starts with no image, so **the database is created
 first**, in `app-flight-api-staging`, before any application runs:
 
 ```bash

@@ -490,10 +490,8 @@ PORT=8080 node index.js        <span class="c"># open http://localhost:8080</spa
         <h3>Declare the environment</h3>
         <span class="filepath">boarding-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
         <pre># envName, not env — env is a reserved key in the chart's container env-var list.
-# rollout: null must be explicit — omitting it makes the chart render its own
-# default rollout with an empty image (two InvalidImageName pods).
-envName: dev
-rollout: null</pre>
+# No rollout: needed: the chart renders no workload until the deploy stage sets an image.
+envName: dev</pre>
         <p class="prose">A dev-cluster-only <code>ApplicationSet</code>
           (<code>boarding-api-lower-envs</code>) watches <code>platform/envs/*.yaml</code> in
           your repo. Within a sync interval you get an empty namespace,
@@ -631,17 +629,17 @@ pipelines:
 NAME                             SYNCED   READY   COMPOSITION                              AGE
 boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m</pre>
         <p class="prose"><code>kubectl describe</code> shows <code>ClusterReady: True</code> and
-          <code>AppResolved: True</code>. The bootstrap file is <code>rollout: null</code>:
-          a namespace, no workload. Whether a workload is running is read on the target
+          <code>AppResolved: True</code>. The bootstrap file holds only the
+          environment's identity: a namespace, and nothing that runs until a release sets an image. Whether a workload is running is read on the target
           cluster (the Rollout, or Tower), not from this XR.</p>
       </div>
 
       <div class="step">
         <h3>Configure it: Tower → boarding-api → App Configuration</h3>
         <p class="prose">Pick environment <code>staging</code>. The active environment is shown
-          prominently at the top; check it before saving. Turn on the <b>Deployment</b> switch —
-          an env with <code>rollout: null</code> deploys no Rollout, Service, HPA or PDB — and
-          fill in:</p>
+          prominently at the top; check it before saving. The <b>Deployment</b> switch is on by
+          default; turning it off sets <code>rollout.enabled: false</code> (no Rollout, Service, HPA or PDB, and
+          releases to it are refused). Fill in:</p>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Section</th><th>For boarding-api</th></tr></thead>
@@ -908,9 +906,10 @@ kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   <span c
           <code>git pull</code> before you push.</p>
       </div>
       <div class="card">
-        <div class="card-head"><span class="card-dot ink"></span><h3>envName, never env; rollout: null</h3></div>
+        <div class="card-head"><span class="card-dot ink"></span><h3>envName, never env; rollout.enabled</h3></div>
         <p>In <code>platform/envs/*.yaml</code>, <code>env:</code> collides with the chart's
-          reserved key, and <code>rollout: null</code> must be explicit.</p>
+          reserved key. No <code>rollout:</code> key means a service once a release sets an image;
+          <code>rollout.enabled: false</code> says an environment runs none.</p>
       </div>
       <div class="card">
         <div class="card-head"><span class="card-dot ink"></span><h3>Flight rules</h3></div>

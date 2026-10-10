@@ -340,7 +340,7 @@ skyport-broker   True     True    infraservices.catalog.hangar.io   2m</pre>
 <span class="filepath">gitops-infra-skyport-broker/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
 <pre>appType: infra
 envName: dev
-rollout: null            <span class="c"># no workload of our own: the broker is the component below</span>
+rollout: { enabled: false }   <span class="c"># no workload of our own: the broker is the component below</span>
 
 components:
   - type: rabbitmq

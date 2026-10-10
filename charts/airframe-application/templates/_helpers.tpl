@@ -57,13 +57,19 @@ airframe-application.hasRollout - "true"/"" - whether this release has a workloa
 all. §3's "Open design question", implemented here per the doc's own stated
 leaning ("optional in the same chart... for mechanism reuse") - an appType: infra
 release that's only a components: block (§ Item 7's standalone-Redis case) sets
-rollout: null (or omits it) and gets no Rollout/Service/HPA/AnalysisTemplate.
-Also false until rollout.image.repository and rollout.image.tag are both set: a
-configured-but-not-yet-built app (the default values ship both empty) renders no
-workload rather than a Rollout whose image is ":" (AF-10a).
+rollout.enabled: false and gets no Rollout/Service/HPA/AnalysisTemplate. rollout: null
+means the same, for files written before rollout.enabled existed (2026-10-10).
+Also false until an image is set (release.image, or the deprecated rollout.image): a
+configured-but-not-yet-released environment renders no workload rather than a Rollout
+whose image is ":" (AF-10a). The two are different facts - "this environment runs no
+service" (rollout.enabled) and "nothing has been released here yet" (no release.image) -
+and Tower shows them differently; only the first is configuration.
 */}}
+{{- define "airframe-application.workloadEnabled" -}}
+{{- if and .Values.rollout (ne (toString .Values.rollout.enabled) "false") -}}true{{- end -}}
+{{- end -}}
 {{- define "airframe-application.hasRollout" -}}
-{{- if and .Values.rollout (include "airframe-application.image" .) -}}true{{- end -}}
+{{- if and (include "airframe-application.workloadEnabled" .) (include "airframe-application.image" .) -}}true{{- end -}}
 {{- end -}}
 
 {{/*

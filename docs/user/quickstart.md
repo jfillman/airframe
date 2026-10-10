@@ -339,15 +339,16 @@ boarding-api-prod-staging   True     True    applicationenvironments.catalog.han
 ```
 
 `kubectl describe` shows `ClusterReady: True` and `AppResolved: True`. The
-bootstrap file is `rollout: null`: a namespace, no workload. Whether a workload is
-running is read on the target cluster (the Rollout, or Tower), not from this XR.
+bootstrap file holds only the environment's identity: a namespace, and nothing that
+runs until a release sets an image. Whether a workload is running is read on the target cluster (the Rollout, or Tower), not from this XR.
 
 ### Step 3 — configure it in Tower's App Configuration tab
 
 **Tower → boarding-api → App Configuration → environment `staging`.** The active
-environment is shown prominently at the top; check it before saving. Turn on the
-**Deployment** switch (an env with `rollout: null` deploys no Rollout, Service,
-HPA or PDB) and fill in:
+environment is shown prominently at the top; check it before saving. The
+**Deployment** switch is on by default; turning it off sets `rollout.enabled: false`
+(no Rollout, Service, HPA or PDB in this environment, and releases to it are refused).
+Fill in:
 
 | Section | For boarding-api |
 |---|---|
@@ -500,7 +501,8 @@ the chart's own values, but no canary has been run with this app yet.
   `deploy.upperEnvironments`.
 - **`envName`, never `env`**, as the environment's name key in
   `platform/envs/*.yaml`.
-- **`rollout: null` must be explicit.**
+- **No `rollout:` key means a service** (the chart default, rendered once a release sets
+  an image); `rollout.enabled: false` is how an environment says it runs none.
 - **The ground deploy commits to `main` itself** — pull before you push.
 - **`ApplicationEnvironment` rejects dev clusters** — `cluster` is live-gated to
   `type: upper`.

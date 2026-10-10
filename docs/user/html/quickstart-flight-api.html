@@ -368,7 +368,6 @@ git add -A &amp;&amp; git commit -m "flight-api: flights and gates in Postgres"<
 <h3>Declare the environment</h3>
 <span class="filepath">flight-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
 <pre>envName: dev
-rollout: null            # explicit; the deploy stage fills in the image later
 
 components:
   - type: postgresql
@@ -387,7 +386,7 @@ env:
 networkPolicy:
   allowIngressFrom:      # let boarding-api's namespace reach us (section 06)
     - { namespace: app-boarding-api-dev, ports: [8080] }</pre>
-<p class="prose"><b>The database is created before the app runs.</b> With <code>rollout: null</code> there is no workload yet, so the first thing this file produces is the <code>PostgreSQL</code> XR and its cluster, within about a minute:</p>
+<p class="prose"><b>The database is created before the app runs.</b> Until the first deploy sets an image there is no workload yet, so the first thing this file produces is the <code>PostgreSQL</code> XR and its cluster, within about a minute:</p>
 <pre>kubectl get postgresql -n app-flight-api-dev              # READY True
 kubectl get cluster.postgresql.cnpg.io -n app-flight-api-dev</pre>
 
@@ -509,7 +508,7 @@ npm test                                     # 11 passing</pre>
 </div>
 <div class="steps"><div class="step">
 <h3>Declare it and create the environment</h3>
-<p class="prose">Add <code>upperEnvironments: [{ name: staging, cluster: prod }]</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts as <code>rollout: null</code>, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
+<p class="prose">Add <code>upperEnvironments: [{ name: staging, cluster: prod }]</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts with no image, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
 
 </div>
 <div class="step">

@@ -1,0 +1,6 @@
+# Must FAIL to render: autopilotReady on a cluster without the control-plane role (CI asserts the failure).
+clusters:
+  - name: kind-prod
+    zone: upper
+    roles: [workloads]
+    airframe: { crossplaneReady: true, autopilotReady: true }

@@ -31,6 +31,9 @@ jobs:
       - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -q 'name: kiac-dev'"
       # C9: the infisical block reaches every record, in-cluster URL only on the infisicalHost cluster
       - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'infisicalUrl: \"http://infisical.example:31800/api\"' | grep -qx 1"
+      # AP-A1: autopilotReady renders on the control-plane cluster (and its alias), and an upper cluster carrying it fails
+      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'autopilotReady: \"true\"' | grep -qx 2"
+      - run: "! helm template r charts/cluster-registry -f charts/cluster-registry/tests/autopilot-on-upper.bad.yaml"
       - run: python3 tools/build-compositions --check
       - run: python3 tools/gen_airframe_schema.py --check --coverage
       - run: python3 tools/gen_component_outputs.py --check

@@ -391,6 +391,13 @@ path. Older `release.yaml` files still carry `relayUrl`, `relayHostAliasIP`, `co
 other fields for them; they are ignored. `releaseTracking` on a release with no Rollout now fails
 the render (`templates/release-tracking-guard.yaml`) instead of silently reporting nothing.
 
+**Fast-track rollback (2026-10-10).** `rollout.rollbackWindow` (default `{revisions: 3}`) renders
+Argo Rollouts' `spec.rollbackWindow`: a pod template change back to one of the Rollout's last three
+revisions skips the canary steps and analysis. That is a Glidepath rollback (ADR-0021 phase 4): the
+image already ran healthy in this environment, and without the window the rollback paused at the
+first canary pause step like any release (seen live on sky-marshall staging). `rollbackWindow: null`
+turns it off; `{}` does not (Helm merges it with the default).
+
 The notes below about the 2026-08-17 pass describe what was built and verified then, including
 the hook Jobs this chart no longer renders.
 

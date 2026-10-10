@@ -1,0 +1,6 @@
+release:
+  image:
+    repository: registry.example/guard-test
+    tag: v2
+rollout:
+  rollbackWindow: null

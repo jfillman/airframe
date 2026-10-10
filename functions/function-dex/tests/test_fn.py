@@ -154,6 +154,20 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
         config = _yaml.safe_load(cm["data"]["config.yaml"])
         self.assertTrue(config.get("connectors"), "Dex config must declare at least one connector")
 
+    async def test_server_mode_pins_a_release_and_lists_client_credentials(self):
+        # Dex v2.46.0 enables client_credentials only when oauth2.grantTypes lists it (its
+        # default list adds it behind a feature flag), and :master floats - guard both.
+        import yaml as _yaml
+
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server"))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        cm = resource.struct_to_dict(rsp.desired.resources["config"].resource)
+        config = _yaml.safe_load(cm["data"]["config.yaml"])
+        self.assertIn("client_credentials", config["oauth2"]["grantTypes"])
+        deploy = resource.struct_to_dict(rsp.desired.resources["deployment"].resource)
+        image = deploy["spec"]["template"]["spec"]["containers"][0]["image"]
+        self.assertRegex(image, r"^ghcr\.io/dexidp/dex:v\d+\.\d+\.\d+$")
+
     async def test_server_mode_ready_once_deployment_has_available_replicas(self):
         req = fnv1.RunFunctionRequest(
             observed=fnv1.State(

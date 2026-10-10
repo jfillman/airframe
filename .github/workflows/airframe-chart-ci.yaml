@@ -12,7 +12,7 @@ name: airframe-chart-ci
 
 on:
   pull_request:
-    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", ".github/workflows/airframe-chart-ci.yaml"]
+    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", "functions/function-dex/**", ".github/workflows/airframe-chart-ci.yaml"]
   push:
     branches: [main]
     paths: ["charts/**", "xrds/**", "compositions/**", "contract/**"]

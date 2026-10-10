@@ -9,6 +9,7 @@
 
 - [AGENTS.md](AGENTS.md): what an agent may and may not touch, today - the human-and-agent-readable rules.
 - [contract/airframe-contract.json](contract/airframe-contract.json): every chart field, every XRD's shape and summary, every component's real outputs (Secret/ConfigMap names and keys) - generated, never hand-edited. Query it with `tools/airframe-capabilities` instead of grepping source.
+- [contract/appspec.schema.json](contract/appspec.schema.json): AppSpec (`apiVersion: airframe/v1`), the desired state of one app and its environments in a single document - what an agent writes to request a new app; Autopilot's planner compiles it into the ordered tenants/app/gitops changes. Worked example: [contract/examples/parachute.appspec.yaml](contract/examples/parachute.appspec.yaml).
 - [charts/airframe-application/values.schema.json](charts/airframe-application/values.schema.json): the single source of truth for the chart's values shape (descriptions, defaults, strictness). `values.yaml` is generated from it.
 
 ## Tools

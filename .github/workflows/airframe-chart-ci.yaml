@@ -37,6 +37,7 @@ jobs:
       - run: python3 tools/gen_contract.py --check
       - run: python3 tools/test_capabilities_coldstart.py
       - run: python3 tools/test_xr_validate.py
+      - run: python3 tools/test_appspec_schema.py
       # A3: every xrds/*.meta.yaml sidecar agrees with its composition renders (11 seeded drifts must be caught),
       # and airframe-verify's step runners work against a fake cluster and a fake Dex
       - run: python3 tools/test_sidecars.py

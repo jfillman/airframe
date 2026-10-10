@@ -8,7 +8,7 @@ clusters:
     roles: [control-plane, workloads]
     tenantsRepo: gitops-cluster-dev-tenants
     aliases: [kiac-dev]
-    airframe: { cicdReady: true, infisicalHost: true }
+    airframe: { cicdReady: true, infisicalHost: true, autopilotReady: true }
   - name: kind-prod
     zone: upper
     roles: [workloads, platform-services]

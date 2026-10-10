@@ -7,7 +7,7 @@
 #   roles: [workloads]               # control-plane | workloads | platform-services
 #   tenantsRepo: gitops-cluster-kind-prod-tenants
 #   aliases: []                      # other names this cluster also answers to (one ConfigMap each)
-#   airframe: { crossplaneReady: true }   # cicdReady, crossplaneReady, infisicalHost
+#   airframe: { crossplaneReady: true }   # cicdReady, crossplaneReady, infisicalHost, autopilotReady (dev only)
 clusters: []
 # The fleet's one Infisical server (review C9): the top-level `infisical:` block of the same clusters.yaml.
 #   infisical:

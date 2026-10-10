@@ -5,6 +5,8 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
   cicdReady        airframe.cicdReady         (dev clusters: the CI/CD control plane is running)
   crossplaneReady  airframe.crossplaneReady   (upper clusters: Crossplane can compose onto it)
   infisicalHost    airframe.infisicalHost
+  autopilotReady   airframe.autopilotReady    (Autopilot AgentRuns may run here: set only after the network-policy
+                   canary passes on this cluster; control-plane clusters only, so an upper cluster can never carry it)
   tenantsRepo      tenantsRepo
   infisicalUrl     infisical.inClusterUrl on the airframe.infisicalHost cluster, infisical.url elsewhere
   infisicalOrgId   infisical.orgId
@@ -28,6 +30,7 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
 {{- $type := ternary "dev" "upper" (has "control-plane" $roles) }}
 {{- if and (eq $type "dev") (ne $zone "lower") }}{{ fail (printf "clusters: '%s' runs the control plane, so its zone must be lower" .name) }}{{ end }}
 {{- $a := .airframe | default dict }}
+{{- if and $a.autopilotReady (ne $type "dev") }}{{ fail (printf "clusters: '%s' sets airframe.autopilotReady, but Autopilot runs only on the control-plane (dev) cluster" .name) }}{{ end }}
 {{- $rec := . }}
 {{- range prepend (.aliases | default list) .name }}
 {{- if hasKey $seen . }}{{ fail (printf "clusters: name '%s' is used twice" .) }}{{ end }}
@@ -55,6 +58,9 @@ data:
   {{- end }}
   {{- if $a.infisicalHost }}
   infisicalHost: "true"
+  {{- end }}
+  {{- if $a.autopilotReady }}
+  autopilotReady: "true"
   {{- end }}
   {{- with $rec.tenantsRepo }}
   tenantsRepo: {{ . }}

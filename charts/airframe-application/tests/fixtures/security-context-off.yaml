@@ -1,0 +1,7 @@
+release:
+  image:
+    repository: registry.example/guard-test
+    tag: v2
+rollout:
+  podSecurityContext: null
+  containerSecurityContext: null

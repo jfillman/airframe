@@ -413,6 +413,18 @@ image already ran healthy in this environment, and without the window the rollba
 first canary pause step like any release (seen live on sky-marshall staging). `rollbackWindow: null`
 turns it off; `{}` does not (Helm merges it with the default).
 
+**Non-root by default (2026-10-11).** The Rollout's pod runs as UID/GID 65532 unless the release says
+otherwise: `rollout.podSecurityContext` defaults to `runAsNonRoot: true`, `runAsUser`/`runAsGroup`/`fsGroup`
+65532 and the `RuntimeDefault` seccomp profile, and `rollout.containerSecurityContext` to
+`allowPrivilegeEscalation: false` with every capability dropped. 65532 is the UID of Tower's break-glass
+debug container: its process access can read the app's files through `/proc/1/root` only when both run
+as the same non-root user. Before this, no fleet image set `USER`, so every app ran as root and process
+access never showed its files. All ten app images on kiac-dev were run as 65532 with their real
+environment and came up ready with no permission errors; the root-owned files `COPY` leaves in the image
+are world-readable, and the JVM's `/tmp` is world-writable. Keys a release sets merge onto the default
+(`podSecurityContext: {runAsUser: 1000}` keeps the rest); `null` drops it, for an image that must run as
+root. Jobs and CronJobs are unchanged.
+
 The notes below about the 2026-08-17 pass describe what was built and verified then, including
 the hook Jobs this chart no longer renders.
 

@@ -350,14 +350,35 @@
           "description": "Readiness probe for the main container."
         },
         "podSecurityContext": {
-          "type": "object",
-          "description": "Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here.",
-          "default": {}
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here. Defaults to non-root UID/GID 65532, the same IDs as Tower's break-glass debug container, so its process access can read the app's files through /proc/1/root. Keys you set merge onto this default (Helm merges maps); null drops it entirely, e.g. for an image that must run as root.",
+          "default": {
+            "runAsNonRoot": true,
+            "runAsUser": 65532,
+            "runAsGroup": 65532,
+            "fsGroup": 65532,
+            "seccompProfile": {
+              "type": "RuntimeDefault"
+            }
+          }
         },
         "containerSecurityContext": {
-          "type": "object",
-          "description": "Raw passthrough - Kubernetes SecurityContext, not modeled field-by-field here.",
-          "default": {}
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Raw passthrough - Kubernetes SecurityContext for the main container, not modeled field-by-field here. Keys you set merge onto this default; null drops it.",
+          "default": {
+            "allowPrivilegeEscalation": false,
+            "capabilities": {
+              "drop": [
+                "ALL"
+              ]
+            }
+          }
         },
         "extraContainers": {
           "type": "array",

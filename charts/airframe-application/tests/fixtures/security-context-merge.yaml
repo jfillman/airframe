@@ -1,0 +1,9 @@
+release:
+  image:
+    repository: registry.example/guard-test
+    tag: v2
+rollout:
+  podSecurityContext:
+    runAsUser: 1000
+  containerSecurityContext:
+    readOnlyRootFilesystem: true

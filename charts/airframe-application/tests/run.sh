@@ -151,4 +151,15 @@ helm template t . -f tests/fixtures/workload-disabled-tracking.yaml 2>&1 | grep 
 ro release-image | grep -A1 '^  rollbackWindow:' | grep -q 'revisions: 3' || { echo "FAIL: rollbackWindow {revisions: 3} is not the default"; fail=1; }
 ro rollback-window-off | grep -q 'rollbackWindow' && { echo "FAIL: rollbackWindow: null did not turn it off"; fail=1; }
 
+# Non-root by default as UID/GID 65532, Tower's break-glass debug UID, so process access can read the app's files.
+# Keys a release sets merge onto the default; null drops it.
+ro release-image | grep -A7 '^      securityContext:' | grep -q 'runAsUser: 65532' || { echo "FAIL: pod securityContext runAsUser 65532 is not the default"; fail=1; }
+ro release-image | grep -q 'runAsNonRoot: true' || { echo "FAIL: runAsNonRoot is not the default"; fail=1; }
+ro release-image | grep -A4 '^        securityContext:' | grep -q 'allowPrivilegeEscalation: false' || { echo "FAIL: container securityContext default missing"; fail=1; }
+ro security-context-off | grep -q 'securityContext' && { echo "FAIL: securityContext null did not drop the default"; fail=1; }
+ro security-context-merge | grep -q 'runAsUser: 1000' || { echo "FAIL: podSecurityContext override not applied"; fail=1; }
+ro security-context-merge | grep -q 'runAsNonRoot: true' || { echo "FAIL: podSecurityContext override did not merge onto the default"; fail=1; }
+ro security-context-merge | grep -q 'readOnlyRootFilesystem: true' || { echo "FAIL: containerSecurityContext override not applied"; fail=1; }
+ro security-context-merge | grep -q 'allowPrivilegeEscalation: false' || { echo "FAIL: containerSecurityContext override did not merge onto the default"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok" || exit 1

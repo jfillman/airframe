@@ -112,10 +112,14 @@ rollout:
   # Empty object ({}) means no probe of this kind is set. Exactly one of httpGet/tcpSocket/exec when
   # non-empty.
   readinessProbe: {}
-  # Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here.
-  podSecurityContext: {}
-  # Raw passthrough - Kubernetes SecurityContext, not modeled field-by-field here.
-  containerSecurityContext: {}
+  # Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here. Defaults to
+  # non-root UID/GID 65532, the same IDs as Tower's break-glass debug container, so its process access
+  # can read the app's files through /proc/1/root. Keys you set merge onto this default (Helm merges
+  # maps); null drops it entirely, e.g. for an image that must run as root.
+  podSecurityContext: {fsGroup: 65532, runAsGroup: 65532, runAsNonRoot: true, runAsUser: 65532, seccompProfile: {type: RuntimeDefault}}
+  # Raw passthrough - Kubernetes SecurityContext for the main container, not modeled field-by-field
+  # here. Keys you set merge onto this default; null drops it.
+  containerSecurityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
   # Raw passthrough - additional container specs, appended as-is.
   extraContainers: []
   # Raw passthrough map, deep-merged last onto .spec.template.spec. NOT for containers[0] (use the

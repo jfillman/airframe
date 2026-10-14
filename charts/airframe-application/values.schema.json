@@ -1210,7 +1210,10 @@
             "description": "ingress.enabled is true.",
             "const": true
           }
-        }
+        },
+        "required": [
+          "enabled"
+        ]
       },
       "then": {
         "description": "... a host is required.",
@@ -1317,7 +1320,10 @@
             "description": "httpRoute.enabled is true.",
             "const": true
           }
-        }
+        },
+        "required": [
+          "enabled"
+        ]
       },
       "then": {
         "description": "... at least one hostname and one parentRef are required.",
@@ -1576,7 +1582,10 @@
                       "description": "The availability indicator type.",
                       "const": "availability"
                     }
-                  }
+                  },
+                  "required": [
+                    "type"
+                  ]
                 },
                 "then": {
                   "description": "... so errorFilter is required.",
@@ -1594,7 +1603,10 @@
                       "description": "The latency indicator type.",
                       "const": "latency"
                     }
-                  }
+                  },
+                  "required": [
+                    "type"
+                  ]
                 },
                 "then": {
                   "description": "... so latencyThreshold is required.",

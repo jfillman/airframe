@@ -31,7 +31,11 @@ def load_base_schema():
 
 def _strict_copy(node):
     """additionalProperties:false on every object that lists properties and doesn't already say
-    otherwise - used only for a component's spec sub-schema, pulled fresh from its XRD."""
+    otherwise - used only for a component's spec sub-schema, pulled fresh from its XRD.
+
+    Also turns OpenAPI 3.0's boolean exclusiveMinimum/exclusiveMaximum (the XRD dialect) into the
+    numeric form Draft 2020-12 expects: `minimum: 0, exclusiveMinimum: true` would otherwise be read
+    as "greater than true", i.e. greater than 1."""
     node = copy.deepcopy(node)
 
     def go(n):
@@ -39,6 +43,10 @@ def _strict_copy(node):
             if isinstance(n.get("properties"), dict) and "additionalProperties" not in n \
                     and "patternProperties" not in n:
                 n["additionalProperties"] = False
+            for excl, bound in (("exclusiveMinimum", "minimum"), ("exclusiveMaximum", "maximum")):
+                if isinstance(n.get(excl), bool):
+                    if n.pop(excl) and bound in n:
+                        n[excl] = n.pop(bound)
             for v in n.values():
                 go(v)
         elif isinstance(n, list):

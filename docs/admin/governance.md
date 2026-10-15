@@ -7,6 +7,9 @@ fleet then inherits them. A developer, a Tower form or an AI agent never configu
 ask for a kind (`PythonApplication`, `PostgreSQL`, `AwsLambdaTarget`) with a few fields, and what
 they get is compliant because the only way to get it is through this layer.
 
+The rules this page enforces are also listed, with the rest of Hangar's, in the [business rules register](https://github.com/jfillman/hangar/blob/main/docs/policy/business-rules.md).
+A change to a rule updates that page too.
+
 This page is the map: which role owns which decision, where in this repository each kind of
 decision lives, which controls are enforced by machinery today and which are still convention, and
 how a policy change ships.

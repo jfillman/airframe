@@ -4,16 +4,18 @@ Two clouds, two jobs each. **Airframe** (Crossplane, this catalog) builds and te
 infrastructure a cloud deploy needs: the `AwsLambdaTarget`, `AwsEcsTarget` and `AzureContainerAppTarget`
 compositions in [cloud-targets.md](../user/cloud-targets.md). **Glidepath** (the pipelines) ships images
 into it. Each job runs as its own identity with its own key, its own permissions and its own blast
-radius, and the two are never shared. On AWS, the Crossplane identity is an IAM role reached through web
-identity federation, so there's no key to store (since 2026-10-16); the other three are still keys:
+radius, and the two are never shared. On AWS both are IAM roles reached through web identity federation
+(since 2026-10-16), so nothing is stored: Crossplane assumes one role, and each Lambda function's deploy step
+assumes a role made for that function alone. The ECS deploy path and both Azure identities still use stored keys
+until their own migration. [How keyless AWS access works](#how-keyless-aws-access-works) is the place to start.
 
 | | Airframe: the Crossplane provider identity | Glidepath: the deployer identity |
 |---|---|---|
-| **Who holds it** | The AWS or Azure provider pods in `crossplane-system`, through the provider's `ClusterProviderConfig` | Every pipeline TaskRun of one application, in that app's `app-<app>-cicd` namespace |
+| **Who holds it** | The AWS or Azure provider pods in `crossplane-system`, through the provider's `ClusterProviderConfig` | AWS Lambda: only the `deploy-aws-lambda` step and the target's bootstrap Job, as ServiceAccount `glidepath-cloud-deployer` in the app's `app-<app>-cicd` namespace. ECS and Azure: every pipeline TaskRun of the app, through `app-secrets` |
 | **What it may do** | Create, observe and delete the resources the three compositions describe: repositories, execution roles, functions and URLs, clusters, task definitions, services, a small VPC; resource groups, environments, container apps | Push an image and roll the deploy surface that image belongs to: `UpdateFunctionCode`, a new task-definition revision plus `UpdateService`, `az containerapp update` |
 | **What it must never do** | Deploy code: no `UpdateFunctionCode`, no `UpdateFunctionConfiguration`, no `ecs:UpdateService`. Grant itself more: only the two managed policies the compositions attach, only on `*-exec` roles. Leave its region. | Create or delete anything. Change a function's role, memory or configuration. Touch IAM beyond passing an `*-ecs-exec` role to ECS. Leave its region. |
 | **Why the split** | A composition bug or a wrong management policy can only create, observe or delete; it can never roll a function back to the placeholder | Anyone who can merge to the app's repository can run code in its pipeline namespace; that trust boundary must not reach infrastructure or IAM |
-| **Where the secret lives** | AWS: nowhere; a projected ServiceAccount token is exchanged with STS for an hour-long session. Azure: Infisical project `platform-cicd-kind-dev`, environment `shared`, path `/`, key `provider-azure-creds` | The app's own Infisical project `<app>-<devCluster>` (for example `smoke-fn-kind-dev`), environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
+| **Where the secret lives** | AWS: nowhere; a projected ServiceAccount token is exchanged with STS for an hour-long session. Azure: Infisical project `platform-cicd-kind-dev`, environment `shared`, path `/`, key `provider-azure-creds` | AWS Lambda: nowhere; the deploy step exchanges a projected token for an hour-long session as `glidepath-deploy-<functionName>`. ECS and Azure (and Lambda, as a fallback until phase 4): the app's own Infisical project `<app>-<devCluster>`, environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
 | **How it reaches the cluster** | AWS: the kubelet projects a token (audience `sts.amazonaws.com`) into the provider pods → `ClusterProviderConfig default` (`source: WebIdentity`) → `AssumeRoleWithWebIdentity`. Azure: `platform-secret-store` (ClusterSecretStore) → ExternalSecret `provider-azure-creds` → Secret of the same name, key `credentials`, in `crossplane-system` → `ClusterProviderConfig default` | The app's own ClusterSecretStore → the `app-secrets` ExternalSecret that `airframe-application` renders from the app's `cicd.yaml` `secrets:` list → Secret `app-secrets` in `app-<app>-cicd` |
 | **Who can read the Kubernetes Secret** | AWS: there is no Secret. Anyone who can mint a token for a `provider-aws-*` ServiceAccount in `crossplane-system` (cluster admins) can become the role. Azure: cluster admins, Argo CD's application controller, External Secrets, the provider pods. No tenant namespace, not Tower's read identity | Cluster admins, Argo CD, External Secrets, and every pod that runs in that app's cicd namespace: the deploy TaskRuns and, for a Lambda target, the composition's bootstrap Job |
 
@@ -21,8 +23,83 @@ The names below (`hangar-crossplane`, `glidepath-deployer`) are conventions: the
 cares about the role ARN, the Infisical keys and the Secret names in the last two rows. Keep the names anyway; the
 cloud's audit log (CloudTrail, the Azure Activity Log) is the only place the two jobs are told apart.
 
-The AWS Crossplane identity has no long-lived credential. The other three are still long-lived keys;
+The AWS identities have no long-lived credential. The ECS deploy key and both Azure identities are still keys;
 [Hardening](#hardening-next) says what replaces them.
+
+## How keyless AWS access works
+
+Start here if you are new to this. The short version: nothing in Hangar keeps an AWS password any more. A pod that
+needs AWS proves who it is with a token the cluster signed for it, AWS checks that proof, and hands back credentials
+that expire in an hour and work for one role only.
+
+### Why it was built
+
+Both AWS identities used to be IAM users with access keys: long-lived passwords for machines, stored in Infisical
+and copied into Kubernetes Secrets. A key works from anywhere until someone deletes it, and the deploy key was
+shared by every app, so a leak from one app's pipeline reached every app's functions. Rotating keys only shortens
+that window; federation removes it.
+
+![Before: two long-lived AWS keys](diagrams/keyless-cloud-deploys/01-before.png)
+
+### How a token becomes AWS access
+
+Every pod has a Kubernetes **ServiceAccount**, and Kubernetes can write a short-lived signed **token** for it into
+the pod. kiac-dev signs tokens as `https://hangarplatform.dev/oidc/kiac-dev` and publishes its public keys there
+(hangar `web/public/oidc/`), so AWS can check a signature without being able to forge one. An **IAM identity
+provider** tells AWS to trust that issuer, and each **IAM role** says in its **trust policy** exactly which
+ServiceAccount, with which audience, may assume it.
+
+![The token exchange](diagrams/keyless-cloud-deploys/02-token-exchange.png)
+
+![The trust chain](diagrams/keyless-cloud-deploys/03-trust-chain.png)
+
+| Who | Runs as | Assumes | Can do |
+|---|---|---|---|
+| Crossplane AWS providers | `provider-aws-*` in `crossplane-system` | `hangar-crossplane-<cluster>` | create, observe and delete what the compositions describe |
+| Glidepath `deploy-aws-lambda` step | `glidepath-cloud-deployer` in `app-<app>-cicd` | `glidepath-deploy-<functionName>` | push to this function's repository, update this function's code |
+| `AwsLambdaTarget` bootstrap Job | `glidepath-cloud-deployer` in `app-<app>-cicd` | `glidepath-deploy-<functionName>` | the same, once, to seed the placeholder image |
+| every other pipeline step | `pipeline-runner` | nothing | no AWS access |
+
+### Why it is built this way
+
+- **One deploy role per function, created by the target.** The `AwsLambdaTarget` already creates the function, its
+  repository and its execution role, so it creates the deploy role beside them and deletes it with them. A new app
+  needs no IAM step, and one app's pipeline can't touch another app's function.
+- **A dedicated ServiceAccount.** Pipeline steps run as `pipeline-runner`, including steps that run the app's own
+  code. Only the deploy step and the bootstrap Job run as `glidepath-cloud-deployer`, the one subject the deploy
+  role trusts.
+- **The account is stated once,** in the fleet's `clusters.yaml` (`aws:`). The cluster registry carries it to the
+  compositions, and Glidepath's control plane carries it to every app as the ConfigMap `glidepath-cloud-identity`.
+  Apps don't repeat it in `cicd.yaml`.
+- **A permissions boundary on every role Crossplane creates.** Creating roles is the most dangerous thing the
+  Crossplane identity does, so it may only create roles that carry `HangarCloudTargetBoundary` (below).
+
+### The guardrails
+
+![Six guardrails](diagrams/keyless-cloud-deploys/04-guardrails.png)
+
+Layer 01 lives in gitops-cluster-dev (`30-policy/kyverno-policies/glidepath-cloud-deployer.yaml`). It decides who
+may run as `glidepath-cloud-deployer` by **who created the object**, not by labels, which a pipeline run can copy
+onto its pods: pods only from Tekton's controller or the Job controller, TaskRuns only from Tekton, Jobs only from
+Crossplane, and a PipelineRun may give the ServiceAccount only to the catalog `deploy` Pipeline's
+`deploy-aws-lambda` task, with no pod-template `env` (a `BASH_ENV` alone would run code inside the deploy step).
+
+The deploy side (the ServiceAccount, the credential choice, the fallback) is documented in Glidepath's
+`docs/admin/cloud-deploy-identity.md`.
+
+### A rule for composition authors: never gate what already exists
+
+Crossplane deletes anything a composition stops rendering. On 2026-10-16 the federation switch made the
+`AwsLambdaTarget` bootstrap Job wait for the new deploy role; for one reconcile the role didn't exist, the finished
+Job dropped out and was deleted, and on the next reconcile the function, which rendered only after a succeeded Job,
+was deleted with its URL and permission. It came back six minutes later from the placeholder image, with a new
+Function URL. v0.3.144 (#90) keeps every resource that already exists in the desired state, and the
+`switch-keeps-existing` and `job-gone-keeps-function` render cases hold that.
+
+![The incident](diagrams/keyless-cloud-deploys/06-incident.png)
+
+When you add a condition to a composition, ask whether it decides **creation** or **presence**. Only the first is
+safe to gate.
 
 ## AWS: `hangar-crossplane` (Crossplane)
 
@@ -360,14 +437,49 @@ kubectl describe repository.ecr.aws.m.upbound.io -n app-<app>-cicd <xr>-repo | g
 # ... AccessDenied ... assumed-role/hangar-crossplane-<cluster>/<cluster>-crossplane is not authorized to perform: ecr:Something ...
 ```
 
-## AWS: `glidepath-deployer` (Glidepath)
+## AWS: `glidepath-deploy-<functionName>` (Glidepath, Lambda)
+
+**Created by:** the function's `AwsLambdaTarget`, once the cluster registry carries the AWS account, the boundary
+and the cluster's `serviceAccountIssuer` (`compositions/awslambdatarget/templates/render-target-resources/deploy-role.yaml`).
+Deleting the target deletes the role.
+**Used by:** Glidepath's `deploy-lambda` Task and the target's bootstrap Job, both as `glidepath-cloud-deployer` in
+the XR's namespace. The role name is `glidepath-deploy-` plus the function name cut to 47 characters; Glidepath
+computes the same name.
+
+Trust policy (rendered):
+
+```json
+{"Version": "2012-10-17", "Statement": [{
+  "Effect": "Allow", "Action": "sts:AssumeRoleWithWebIdentity",
+  "Principal": {"Federated": "arn:aws:iam::<account>:oidc-provider/hangarplatform.dev/oidc/kiac-dev"},
+  "Condition": {"StringEquals": {
+    "hangarplatform.dev/oidc/kiac-dev:aud": "sts.amazonaws.com",
+    "hangarplatform.dev/oidc/kiac-dev:sub": "system:serviceaccount:app-<app>-cicd:glidepath-cloud-deployer"}}}]}
+```
+
+Inline policy `deploy-this-function`: `ecr:GetAuthorizationToken`; the pull and push calls on
+`repository/<functionName>` only; `lambda:GetFunction`, `lambda:GetFunctionConfiguration` and
+`lambda:UpdateFunctionCode` on `function:<functionName>` only. The permissions boundary caps it again.
+
+Check one from the cluster (the token is printed nowhere):
+
+```bash
+NS=app-<app>-cicd
+aws sts assume-role-with-web-identity --no-sign-request --region us-east-1 \
+  --role-arn "arn:aws:iam::${ACCOUNT}:role/glidepath-deploy-<functionName>" --role-session-name check \
+  --web-identity-token "$(kubectl -n $NS create token glidepath-cloud-deployer --audience sts.amazonaws.com --duration 10m)" \
+  --query AssumedRoleUser.Arn --output text
+```
+
+## AWS: `glidepath-deployer` (Glidepath, ECS and the Lambda fallback)
 
 **Created by:** an account administrator, once per AWS account (IAM user `glidepath-deployer`, policy
 `GlidepathDeployer`).
-**Used by:** Glidepath's `deploy-lambda` and `deploy-ecs` Tasks, and the `AwsLambdaTarget` bootstrap
-Job, all in the app's `app-<app>-cicd` namespace, reading `aws-access-key-id` and
-`aws-secret-access-key` from the `app-secrets` Secret. The Crossplane identity never pushes an image;
-the deployer never creates infrastructure.
+**Used by:** Glidepath's `deploy-ecs` Task, and `deploy-lambda` only when it can't assume the function's deploy
+role (no `glidepath-cloud-identity` ConfigMap yet, or the role not created yet), reading `aws-access-key-id` and
+`aws-secret-access-key` from the `app-secrets` Secret. ECS moves to a deploy role once its deploy path has run
+against AWS; then this user is deleted. The Crossplane identity never pushes an image; the deployer never creates
+infrastructure.
 
 ### What it does
 
@@ -632,16 +744,14 @@ deploy, delete the old key.
 
 ## Hardening next
 
-- **No long-lived keys.** Done for AWS Crossplane (2026-10-16): the cluster publishes its
-  ServiceAccount issuer, and the provider uses `credentials.source: WebIdentity`. The same issuer works
-  for Azure Workload Identity: a federated credential on the Crossplane app registration, subject
-  `system:serviceaccount:crossplane-system:<provider-azure-* SA>`. Glidepath's TaskRuns can use projected
-  ServiceAccount tokens the same way. That would remove the deployer keys too, with one role per app
-  trusting `system:serviceaccount:app-<app>-cicd:<pipeline SA>`.
+- **No long-lived keys.** Done for AWS Crossplane and for Lambda deploys (2026-10-16). Left: remove the Lambda key
+  fallback and the `glidepath-deployer` user once every app has deployed through its role; the same deploy role
+  for `AwsEcsTarget` / `deploy-ecs`; and Azure, through Workload Identity federated credentials on the Crossplane
+  and deployer app registrations, trusting the same issuer and ServiceAccounts.
 - **Region as an organisation rule, not a policy line:** a service control policy or Azure Policy
   denying every region but the one in use, so a wider policy written in a hurry cannot cross it.
 - **Attribution:** CloudTrail and the Activity Log already split the two identities. Alerting on the
   Crossplane identity calling anything outside the policy above, or on the deployer being used outside
   a pipeline's source IP range, is the cheap detective control.
-- **Per-app deployer keys** if the audit log must name the app, and `ecr` resource ARNs narrowed to
-  `repository/<functionName>` per app if two apps must not be able to push to each other.
+- **Attribution is already per function** for Lambda: CloudTrail names `glidepath-deploy-<functionName>` and a
+  session per TaskRun. ECS gets the same with its own deploy role.

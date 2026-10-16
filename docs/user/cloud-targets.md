@@ -39,6 +39,14 @@ being tested.
     Glidepath's deploy step needs without federation), planted in the app's Infisical project. The Job's
     pod waits, Pending, until the `app-secrets` Secret exists.
 
+## What a target never does
+
+Once a target has created its function (or service), the function stays for as long as the XR exists. Deleting
+the bootstrap Job to retry it, or a change in how credentials are set up, never removes it: the composition only
+decides when to create things, and keeps everything that already exists (v0.3.144, after the 2026-10-16 incident in
+[cloud-credentials.md](../admin/cloud-credentials.md#a-rule-for-composition-authors-never-gate-what-already-exists)).
+Deleting the XR is the only way to remove the function, its URL and its roles.
+
 ## Requesting one
 
 Commit the XR into the app's own `tenants/<app>/xr-requests/` in the dev cluster's tenants repo, next

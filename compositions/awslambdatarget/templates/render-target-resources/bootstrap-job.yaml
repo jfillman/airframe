@@ -2,9 +2,12 @@
 # no Crossplane provider can push one. This Job seeds the repository with the public AWS Lambda base
 # image for the chosen runtime, under the tag `bootstrap`, for the function's one architecture
 # (Lambda rejects multi-architecture indexes, hence crane's --platform). Same two images and the
-# same login dance as Glidepath's deploy-lambda.yaml, so it needs the same credentials: the
-# aws-access-key-id / aws-secret-access-key keys of spec.credentialsSecret (app-secrets by default)
-# in this XR's namespace.
+# same login dance as Glidepath's deploy-lambda.yaml, with the same credentials:
+#   - federated (the registry carries the account, the boundary and the issuer): the Job runs as the
+#     ServiceAccount glidepath-cloud-deployer and assumes this target's deploy role (deploy-role.yaml) with a
+#     projected token. Nothing is stored. Rendered only once that role has been observed with its ARN.
+#   - otherwise: the aws-access-key-id / aws-secret-access-key keys of spec.credentialsSecret (app-secrets by
+#     default) in this XR's namespace.
 #
 # Rendered only once the Repository has been observed with its URL (one reconcile after creation).
 # A Job's pod template is immutable, so a later change of spec.runtime or spec.architecture cannot
@@ -25,9 +28,12 @@
 <<- if eq $runtime "python3.13" >><<- $bootstrapImage = "public.ecr.aws/lambda/python:3.13" >><<- end >>
 <<- if eq $runtime "go" >><<- $bootstrapImage = "public.ecr.aws/lambda/provided:al2023" >><<- end >>
 <<- $credsSecret := $spec.credentialsSecret | default "app-secrets" >>
+<<- $federated := and $awsAccountId $awsBoundaryArn $saIssuer >>
+<<- $deployRoleObs := index (.observed.resources | default dict) "deploy-role" | default dict >>
+<<- $deployRoleArn := dig "resource" "status" "atProvider" "arn" "" $deployRoleObs >>
 <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
 <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
-<<- if $repoUrl >>
+<<- if and $repoUrl (or (not $federated) $deployRoleArn) >>
 <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
 apiVersion: batch/v1
 kind: Job
@@ -47,7 +53,20 @@ spec:
         hangar.io/target: <<$xrName>>
     spec:
       restartPolicy: Never
+      <<- if $federated >>
+      serviceAccountName: glidepath-cloud-deployer
+      automountServiceAccountToken: false
+      <<- end >>
       volumes:
+        <<- if $federated >>
+        - name: aws-web-identity
+          projected:
+            sources:
+              - serviceAccountToken:
+                  audience: sts.amazonaws.com
+                  expirationSeconds: 3600
+                  path: token
+        <<- else >>
         - name: aws-credentials
           secret:
             secretName: <<$credsSecret>>
@@ -56,15 +75,22 @@ spec:
                 path: aws-access-key-id
               - key: aws-secret-access-key
                 path: aws-secret-access-key
+        <<- end >>
         - name: work
           emptyDir: {}
       initContainers:
         - name: ecr-login
           image: public.ecr.aws/aws-cli/aws-cli:2.37.9
           volumeMounts:
+            <<- if $federated >>
+            - name: aws-web-identity
+              mountPath: /var/run/secrets/aws-web-identity
+              readOnly: true
+            <<- else >>
             - name: aws-credentials
               mountPath: /var/run/secrets/aws
               readOnly: true
+            <<- end >>
             - name: work
               mountPath: /work
           env:
@@ -72,12 +98,23 @@ spec:
               value: <<$region>>
             - name: REGISTRY_HOST
               value: <<$registryHost>>
+            <<- if $federated >>
+            # The AWS CLI exchanges the token for a session itself when these two are set.
+            - name: AWS_ROLE_ARN
+              value: <<$deployRoleArn>>
+            - name: AWS_WEB_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/aws-web-identity/token
+            - name: AWS_ROLE_SESSION_NAME
+              value: <<printf "bootstrap-%s" $xrName | trunc 64>>
+            <<- end >>
           command: ["bash", "-c"]
           args:
             - |
               set -euo pipefail
+              <<- if not $federated >>
               export AWS_ACCESS_KEY_ID="$(cat /var/run/secrets/aws/aws-access-key-id)"
               export AWS_SECRET_ACCESS_KEY="$(cat /var/run/secrets/aws/aws-secret-access-key)"
+              <<- end >>
               TOKEN="$(aws ecr get-login-password)"
               AUTH="$(printf 'AWS:%s' "${TOKEN}" | base64 -w0)"
               mkdir -p /work/docker

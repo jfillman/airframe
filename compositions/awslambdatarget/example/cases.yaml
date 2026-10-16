@@ -41,3 +41,14 @@ cases:
   expect:
     conditions:
       TargetReady: AwsLambdaTargetBootstrapping
+- name: federated
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  - observed-deploy-role.yaml
+  expect:
+    conditions:
+      TargetReady: AwsLambdaTargetBootstrapping

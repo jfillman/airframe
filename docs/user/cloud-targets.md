@@ -28,10 +28,16 @@ being tested.
   format and the checks, and explains why that identity is not the one Glidepath deploys with. Without
   them, every target reports `TargetReady: False`, with the provider's own credentials error on its managed
   resources.
-- For a Lambda target, the app's own `aws-access-key-id` / `aws-secret-access-key` secrets (the ones
-  Glidepath's deploy step already needs), planted in the app's Infisical project: the target's
-  bootstrap Job pushes the placeholder image with them. Its pod waits, Pending, until the
-  `app-secrets` Secret exists.
+- For a Lambda target, credentials for the bootstrap Job that pushes the placeholder image, one of:
+  - **Federated (no stored key):** when the cluster registry carries the AWS account, the permissions
+    boundary and the cluster's `serviceAccountIssuer`, the target also creates
+    `glidepath-deploy-<functionName>`. That's an IAM role trusted only by the ServiceAccount
+    `glidepath-cloud-deployer` in the app's `-cicd` namespace, allowed only this repository and this
+    function's code. The Job assumes it, and so does Glidepath's deploy step. The ServiceAccount comes from
+    the app's Glidepath chart; the Job's pod can't start until it exists.
+  - **Otherwise:** the app's own `aws-access-key-id` / `aws-secret-access-key` secrets (the ones
+    Glidepath's deploy step needs without federation), planted in the app's Infisical project. The Job's
+    pod waits, Pending, until the `app-secrets` Secret exists.
 
 ## Requesting one
 

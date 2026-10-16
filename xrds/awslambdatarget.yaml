@@ -113,16 +113,15 @@ spec:
                 credentialsSecret:
                   type: string
                   description: >-
-                    Name of a Secret in this XR's namespace holding the AWS credentials the bootstrap
-                    Job uses to push the placeholder image into ECR, under the keys
-                    aws-access-key-id and aws-secret-access-key - the same keys Glidepath's own
-                    deploy-lambda step reads from app-secrets. Defaults to app-secrets, which exists
-                    in every app-<app>-cicd namespace whose cicd.yaml lists those two secrets. These
-                    credentials are only used by that Job; the Crossplane-managed resources use the
-                    provider's own ClusterProviderConfig. Ignored once the cluster registry carries the
-                    AWS account, the permissions boundary and the cluster's ServiceAccount issuer: the
-                    target then creates a deploy role (glidepath-deploy-<functionName>) and the Job
-                    assumes it as the ServiceAccount glidepath-cloud-deployer, with no stored key.
+                    Legacy, for a cluster without web identity only. Name of a Secret in this XR's
+                    namespace holding aws-access-key-id and aws-secret-access-key, which the bootstrap
+                    Job then uses to push the placeholder image into ECR. Ignored when the cluster
+                    registry carries the AWS account, the permissions boundary and the cluster's
+                    ServiceAccount issuer (kiac-dev does): the target creates a deploy role
+                    (glidepath-deploy-<functionName>) and the Job assumes it as the ServiceAccount
+                    glidepath-cloud-deployer, with no stored key. Glidepath's deploy-lambda has used
+                    only that role since 2026-10-16, so a function bootstrapped with a key can't be
+                    deployed to.
                   minLength: 1
                   default: app-secrets
             status:

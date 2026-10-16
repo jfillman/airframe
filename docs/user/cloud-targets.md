@@ -35,9 +35,10 @@ being tested.
     `glidepath-cloud-deployer` in the app's `-cicd` namespace, allowed only this repository and this
     function's code. The Job assumes it, and so does Glidepath's deploy step. The ServiceAccount comes from
     the app's Glidepath chart; the Job's pod can't start until it exists.
-  - **Otherwise:** the app's own `aws-access-key-id` / `aws-secret-access-key` secrets (the ones
-    Glidepath's deploy step needs without federation), planted in the app's Infisical project. The Job's
-    pod waits, Pending, until the `app-secrets` Secret exists.
+  - **Otherwise (legacy):** the Secret named by `credentialsSecret` (`app-secrets` by default) with
+    `aws-access-key-id` / `aws-secret-access-key`; the Job's pod waits, Pending, until it exists. Since
+    2026-10-16 Glidepath deploys a Lambda only through the deploy role, so a target bootstrapped this way
+    gets a function nothing can deploy to. Use a cluster with web identity.
 
 ## What a target never does
 

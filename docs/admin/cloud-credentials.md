@@ -84,7 +84,7 @@ onto its pods: pods only from Tekton's controller or the Job controller, TaskRun
 Crossplane, and a PipelineRun may give the ServiceAccount only to the catalog `deploy` Pipeline's
 `deploy-aws-lambda` task, with no pod-template `env` (a `BASH_ENV` alone would run code inside the deploy step).
 
-The deploy side (the ServiceAccount, the credential choice, the fallback) is documented in Glidepath's
+The deploy side (the ServiceAccount and how the step gets its access) is documented in Glidepath's
 `docs/admin/cloud-deploy-identity.md`.
 
 ### A rule for composition authors: never gate what already exists
@@ -480,14 +480,15 @@ aws sts assume-role-with-web-identity --no-sign-request --region us-east-1 \
   --query AssumedRoleUser.Arn --output text
 ```
 
-## AWS: `glidepath-deployer` (Glidepath, ECS and the Lambda fallback)
+## AWS: `glidepath-deployer` (Glidepath, ECS only)
 
 **Created by:** an account administrator, once per AWS account (IAM user `glidepath-deployer`, policy
 `GlidepathDeployer`).
-**Used by:** Glidepath's `deploy-ecs` Task, and `deploy-lambda` only when it can't assume the function's deploy
-role (no `glidepath-cloud-identity` ConfigMap yet, or the role not created yet), reading `aws-access-key-id` and
-`aws-secret-access-key` from the `app-secrets` Secret. ECS moves to a deploy role once its deploy path has run
-against AWS; then this user is deleted. The Crossplane identity never pushes an image; the deployer never creates
+**Used by:** Glidepath's `deploy-ecs` Task only, reading `aws-access-key-id` and `aws-secret-access-key` from the
+`app-secrets` Secret. `deploy-lambda` stopped using it on 2026-10-16 (phase 4): it has no stored-key path at all, and
+the `LambdaFunction` scaffold no longer lists the two secrets. No app on kiac-dev or kind-prod holds the key today,
+so the user and its keys can be deleted now and re-created only if an ECS app needs one before ECS gets its own
+deploy role. The Crossplane identity never pushes an image; the deployer never creates
 infrastructure.
 
 ### What it does
@@ -753,9 +754,8 @@ deploy, delete the old key.
 
 ## Hardening next
 
-- **No long-lived keys.** Done for AWS Crossplane and for Lambda deploys (2026-10-16). Left: remove the Lambda key
-  fallback and the `glidepath-deployer` user once every app has deployed through its role; the same deploy role
-  for `AwsEcsTarget` / `deploy-ecs`; and Azure, through Workload Identity federated credentials on the Crossplane
+- **No long-lived keys.** Done for AWS Crossplane and for Lambda deploys, fallback included (2026-10-16). Left:
+  delete the `glidepath-deployer` user; the same deploy role for `AwsEcsTarget` / `deploy-ecs`; and Azure, through Workload Identity federated credentials on the Crossplane
   and deployer app registrations, trusting the same issuer and ServiceAccounts.
 - **Region as an organisation rule, not a policy line:** a service control policy or Azure Policy
   denying every region but the one in use, so a wider policy written in a hurry cannot cross it.

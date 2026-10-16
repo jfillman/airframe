@@ -159,8 +159,9 @@ spec:
                     it off (the default) to stand a target up and down independently, as its own
                     AwsLambdaTarget XR in this app's xr-requests, which is the shape for a smoke
                     app you only want to pay for while testing. Both need the AWS provider
-                    installed and the app's aws-access-key-id/aws-secret-access-key secrets in
-                    place (the child's bootstrap Job waits for them).
+                    installed and the fleet's clusters.yaml to name the AWS account; no AWS key is
+                    stored anywhere (the target's bootstrap Job and every deploy assume IAM roles
+                    with a one-hour token).
                   properties:
                     enabled:
                       type: boolean

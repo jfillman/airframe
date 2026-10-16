@@ -207,9 +207,8 @@ spec:
                     promotionOrder:
                       - dev
 
-                  secrets:
-                    - name: aws-access-key-id
-                    - name: aws-secret-access-key
+                  # No secrets: the deploy reaches AWS through this function's own IAM role, assumed with a one-hour token
+                  # (Glidepath docs/admin/cloud-deploy-identity.md). There is no AWS key to store.
 
                   notifications:
                     backstage:
@@ -698,13 +697,14 @@ spec:
                   curl -s -XPOST http://localhost:9000/2015-03-31/functions/function/invocations -d '{}'
                   ```
 
-                  **Deploys to an existing Lambda function.** Glidepath updates the function's container image
-                  (`deploy.target: aws-lambda` in `cicd.yaml`); it never creates the function. Create the function
-                  (package type `Image`), its execution role and its ECR repository first, then add
-                  `aws-access-key-id` and `aws-secret-access-key` to this app's Infisical project.
+                  **Deploys to a Lambda function the platform creates.** Glidepath updates the function's container
+                  image (`deploy.target: aws-lambda` in `cicd.yaml`); it never creates the function. An Airframe
+                  `AwsLambdaTarget` does: the function, its ECR repository, its execution role, and a deploy role that
+                  may only push to that repository and update that function. Glidepath copies each image from
+                  `ghcr.io` into the ECR repository (Lambda pulls only from ECR) and deploys it.
 
-                  **Known gap:** Lambda can only pull from Amazon ECR, and Glidepath currently pushes every image to
-                  `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
+                  **No AWS key.** The deploy step assumes the function's deploy role with a one-hour token Kubernetes
+                  signs for it, so there is nothing to put in Infisical for AWS.
                 commitMessage: "LambdaFunction scaffold: README.md"
 
             <<- end >>

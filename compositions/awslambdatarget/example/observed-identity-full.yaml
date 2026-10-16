@@ -1,0 +1,43 @@
+# The execution role and the deploy role as stored, with the spec this composition rendered (trimmed), for the case
+# where the cluster registry can't be read: both must be re-declared from here, never dropped or weakened.
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: smoke-fn-exec
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: iam-role
+    crossplane.io/external-name: glidepath-smoke-fn-exec
+spec:
+  forProvider:
+    permissionsBoundary: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
+status:
+  atProvider:
+    arn: arn:aws:iam::012345678901:role/glidepath-smoke-fn-exec
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: smoke-fn-deploy
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: deploy-role
+    crossplane.io/external-name: glidepath-deploy-glidepath-smoke-fn
+spec:
+  forProvider:
+    description: Deploys the glidepath-smoke-fn Lambda function from app-smoke-fn-cicd (Airframe AwsLambdaTarget smoke-fn)
+    assumeRolePolicy: '{"Statement":[{"Action":"sts:AssumeRoleWithWebIdentity","Effect":"Allow"}],"Version":"2012-10-17"}'
+    inlinePolicy:
+      - name: deploy-this-function
+        policy: '{"Statement":[{"Action":"ecr:GetAuthorizationToken","Effect":"Allow","Resource":"*","Sid":"EcrLogin"}],"Version":"2012-10-17"}'
+    permissionsBoundary: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
+    tags:
+      hangar.io/component: aws-lambda-target
+      hangar.io/target: smoke-fn
+status:
+  atProvider:
+    arn: arn:aws:iam::012345678901:role/glidepath-deploy-glidepath-smoke-fn
+  conditions:
+    - {type: Ready, status: "True", reason: Available}

@@ -1775,12 +1775,6 @@
                           "type": "boolean",
                           "description": "Create a public Lambda Function URL (auth type NONE, plus the resource policy that allows anonymous invocation) so the deployed function can be reached with curl. The URL is published in status.functionUrl. Set false for a function that is only ever invoked by another AWS service.",
                           "default": true
-                        },
-                        "credentialsSecret": {
-                          "type": "string",
-                          "description": "Legacy, for a cluster without web identity only. Name of a Secret in this XR's namespace holding aws-access-key-id and aws-secret-access-key, which the bootstrap Job then uses to push the placeholder image into ECR. Ignored when the cluster registry carries the AWS account, the permissions boundary and the cluster's ServiceAccount issuer (kiac-dev does): the target creates a deploy role (glidepath-deploy-<functionName>) and the Job assumes it as the ServiceAccount glidepath-cloud-deployer, with no stored key. Glidepath's deploy-lambda has used only that role since 2026-10-16, so a function bootstrapped with a key can't be deployed to.",
-                          "minLength": 1,
-                          "default": "app-secrets"
                         }
                       },
                       "additionalProperties": false

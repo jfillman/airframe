@@ -1,0 +1,9 @@
+# The deploy role as Crossplane can observe it for one reconcile (an informer resync, an etcd stall): present, but
+# without status.atProvider.
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: smoke-fn-deploy
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: deploy-role

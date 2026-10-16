@@ -1,37 +1,28 @@
 # Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
 # (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
 # readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+# Every case but no-web-identity and registry-unreadable-keeps-everything reads cluster-registry-with-aws.yaml: there is
+# no access-key mode (v0.3.147), so a target only does something on a cluster with web identity.
 cases:
 - name: fresh
   xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
   expect:
+    present: [ecr-repository, iam-role, deploy-role]
     conditions:
       TargetReady: AwsLambdaTargetProvisioning
+# A cluster without web identity: no deploy role, no Job, and a reason that says what to add.
+- name: no-web-identity
+  xr: xr-defaults.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  expect:
+    present: [ecr-repository, iam-role]
+    conditions:
+      TargetReady: AwsLambdaTargetNeedsWebIdentity
 - name: repository-and-role
-  xr: xr-defaults.yaml
-  observed:
-  - observed-repository.yaml
-  - observed-role.yaml
-  expect:
-    conditions:
-      TargetReady: AwsLambdaTargetBootstrapping
-- name: job-succeeded
-  xr: xr-defaults.yaml
-  observed:
-  - observed-repository.yaml
-  - observed-role.yaml
-  - observed-job-succeeded.yaml
-- name: ready
-  xr: xr-defaults.yaml
-  observed:
-  - observed-repository.yaml
-  - observed-role.yaml
-  - observed-job-succeeded.yaml
-  - observed-function-and-url.yaml
-  expect:
-    conditions:
-      TargetReady: AwsLambdaTargetReady
-- name: permissions-boundary
   xr: xr-defaults.yaml
   required:
   - cluster-registry-with-aws.yaml
@@ -39,6 +30,7 @@ cases:
   - observed-repository.yaml
   - observed-role.yaml
   expect:
+    present: [deploy-role]
     conditions:
       TargetReady: AwsLambdaTargetBootstrapping
 - name: federated
@@ -50,18 +42,29 @@ cases:
   - observed-role.yaml
   - observed-deploy-role.yaml
   expect:
+    present: [bootstrap-job]
     conditions:
       TargetReady: AwsLambdaTargetBootstrapping
-# Regression (incident 2026-10-16): switching an existing, key-based target to federation while its deploy role is not
-# observed yet must keep the Job (in key mode, unchanged), the function, its URL and its permission.
-- name: switch-keeps-existing
+- name: job-succeeded
   xr: xr-defaults.yaml
   required:
   - cluster-registry-with-aws.yaml
   observed:
   - observed-repository.yaml
   - observed-role.yaml
-  - observed-job-succeeded.yaml
+  - observed-deploy-role.yaml
+  - observed-job-federated.yaml
+  expect:
+    present: [bootstrap-job, lambda-function]
+- name: ready
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  - observed-deploy-role.yaml
+  - observed-job-federated.yaml
   - observed-function-and-url.yaml
   expect:
     conditions:
@@ -69,11 +72,15 @@ cases:
 # A function whose bootstrap Job is gone (deleted to retry) stays in the desired state.
 - name: job-gone-keeps-function
   xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
   observed:
   - observed-repository.yaml
   - observed-role.yaml
+  - observed-deploy-role.yaml
   - observed-function-and-url.yaml
   expect:
+    present: [lambda-function, function-url]
     conditions:
       TargetReady: AwsLambdaTargetReady
 # Regression (incident 2026-10-16, second form): a Repository observed without its URL for one reconcile must not drop
@@ -90,3 +97,29 @@ cases:
   - observed-function-and-url.yaml
   expect:
     present: [bootstrap-job, lambda-function]
+# The same for the deploy role's ARN: the Job's AWS_ROLE_ARN comes back from its own spec.
+- name: deploy-role-arn-missing-keeps-job
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  - observed-deploy-role-no-arn.yaml
+  - observed-job-federated.yaml
+  - observed-function-and-url.yaml
+  expect:
+    present: [bootstrap-job, deploy-role, lambda-function]
+# The cluster registry can't be read for a reconcile while everything exists: nothing is dropped, the deploy role is
+# re-declared from its own spec and the execution role keeps its permissions boundary.
+- name: registry-unreadable-keeps-everything
+  xr: xr-defaults.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-identity-full.yaml
+  - observed-job-federated.yaml
+  - observed-function-and-url.yaml
+  expect:
+    present: [ecr-repository, iam-role, deploy-role, bootstrap-job, lambda-function, function-url]
+    conditions:
+      TargetReady: AwsLambdaTargetReady

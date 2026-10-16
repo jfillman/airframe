@@ -291,29 +291,25 @@ def fig_layers():
 # 5. The deploy step's credential decision (flowchart)
 # =========================================================================================================
 def fig_flow():
-    g = SVG("fed-flow", 1000, 704, "How the deploy step picks its AWS credentials",
-            "The deploy step assumes the function's IAM role only when the namespace carries the account ConfigMap, its token belongs to glidepath-cloud-deployer and STS accepts the role; otherwise it falls back to the app's stored key, and fails only when there is none.")
+    # Phase 4 (2026-10-16): no stored-key fallback. Each failed check stops the deploy with its own fix.
+    g = SVG("fed-flow", 1000, 456, "How the deploy step gets its AWS access",
+            "The deploy step checks three things in order: the account ConfigMap is in the namespace, its token belongs to glidepath-cloud-deployer, and STS accepts the function's role. When all hold it assumes glidepath-deploy-<function> with no stored key; when one fails the deploy stops with an error naming that piece.")
     # arrows first
     g.arrow([(500, 64), (500, 92)])
     g.arrow([(500, 184), (500, 212)]); g.label_v(500, 198, "YES")
     g.arrow([(500, 304), (500, 332)]); g.label_v(500, 318, "YES")
     g.arrow([(620, 376), (692, 376)], color="accent"); g.label_h(656, 376, "YES", ACC)
-    g.arrow([(380, 140), (220, 140), (220, 468)]); g.label_h(300, 140, "NO")
-    g.arrow([(380, 260), (224, 260)]); g.label_h(300, 260, "NO")
-    g.arrow([(380, 376), (224, 376)]); g.label_h(300, 376, "NO · WARN")
-    g.arrow([(340, 516), (412, 516)]); g.label_h(376, 516, "YES")
-    g.arrow([(220, 560), (220, 600)]); g.label_v(220, 580, "NO")
-    g.dot(220, 260); g.dot(220, 376)
+    for y in (140, 260, 376):
+        g.arrow([(380, y), (304, y)]); g.label_h(342, y, "NO")
     # shapes
     g.oval(380, 24, 240, 40, "Deploy step starts")
     g.diamond(500, 140, 120, 44, "Account ConfigMap", "in the namespace?")
     g.diamond(500, 260, 120, 44, "Token belongs to", "glidepath-cloud-deployer?")
     g.diamond(500, 376, 120, 44, "STS accepts", "the role?")
     g.node(696, 348, 264, 56, "focal", None, "Assume glidepath-deploy-<fn>", "no stored key")
-    g.diamond(220, 516, 120, 44, "App key in", "app-secrets?")
-    g.node(416, 488, 224, 56, "store", None, "Use the app's key", "the old path, until phase 4")
-    g.oval(120, 604, 200, 44, "Deploy fails", sub="clear error, nothing changed")
-    g.legend(684, [("focal", "web identity"), ("store", "stored key"), ("dot", "branches rejoin")])
+    g.oval(56, 118, 244, 44, "Deploy fails", sub="error names clusters.yaml")
+    g.oval(56, 238, 244, 44, "Deploy fails", sub="error names taskRunSpecs")
+    g.oval(56, 354, 244, 44, "Deploy fails", sub="error names the deploy Role")
     return g
 
 

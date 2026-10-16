@@ -11,14 +11,32 @@
 # else - no other function or repository, no configuration change, no delete. The fleet's permissions boundary
 # caps it again, and the Crossplane identity cannot create it without that boundary.
 #
-# Rendered only once the registry carries the account, the boundary and the issuer; until then the target keeps
-# the access-key path (spec.credentialsSecret).
+# Created only once the registry carries the account, the boundary and the issuer; until then the target creates no
+# Job either and reports AwsLambdaTargetNeedsWebIdentity (there is no access-key mode since v0.3.147). Once the role
+# exists it is always rendered: if the registry can't be read for a reconcile, the role is re-declared from its own
+# observed spec instead of being dropped, which would delete it in AWS (business rule CRED-09).
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $spec := .observed.composite.resource.spec >>
 <<- $functionName := $spec.functionName | default $xrName >>
 <<- $region := $spec.region | default "us-east-1" >>
-<<- if and $awsAccountId $awsBoundaryArn $saIssuer >>
+<<- $deployRoleObs := index (.observed.resources | default dict) "deploy-role" | default dict >>
+<<- if and $deployRoleObs (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+<<- $observedForProvider := dig "resource" "spec" "forProvider" dict $deployRoleObs >>
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-deploy
+  annotations:
+    <<setResourceNameAnnotation "deploy-role">>
+    crossplane.io/external-name: <<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "glidepath-deploy-%s" (trunc 47 $functionName)) $deployRoleObs>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    <<- toYaml $observedForProvider | nindent 4 >>
+<<- else if and $awsAccountId $awsBoundaryArn $saIssuer >>
 <<- $issuerHost := trimPrefix "https://" $saIssuer >>
 <<- $deployRoleName := printf "glidepath-deploy-%s" (trunc 47 $functionName) >>
 <<- $trust := dict "Version" "2012-10-17" "Statement" (list (dict

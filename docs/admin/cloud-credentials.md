@@ -110,6 +110,20 @@ deletion. v0.3.145 does both; the `repository-url-missing-keeps-job` render case
 that Crossplane deletes is deleted with orphan propagation (the API default for Jobs), so the garbage collector must
 be able to remove its `orphan` finalizer; an admission policy on Job updates has to allow that.
 
+v0.3.147 applies the same rule to the rest of the target's identity. The Job's role ARN comes back from its own spec
+if the deploy role is observed without one (`deploy-role-arn-missing-keeps-job`). If the cluster registry can't be
+read for a reconcile, the deploy role is re-declared from its own observed spec instead of being dropped (which would
+delete it in AWS), and the execution role keeps its permissions boundary (`registry-unreadable-keeps-everything`).
+
+### No access-key mode
+
+Until v0.3.147 an `AwsLambdaTarget` on a cluster without web identity could bootstrap with an access key from
+`spec.credentialsSecret`. That field and mode are gone: since phase 4 Glidepath deploys a Lambda only through the
+function's deploy role, so a key-bootstrapped function was one nothing could deploy to. Such a target now creates the
+repository and the execution role and stops with `TargetReady: AwsLambdaTargetNeedsWebIdentity`, naming the three
+registry fields it needs. A bootstrap Job created by the old mode (none existed when it was removed) would render as an
+apply error, since a Job's pod template is immutable; delete it and the next reconcile creates a web-identity one.
+
 ## AWS: `hangar-crossplane` (Crossplane)
 
 **Created by:** an account administrator, once per AWS account and cluster: an IAM OIDC provider for

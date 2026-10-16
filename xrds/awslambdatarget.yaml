@@ -10,8 +10,9 @@
 # everything down (the ECR repository is force-deleted with its images). It is NOT composed by
 # the LambdaFunction app XRD - an app is onboarded once, a target is stood up at will. Request it
 # the same way as every other XR, a manifest in tenants/<app>/xr-requests/, in the app's own
-# app-<app>-cicd namespace: the bootstrap Job below mounts that namespace's `app-secrets` for
-# the AWS credentials, the same keys Glidepath's deploy-lambda step already requires.
+# app-<app>-cicd namespace: the target's deploy role trusts only that namespace's ServiceAccount
+# glidepath-cloud-deployer, which the bootstrap Job and Glidepath's deploy-lambda step run as. No AWS key is
+# stored anywhere; a cluster without web identity gets TargetReady AwsLambdaTargetNeedsWebIdentity.
 #
 # The one non-declarative piece: Lambda refuses to create an image-packaged function until an
 # image exists in the repository, and no provider can push one. So the Composition runs a
@@ -110,20 +111,6 @@ spec:
                     curl. The URL is published in status.functionUrl. Set false for a function that
                     is only ever invoked by another AWS service.
                   default: true
-                credentialsSecret:
-                  type: string
-                  description: >-
-                    Legacy, for a cluster without web identity only. Name of a Secret in this XR's
-                    namespace holding aws-access-key-id and aws-secret-access-key, which the bootstrap
-                    Job then uses to push the placeholder image into ECR. Ignored when the cluster
-                    registry carries the AWS account, the permissions boundary and the cluster's
-                    ServiceAccount issuer (kiac-dev does): the target creates a deploy role
-                    (glidepath-deploy-<functionName>) and the Job assumes it as the ServiceAccount
-                    glidepath-cloud-deployer, with no stored key. Glidepath's deploy-lambda has used
-                    only that role since 2026-10-16, so a function bootstrapped with a key can't be
-                    deployed to.
-                  minLength: 1
-                  default: app-secrets
             status:
               type: object
               description: >-

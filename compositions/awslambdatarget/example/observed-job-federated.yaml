@@ -1,5 +1,5 @@
 # A finished federated bootstrap Job as it is stored, with the pod template this composition rendered (trimmed to what
-# the composition reads back: the ServiceAccount and the copy destination).
+# the composition reads back: the ServiceAccount, the role it assumes and the copy destination).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -11,6 +11,11 @@ spec:
   template:
     spec:
       serviceAccountName: glidepath-cloud-deployer
+      initContainers:
+        - name: ecr-login
+          env:
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: AWS_ROLE_ARN, value: "arn:aws:iam::012345678901:role/glidepath-deploy-glidepath-smoke-fn"}
       containers:
         - name: copy-bootstrap-image
           args: ["copy", "--platform", "linux/arm64", "public.ecr.aws/lambda/nodejs:22", "158233516926.dkr.ecr.us-east-1.amazonaws.com/glidepath-smoke-fn:bootstrap"]

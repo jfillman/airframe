@@ -2,4 +2,4 @@ apiVersion: v2
 name: cluster-registry
 description: Airframe's cluster-registry ConfigMaps, rendered from the fleet's clusters.yaml (one record per cluster, shared with Glidepath).
 type: application
-version: 0.1.0
+version: 0.2.0

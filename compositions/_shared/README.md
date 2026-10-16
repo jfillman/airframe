@@ -15,6 +15,9 @@ Now there is one file per partial here, and each composition's `templates/<step>
 _shared/render-github-resources/00-devcluster-gate.yaml   defines $xrName $spec $devCluster $clusterOk $tenantsRepo; the ExtraResources request
 _shared/render-github-resources/secretstore-xr.yaml       the SecretStore xr-request RepositoryFile
 _shared/render-github-resources/tekton-cicd-child.yaml    the TektonCICD child (gitopsRepoUrl only when $hasGitopsRepo)
+_shared/render-target-resources/00-cloud-identity.yaml    (AwsLambdaTarget, AwsEcsTarget) defines $awsBoundaryArn
+                                                          $awsAccountId $saIssuer from the control-plane cluster's
+                                                          registry record; the ExtraResources request
 _shared/cicd-onboarding-status/status.yaml                DevClusterReady / CicdOnboarded proxy, plus TargetReady when $targetResourceName is set
 ```
 

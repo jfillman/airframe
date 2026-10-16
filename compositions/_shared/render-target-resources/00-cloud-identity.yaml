@@ -1,0 +1,38 @@
+# SHARED PARTIAL (compositions/_shared/render-target-resources/00-cloud-identity.yaml): the cloud-target compositions'
+# templates/render-target-resources/00-cloud-identity.yaml are symlinks to this file. Edit here, run
+# tools/build-compositions, then tools/test_compositions.py and review every affected composition's expected/ diff.
+#
+# Reads the fleet's AWS facts from the cluster registry (charts/cluster-registry, the hub's clusters.yaml): the
+# record of the control-plane cluster (type: dev), which is where these XRs, their Crossplane providers and the
+# Glidepath pipelines that deploy into them run. A cloud-target XR does not know its cluster's name, hence a label
+# selector and a filter rather than matchName.
+#
+#   $awsBoundaryArn  aws.permissionsBoundaryPolicy as an ARN. Every IAM role these compositions create carries it,
+#                    because the Crossplane identity's policy (HangarCrossplaneCloudTargets) refuses to create a role,
+#                    or grant one anything, without it (docs/admin/cloud-credentials.md).
+#   $awsAccountId    aws.accountId.
+#   $saIssuer        the control-plane cluster's public ServiceAccount issuer (serviceAccountIssuer), or "".
+#
+# All three are "" until the registry carries them, and the templates then render what they did before (no
+# boundary). The cloud account's policy, not this template, is what enforces the boundary.
+<<- $registryItems := index (.extraResources | default dict) "cluster-registry" | default dict >>
+<<- $awsBoundaryArn := "" >>
+<<- $awsAccountId := "" >>
+<<- $saIssuer := "" >>
+<<- range (index $registryItems "items" | default list) >>
+  <<- $data := .resource.data | default dict >>
+  <<- if eq (index $data "type" | default "") "dev" >>
+    <<- $awsBoundaryArn = index $data "awsPermissionsBoundaryArn" | default "" >>
+    <<- $awsAccountId = index $data "awsAccountId" | default "" >>
+    <<- $saIssuer = index $data "serviceAccountIssuer" | default "" >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  cluster-registry:
+    apiVersion: v1
+    kind: ConfigMap
+    namespace: crossplane-system
+    matchLabels:
+      hangar.io/cluster-registry: "true"

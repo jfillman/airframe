@@ -2,6 +2,9 @@ infisical:
   orgId: 00000000-0000-0000-0000-000000000001
   url: http://infisical.example:31800/api
   inClusterUrl: http://infisical.infisical.svc.cluster.local:8080/api
+aws:
+  accountId: "012345678901"
+  permissionsBoundaryPolicy: HangarCloudTargetBoundary
 clusters:
   - name: kind-dev
     zone: lower
@@ -9,6 +12,7 @@ clusters:
     tenantsRepo: gitops-cluster-dev-tenants
     aliases: [kiac-dev]
     airframe: { cicdReady: true, infisicalHost: true, autopilotReady: true }
+    serviceAccountIssuer: https://issuer.example/oidc/kind-dev
   - name: kind-prod
     zone: upper
     roles: [workloads, platform-services]

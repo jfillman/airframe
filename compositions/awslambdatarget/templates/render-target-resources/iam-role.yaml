@@ -1,6 +1,7 @@
 # The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
 # AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
-# characters, hence the trunc.
+# characters, hence the trunc. It carries the fleet's permissions boundary ($awsBoundaryArn, from
+# 00-cloud-identity.yaml) whenever the cluster registry provides one.
 <<- $xrName := .observed.composite.resource.metadata.name >>
 <<- $spec := .observed.composite.resource.spec >>
 <<- $functionName := $spec.functionName | default $xrName >>
@@ -19,6 +20,9 @@ spec:
     description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
     assumeRolePolicy: |
       {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+    <<- if $awsBoundaryArn >>
+    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    <<- end >>
     tags:
       hangar.io/target: <<$xrName>>
       hangar.io/component: aws-lambda-target

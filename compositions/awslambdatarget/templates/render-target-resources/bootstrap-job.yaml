@@ -41,7 +41,18 @@
 <<- if $jobObs >>
 <<- $federated = eq (dig "resource" "spec" "template" "spec" "serviceAccountName" "" $jobObs) "glidepath-cloud-deployer" >>
 <<- end >>
-<<- if and $repoUrl (or $jobObs (not $federated) $deployRoleArn) >>
+<<- /* The same rule must not hang on the Repository's observed URL either: it can be missing for a reconcile (an
+       informer resync, an etcd stall), and on 2026-10-16 that dropped and deleted both of kiac-dev's Jobs twice. Take
+       the URL from the Job's own copy destination ("<repoUrl>:bootstrap", written below), and keep rendering an
+       existing Job even if that fails too: a wrong spec is an apply error, a missing one is a deletion. */ ->>
+<<- if and $jobObs (not $repoUrl) >>
+<<- range (dig "resource" "spec" "template" "spec" "containers" list $jobObs) >>
+<<- if and (eq (.name | default "") "copy-bootstrap-image") .args >>
+<<- $repoUrl = trimSuffix ":bootstrap" (last .args) >>
+<<- end >>
+<<- end >>
+<<- end >>
+<<- if or $jobObs (and $repoUrl (or (not $federated) $deployRoleArn)) >>
 <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
 apiVersion: batch/v1
 kind: Job

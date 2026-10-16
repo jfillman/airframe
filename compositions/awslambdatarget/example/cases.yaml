@@ -76,3 +76,17 @@ cases:
   expect:
     conditions:
       TargetReady: AwsLambdaTargetReady
+# Regression (incident 2026-10-16, second form): a Repository observed without its URL for one reconcile must not drop
+# an existing Job; the URL comes back from the Job's own copy destination, and the function stays.
+- name: repository-url-missing-keeps-job
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository-no-url.yaml
+  - observed-role.yaml
+  - observed-deploy-role.yaml
+  - observed-job-federated.yaml
+  - observed-function-and-url.yaml
+  expect:
+    present: [bootstrap-job, lambda-function]

@@ -4,7 +4,8 @@ Two clouds, two jobs each. **Airframe** (Crossplane, this catalog) builds and te
 infrastructure a cloud deploy needs: the `AwsLambdaTarget`, `AwsEcsTarget` and `AzureContainerAppTarget`
 compositions in [cloud-targets.md](../user/cloud-targets.md). **Glidepath** (the pipelines) ships images
 into it. Each job runs as its own identity with its own key, its own permissions and its own blast
-radius, and the two are never shared:
+radius, and the two are never shared. On AWS, the Crossplane identity is an IAM role reached through web
+identity federation, so there's no key to store (since 2026-10-16); the other three are still keys:
 
 | | Airframe: the Crossplane provider identity | Glidepath: the deployer identity |
 |---|---|---|
@@ -12,22 +13,24 @@ radius, and the two are never shared:
 | **What it may do** | Create, observe and delete the resources the three compositions describe: repositories, execution roles, functions and URLs, clusters, task definitions, services, a small VPC; resource groups, environments, container apps | Push an image and roll the deploy surface that image belongs to: `UpdateFunctionCode`, a new task-definition revision plus `UpdateService`, `az containerapp update` |
 | **What it must never do** | Deploy code: no `UpdateFunctionCode`, no `UpdateFunctionConfiguration`, no `ecs:UpdateService`. Grant itself more: only the two managed policies the compositions attach, only on `*-exec` roles. Leave its region. | Create or delete anything. Change a function's role, memory or configuration. Touch IAM beyond passing an `*-ecs-exec` role to ECS. Leave its region. |
 | **Why the split** | A composition bug or a wrong management policy can only create, observe or delete; it can never roll a function back to the placeholder | Anyone who can merge to the app's repository can run code in its pipeline namespace; that trust boundary must not reach infrastructure or IAM |
-| **Where the secret lives** | Infisical project `platform-cicd-kind-dev`, environment `shared`, path `/`, keys `provider-aws-creds` and `provider-azure-creds` | The app's own Infisical project `<app>-<devCluster>` (for example `smoke-fn-kind-dev`), environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
-| **How it reaches the cluster** | `platform-secret-store` (ClusterSecretStore) → ExternalSecret `provider-aws-creds` / `provider-azure-creds` → Secret of the same name, key `credentials`, in `crossplane-system` → `ClusterProviderConfig default` | The app's own ClusterSecretStore → the `app-secrets` ExternalSecret that `airframe-application` renders from the app's `cicd.yaml` `secrets:` list → Secret `app-secrets` in `app-<app>-cicd` |
-| **Who can read the Kubernetes Secret** | Cluster admins, Argo CD's application controller, External Secrets, the provider pods. No tenant namespace, not Tower's read identity | Cluster admins, Argo CD, External Secrets, and every pod that runs in that app's cicd namespace: the deploy TaskRuns and, for a Lambda target, the composition's bootstrap Job |
+| **Where the secret lives** | AWS: nowhere; a projected ServiceAccount token is exchanged with STS for an hour-long session. Azure: Infisical project `platform-cicd-kind-dev`, environment `shared`, path `/`, key `provider-azure-creds` | The app's own Infisical project `<app>-<devCluster>` (for example `smoke-fn-kind-dev`), environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
+| **How it reaches the cluster** | AWS: the kubelet projects a token (audience `sts.amazonaws.com`) into the provider pods → `ClusterProviderConfig default` (`source: WebIdentity`) → `AssumeRoleWithWebIdentity`. Azure: `platform-secret-store` (ClusterSecretStore) → ExternalSecret `provider-azure-creds` → Secret of the same name, key `credentials`, in `crossplane-system` → `ClusterProviderConfig default` | The app's own ClusterSecretStore → the `app-secrets` ExternalSecret that `airframe-application` renders from the app's `cicd.yaml` `secrets:` list → Secret `app-secrets` in `app-<app>-cicd` |
+| **Who can read the Kubernetes Secret** | AWS: there is no Secret. Anyone who can mint a token for a `provider-aws-*` ServiceAccount in `crossplane-system` (cluster admins) can become the role. Azure: cluster admins, Argo CD's application controller, External Secrets, the provider pods. No tenant namespace, not Tower's read identity | Cluster admins, Argo CD, External Secrets, and every pod that runs in that app's cicd namespace: the deploy TaskRuns and, for a Lambda target, the composition's bootstrap Job |
 
 The names below (`hangar-crossplane`, `glidepath-deployer`) are conventions: the cluster only
-cares about the Infisical keys and the Secret names in the last two rows. Keep the names anyway; the
+cares about the role ARN, the Infisical keys and the Secret names in the last two rows. Keep the names anyway; the
 cloud's audit log (CloudTrail, the Azure Activity Log) is the only place the two jobs are told apart.
 
-Both identities are long-lived access keys today. [Hardening](#hardening-next) says what replaces them.
+The AWS Crossplane identity has no long-lived credential. The other three are still long-lived keys;
+[Hardening](#hardening-next) says what replaces them.
 
 ## AWS: `hangar-crossplane` (Crossplane)
 
-**Created by:** an account administrator, once per AWS account (IAM user `hangar-crossplane`, policy
-`HangarCrossplaneCloudTargets`).
-**Used by:** `provider-aws-iam`, `provider-aws-ecr`, `provider-aws-lambda`, `provider-aws-ecs`,
-`provider-aws-ec2` on the dev cluster, through `ClusterProviderConfig default`
+**Created by:** an account administrator, once per AWS account and cluster: an IAM OIDC provider for
+the cluster's ServiceAccount issuer, the role `hangar-crossplane-<cluster>` that trusts it, and the
+policy `HangarCrossplaneCloudTargets` attached to that role. On kiac-dev the role is
+`hangar-crossplane-kiac-dev` and the issuer is `https://hangarplatform.dev/oidc/kiac-dev`.
+**Used by:** the `provider-aws-*` packages on the dev cluster, through `ClusterProviderConfig default`
 (`aws.m.upbound.io/v1beta1`, in `gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml`).
 
 ### What it does, per target
@@ -162,17 +165,18 @@ aws iam create-policy \
   --description "Crossplane provider-aws on the Hangar dev cluster: what AwsLambdaTarget and AwsEcsTarget compose, one region, no Lambda code or config updates" \
   --policy-document file://hangar-crossplane-policy.json
 
-aws iam create-user --user-name hangar-crossplane \
-  --tags Key=hangar.io/component,Value=hangar-crossplane
-
-aws iam attach-user-policy --user-name hangar-crossplane \
+aws iam attach-role-policy --role-name "hangar-crossplane-${CLUSTER}" \
   --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCrossplaneCloudTargets"
-
-aws iam create-access-key --user-name hangar-crossplane --output json
 ```
 
+`ACCOUNT` must be the account the role lives in, the same one the compositions create resources in.
+The ECR, Lambda and IAM statements name it in their resource ARNs. A document rendered for a different
+account still passes `validate-policy`, but those statements match nothing: ECS and EC2 calls work and
+every ECR, Lambda and IAM call fails with "no identity-based policy allows". That happened on
+2026-10-16. Run the `attach-role-policy` above after creating the role in [The trust](#the-trust).
+
 To change the policy of an identity that already exists (a tightened or corrected document), publish a
-new default version instead of recreating anything; the key keeps working:
+new default version instead of recreating anything; the role picks it up on its next session:
 
 ```bash
 aws iam create-policy-version --set-as-default \
@@ -197,39 +201,76 @@ Deliberately absent: `lambda:UpdateFunctionCode`, `lambda:UpdateFunctionConfigur
 deletion never has to scale it to zero), `iam:CreatePolicy`, any `iam:*` on a role that does not end in
 `-exec`, any ECR push call, `sts:AssumeRole`, anything outside the region.
 
-### The secret
+### The trust
 
-The Upbound provider reads an AWS shared-credentials file, so the Infisical secret is this multi-line
-value, built from the two fields of the last command above:
+The ServiceAccount issuer belongs to the cluster: apron `hack/cluster-identity.sh issuer` sets it, and
+the discovery document and keys are published under hangar's `web/public/oidc/<cluster>`
+(`gitops-cluster-dev/00-bootstrap/cluster-identity/README.md` has kiac-dev's). With that in place:
 
+```bash
+CLUSTER=kiac-dev
+ISSUER=hangarplatform.dev/oidc/${CLUSTER}
+
+aws iam create-open-id-connect-provider --url "https://${ISSUER}" --client-id-list sts.amazonaws.com
+
+cat > trust.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": { "Federated": "arn:aws:iam::${ACCOUNT}:oidc-provider/${ISSUER}" },
+    "Action": "sts:AssumeRoleWithWebIdentity",
+    "Condition": {
+      "StringEquals": { "${ISSUER}:aud": "sts.amazonaws.com" },
+      "StringLike": { "${ISSUER}:sub": "system:serviceaccount:crossplane-system:provider-aws-*" }
+    }
+  }]
+}
+EOF
+aws iam create-role --role-name "hangar-crossplane-${CLUSTER}" --assume-role-policy-document file://trust.json \
+  --tags Key=hangar.io/component,Value=hangar-crossplane
 ```
-[default]
-aws_access_key_id = AKIA...
-aws_secret_access_key = ...
+
+`sub` is matched as a pattern because Crossplane names each provider's ServiceAccount with a revision
+hash (`provider-aws-iam-e109a739ef27`), and the hash changes on every upgrade.
+
+On the cluster side, `provider-aws-runtime.yaml` (a DeploymentRuntimeConfig used only by the AWS
+providers) mounts a projected token with audience `sts.amazonaws.com` at `/var/run/secrets/aws/token`.
+`provider-aws-config.yaml` points the ClusterProviderConfig at it:
+
+```yaml
+spec:
+  credentials:
+    source: WebIdentity
+    webIdentity:
+      roleARN: arn:aws:iam::<account>:role/hangar-crossplane-<cluster>
+      roleSessionName: <cluster>-crossplane
+      tokenConfig: {source: Filesystem, fs: {path: /var/run/secrets/aws/token}}
 ```
 
-Plant it as `provider-aws-creds` in the `platform-cicd-kind-dev` project, `shared` environment, root
-path: the project `platform-secret-store` reads. Multi-line values are fine. The ExternalSecret in
-`gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-creds-external-secret.yaml` maps the whole
-value to the `credentials` key of Secret `provider-aws-creds` in `crossplane-system`, refreshed hourly.
+Don't also set `AWS_WEB_IDENTITY_TOKEN_FILE` on the pods. provider-upjet-aws v2.9.0 refuses that
+variable without `AWS_ROLE_ARN`.
 
 ### Confirming it
 
 ```bash
-# don't wait for the hourly refresh
-kubectl annotate externalsecret provider-aws-creds -n crossplane-system force-sync=$(date +%s) --overwrite
-kubectl get externalsecret provider-aws-creds -n crossplane-system        # STATUS SecretSynced, READY True
-kubectl get secret provider-aws-creds -n crossplane-system -o jsonpath='{.data.credentials}' | base64 -d | grep -c aws_access_key_id
+# the trust: a provider token gets a session; the default ServiceAccount does not
+SA=$(kubectl -n crossplane-system get sa -o name | grep provider-aws-ecr | cut -d/ -f2)
+aws sts assume-role-with-web-identity --no-sign-request --region us-east-1 \
+  --role-arn "arn:aws:iam::${ACCOUNT}:role/hangar-crossplane-${CLUSTER}" --role-session-name check \
+  --web-identity-token "$(kubectl -n crossplane-system create token $SA --audience sts.amazonaws.com --duration 10m)" \
+  --query AssumedRoleUser.Arn --output text
 ```
 
-Then the real test is a target: [cloud-targets.md](../user/cloud-targets.md#requesting-one). The Argo CD
-`crossplane-packages` Application goes from Degraded to Healthy once both credential ExternalSecrets
-sync. If the policy is too tight, the provider says exactly what it was refused, on the managed
-resource:
+Then the real test is a managed resource. An empty ECR repository costs nothing: create one
+(`ecr.aws.m.upbound.io/v1beta1` `Repository`, `forceDelete: true`, `providerConfigRef: {kind:
+ClusterProviderConfig, name: default}`), wait for `Ready`, then delete it. Or request a target:
+[cloud-targets.md](../user/cloud-targets.md#requesting-one). If the policy is too tight, the provider
+says exactly what it was refused, on the managed resource:
 
 ```bash
 kubectl describe repository.ecr.aws.m.upbound.io -n app-<app>-cicd <xr>-repo | grep -A2 'Synced'
-# ... AccessDenied ... User: arn:aws:iam::...:user/hangar-crossplane is not authorized to perform: ecr:Something on resource: ...
+# ... AccessDenied ... assumed-role/hangar-crossplane-<cluster>/<cluster>-crossplane is not authorized to perform: ecr:Something ...
 ```
 
 ## AWS: `glidepath-deployer` (Glidepath)
@@ -489,8 +530,13 @@ further: the key can change the image of Container Apps in one resource group an
 
 ## Rotation
 
-Both platform identities: create the new key, replace the Infisical value, force the ExternalSecret
-(the `annotate` above), confirm the provider still reconciles (`kubectl get managed -A` shows every
+AWS Crossplane: nothing to rotate. Sessions last an hour and the kubelet refreshes the token. What can
+change is the cluster's ServiceAccount signing key, which happens when a cluster is recreated. Publish the
+new key next to the old one in `jwks.json` before the cluster switches, because AWS caches keys.
+
+The Azure Crossplane identity: create the new secret, replace the Infisical value, force the
+ExternalSecret (`kubectl annotate externalsecret provider-azure-creds -n crossplane-system
+force-sync=$(date +%s) --overwrite`), confirm the provider still reconciles (`kubectl get managed -A` shows every
 resource `SYNCED True`), then delete the old key in the cloud. The provider pods read the Secret on each
 reconcile; no restart. The deployer: replace the value in each app project that carries it, run one
 deploy, delete the old key.
@@ -499,11 +545,12 @@ deploy, delete the old key.
 
 ## Hardening next
 
-- **No long-lived keys.** Both Upbound providers accept federated identity (`credentials.source:
-  WebIdentity` / IRSA on AWS, Workload Identity on Azure) from a cluster with a public OIDC issuer. A
-  kind cluster has none; publishing its discovery document (an S3 bucket is enough) removes every key in
-  this document for the Crossplane identity. Glidepath's TaskRuns can use the same projected
-  ServiceAccount tokens.
+- **No long-lived keys.** Done for AWS Crossplane (2026-10-16): the cluster publishes its
+  ServiceAccount issuer, and the provider uses `credentials.source: WebIdentity`. The same issuer works
+  for Azure Workload Identity: a federated credential on the Crossplane app registration, subject
+  `system:serviceaccount:crossplane-system:<provider-azure-* SA>`. Glidepath's TaskRuns can use projected
+  ServiceAccount tokens the same way. That would remove the deployer keys too, with one role per app
+  trusting `system:serviceaccount:app-<app>-cicd:<pipeline SA>`.
 - **Region as an organisation rule, not a policy line:** a service control policy or Azure Policy
   denying every region but the one in use, so a wider policy written in a hurry cannot cross it.
 - **Attribution:** CloudTrail and the Activity Log already split the two identities. Alerting on the

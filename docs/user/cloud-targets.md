@@ -20,12 +20,14 @@ being tested.
 ## Prerequisites (once per cluster)
 
 - The AWS and Azure providers on the dev cluster (`gitops-cluster-dev/10-crds-operators/crossplane/providers.yaml`).
-- Credentials for them: the `hangar-crossplane` identity in each cloud, planted as `provider-aws-creds` and
-  `provider-azure-creds` in the `platform-cicd-kind-dev` Infisical project (what the `platform-secret-store`
-  reads). [docs/admin/cloud-credentials.md](../admin/cloud-credentials.md) has the policies, the secret formats
-  and the checks, and explains why that identity is not the one Glidepath deploys with. Until they exist the
-  ExternalSecrets in that directory stay unsynced and every target reports `TargetReady: False` with the
-  provider's own "cannot get credentials" error on its managed resources.
+- Credentials for them: the `hangar-crossplane` identity in each cloud. On AWS it's an IAM role that the
+  providers assume with the cluster's own ServiceAccount tokens (web identity federation), so nothing is
+  planted. On Azure it's still a secret, `provider-azure-creds` in the `platform-cicd-kind-dev` Infisical
+  project (what the `platform-secret-store` reads).
+  [docs/admin/cloud-credentials.md](../admin/cloud-credentials.md) has the policies, the trust, the secret
+  format and the checks, and explains why that identity is not the one Glidepath deploys with. Without
+  them, every target reports `TargetReady: False`, with the provider's own credentials error on its managed
+  resources.
 - For a Lambda target, the app's own `aws-access-key-id` / `aws-secret-access-key` secrets (the ones
   Glidepath's deploy step already needs), planted in the app's Infisical project: the target's
   bootstrap Job pushes the placeholder image with them. Its pod waits, Pending, until the

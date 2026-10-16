@@ -27,6 +27,45 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL (compositions/_shared/render-target-resources/00-cloud-identity.yaml): the cloud-target compositions'
+            # templates/render-target-resources/00-cloud-identity.yaml are symlinks to this file. Edit here, run
+            # tools/build-compositions, then tools/test_compositions.py and review every affected composition's expected/ diff.
+            #
+            # Reads the fleet's AWS facts from the cluster registry (charts/cluster-registry, the hub's clusters.yaml): the
+            # record of the control-plane cluster (type: dev), which is where these XRs, their Crossplane providers and the
+            # Glidepath pipelines that deploy into them run. A cloud-target XR does not know its cluster's name, hence a label
+            # selector and a filter rather than matchName.
+            #
+            #   $awsBoundaryArn  aws.permissionsBoundaryPolicy as an ARN. Every IAM role these compositions create carries it,
+            #                    because the Crossplane identity's policy (HangarCrossplaneCloudTargets) refuses to create a role,
+            #                    or grant one anything, without it (docs/admin/cloud-credentials.md).
+            #   $awsAccountId    aws.accountId.
+            #   $saIssuer        the control-plane cluster's public ServiceAccount issuer (serviceAccountIssuer), or "".
+            #
+            # All three are "" until the registry carries them, and the templates then render what they did before (no
+            # boundary). The cloud account's policy, not this template, is what enforces the boundary.
+            <<- $registryItems := index (.extraResources | default dict) "cluster-registry" | default dict >>
+            <<- $awsBoundaryArn := "" >>
+            <<- $awsAccountId := "" >>
+            <<- $saIssuer := "" >>
+            <<- range (index $registryItems "items" | default list) >>
+              <<- $data := .resource.data | default dict >>
+              <<- if eq (index $data "type" | default "") "dev" >>
+                <<- $awsBoundaryArn = index $data "awsPermissionsBoundaryArn" | default "" >>
+                <<- $awsAccountId = index $data "awsAccountId" | default "" >>
+                <<- $saIssuer = index $data "serviceAccountIssuer" | default "" >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              cluster-registry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchLabels:
+                  hangar.io/cluster-registry: "true"
+            ---
             # Lambda will not create an image-packaged function until an image exists in the repository, and
             # no Crossplane provider can push one. This Job seeds the repository with the public AWS Lambda base
             # image for the chosen runtime, under the tag `bootstrap`, for the function's one architecture
@@ -218,7 +257,8 @@ spec:
             ---
             # The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
             # AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
-            # characters, hence the trunc.
+            # characters, hence the trunc. It carries the fleet's permissions boundary ($awsBoundaryArn, from
+            # 00-cloud-identity.yaml) whenever the cluster registry provides one.
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $functionName := $spec.functionName | default $xrName >>
@@ -237,6 +277,9 @@ spec:
                 description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
                 assumeRolePolicy: |
                   {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+                <<- if $awsBoundaryArn >>
+                permissionsBoundary: <<$awsBoundaryArn | quote>>
+                <<- end >>
                 tags:
                   hangar.io/target: <<$xrName>>
                   hangar.io/component: aws-lambda-target

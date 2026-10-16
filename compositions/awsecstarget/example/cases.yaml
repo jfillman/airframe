@@ -16,3 +16,7 @@ cases:
       TargetReady: AwsEcsTargetReady
 - name: existing-network
   xr: xr-existing-network.yaml
+- name: permissions-boundary
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml

@@ -31,3 +31,13 @@ cases:
   expect:
     conditions:
       TargetReady: AwsLambdaTargetReady
+- name: permissions-boundary
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  expect:
+    conditions:
+      TargetReady: AwsLambdaTargetBootstrapping

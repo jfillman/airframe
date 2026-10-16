@@ -46,7 +46,30 @@ Nothing in either composition updates a function, a task definition or a service
 ### The policy
 
 The region is a hard boundary: ECR and Lambda through the resource ARN, ECS and EC2 through
-`aws:RequestedRegion`. IAM is global, so it is bounded by the role-name pattern instead.
+`aws:RequestedRegion`. IAM is global, so it is bounded by the role-name pattern and a permissions boundary.
+
+**The permissions boundary (since 2026-10-16).** The compositions create IAM roles: `*-exec` execution roles today,
+and per-app `glidepath-deploy-*` roles later. An identity that may create a role, set its trust and give it an inline
+policy can make itself an administrator. So every role it creates or extends must carry the boundary
+`HangarCloudTargetBoundary`, which caps that role at what a cloud target needs: logs, ECR pull and push, Lambda
+`UpdateFunctionCode`, ECS task definitions and `UpdateService`, and passing an `*-ecs-exec` role to ECS. All of it is
+limited to the region. `CreateRole`, `PutRolePolicy`, `AttachRolePolicy` and `PutRolePermissionsBoundary` require it
+(`iam:PermissionsBoundary`). Removing permissions doesn't, so tearing a target down never depends on it. Nothing may
+remove a boundary. The compositions read the boundary ARN from the cluster registry: the `aws:` block of the hub's
+`clusters.yaml`, rendered by `charts/cluster-registry`.
+
+IAM has no condition key on a trust policy, so `UpdateAssumeRolePolicy` can't be tied to the boundary. That's why
+every role matching these patterns must carry it. Check with
+`aws iam list-roles --query 'Roles[?ends_with(RoleName,\`-exec\`)].RoleName'` and `aws iam get-role` for
+`PermissionsBoundary`; a role from before the boundary gets it on its composition's next reconcile.
+
+Publish in this order:
+1. the boundary policy;
+2. this policy;
+3. the `aws:` block in `clusters.yaml` with an airframe release that reads it.
+
+The other way round, Crossplane can't add the boundary to existing roles, because the old policy lacks
+`PutRolePermissionsBoundary`.
 
 ```bash
 export AWS_PAGER=""
@@ -54,26 +77,82 @@ REGION=us-east-1
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)   # the account the role and the targets live in
 CLUSTER=kiac-dev
 
+cat > hangar-cloud-target-boundary.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Sid": "ExecutionRoleLogs", "Effect": "Allow",
+      "Action": ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:${REGION}:${ACCOUNT}:log-group:*" },
+    { "Sid": "EcrLogin", "Effect": "Allow", "Action": "ecr:GetAuthorizationToken", "Resource": "*" },
+    { "Sid": "EcrPullAndPush", "Effect": "Allow",
+      "Action": ["ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:GetDownloadUrlForLayer",
+                 "ecr:DescribeImages", "ecr:DescribeRepositories", "ecr:GetRepositoryPolicy",
+                 "ecr:InitiateLayerUpload", "ecr:UploadLayerPart", "ecr:CompleteLayerUpload", "ecr:PutImage"],
+      "Resource": "arn:aws:ecr:${REGION}:${ACCOUNT}:repository/*" },
+    { "Sid": "LambdaDeploy", "Effect": "Allow",
+      "Action": ["lambda:GetFunction", "lambda:GetFunctionConfiguration", "lambda:UpdateFunctionCode"],
+      "Resource": "arn:aws:lambda:${REGION}:${ACCOUNT}:function:*" },
+    { "Sid": "EcsTaskDefinitions", "Effect": "Allow",
+      "Action": ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition", "ecs:TagResource"],
+      "Resource": "*", "Condition": { "StringEquals": { "aws:RequestedRegion": "${REGION}" } } },
+    { "Sid": "EcsUpdateService", "Effect": "Allow", "Action": ["ecs:DescribeServices", "ecs:UpdateService"],
+      "Resource": "arn:aws:ecs:${REGION}:${ACCOUNT}:service/*/*" },
+    { "Sid": "PassEcsExecutionRoles", "Effect": "Allow", "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/*-ecs-exec",
+      "Condition": { "StringEquals": { "iam:PassedToService": "ecs-tasks.amazonaws.com" } } }
+  ]
+}
+EOF
+aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY \
+  --policy-document file://hangar-cloud-target-boundary.json  # expect: "findings": []
+aws iam create-policy --policy-name HangarCloudTargetBoundary \
+  --description "Most any IAM role an Airframe cloud-target composition creates may ever do" \
+  --policy-document file://hangar-cloud-target-boundary.json
+
 cat > hangar-crossplane-policy.json <<EOF
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ExecutionRoles",
+      "Sid": "ComposedRolesReadAndRemove",
       "Effect": "Allow",
       "Action": [
-        "iam:CreateRole", "iam:DeleteRole", "iam:GetRole", "iam:UpdateRole",
-        "iam:UpdateRoleDescription", "iam:UpdateAssumeRolePolicy",
-        "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags",
-        "iam:PutRolePolicy", "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:ListRolePolicies",
+        "iam:GetRole", "iam:DeleteRole", "iam:UpdateRole", "iam:UpdateRoleDescription",
+        "iam:UpdateAssumeRolePolicy", "iam:TagRole", "iam:UntagRole", "iam:ListRoleTags",
+        "iam:GetRolePolicy", "iam:DeleteRolePolicy", "iam:ListRolePolicies",
         "iam:ListAttachedRolePolicies", "iam:ListInstanceProfilesForRole"
       ],
-      "Resource": "arn:aws:iam::${ACCOUNT}:role/*-exec"
+      "Resource": ["arn:aws:iam::${ACCOUNT}:role/*-exec", "arn:aws:iam::${ACCOUNT}:role/glidepath-deploy-*"]
     },
     {
-      "Sid": "AttachOnlyTheTwoManagedPolicies",
+      "Sid": "ComposedRolesGrantOnlyInsideTheBoundary",
       "Effect": "Allow",
-      "Action": ["iam:AttachRolePolicy", "iam:DetachRolePolicy"],
+      "Action": ["iam:CreateRole", "iam:PutRolePolicy", "iam:PutRolePermissionsBoundary"],
+      "Resource": ["arn:aws:iam::${ACCOUNT}:role/*-exec", "arn:aws:iam::${ACCOUNT}:role/glidepath-deploy-*"],
+      "Condition": {
+        "StringEquals": { "iam:PermissionsBoundary": "arn:aws:iam::${ACCOUNT}:policy/HangarCloudTargetBoundary" }
+      }
+    },
+    {
+      "Sid": "AttachOnlyTheTwoManagedPoliciesInsideTheBoundary",
+      "Effect": "Allow",
+      "Action": "iam:AttachRolePolicy",
+      "Resource": "arn:aws:iam::${ACCOUNT}:role/*-exec",
+      "Condition": {
+        "ArnEquals": {
+          "iam:PolicyARN": [
+            "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+            "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+          ]
+        },
+        "StringEquals": { "iam:PermissionsBoundary": "arn:aws:iam::${ACCOUNT}:policy/HangarCloudTargetBoundary" }
+      }
+    },
+    {
+      "Sid": "DetachOnlyTheTwoManagedPolicies",
+      "Effect": "Allow",
+      "Action": "iam:DetachRolePolicy",
       "Resource": "arn:aws:iam::${ACCOUNT}:role/*-exec",
       "Condition": {
         "ArnEquals": {
@@ -83,6 +162,12 @@ cat > hangar-crossplane-policy.json <<EOF
           ]
         }
       }
+    },
+    {
+      "Sid": "NeverRemoveABoundary",
+      "Effect": "Deny",
+      "Action": "iam:DeleteRolePermissionsBoundary",
+      "Resource": "*"
     },
     {
       "Sid": "PassExecutionRolesToLambdaAndEcs",
@@ -196,11 +281,13 @@ Lines that look wider than the compositions need, and why they are there:
 | `ec2:RevokeSecurityGroupEgress` | The provider revokes AWS's default allow-all egress rule on every security group it creates; the composition then adds its own explicit egress rule. |
 | `ec2:DescribeNetworkAcls`, `ec2:DescribeRouteTables` | The provider's observe of a VPC looks up the default network ACL and main route table ids. |
 | `iam:ListInstanceProfilesForRole` | The provider checks for instance profiles before deleting a role. |
+| `iam:UpdateAssumeRolePolicy`, unconditioned | IAM has no condition key for a trust policy. Every role matching these patterns carries the boundary, so a changed trust still lands on a capped role. |
 
 Deliberately absent: `lambda:UpdateFunctionCode`, `lambda:UpdateFunctionConfiguration`,
 `lambda:PublishVersion`, `ecs:UpdateService` (the service is composed with `forceDelete: true`, so
 deletion never has to scale it to zero), `iam:CreatePolicy`, any `iam:*` on a role that does not end in
-`-exec`, any ECR push call, `sts:AssumeRole`, anything outside the region.
+`-exec`, any ECR push call, `sts:AssumeRole`, anything outside the region, creating or extending a role without
+`HangarCloudTargetBoundary`, and removing any role's boundary.
 
 ### The trust
 

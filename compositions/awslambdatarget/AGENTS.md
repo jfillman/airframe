@@ -31,6 +31,7 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - Edit `compositions/awslambdatarget/templates/`, never the inline blocks in `composition.yaml`: `python3 tools/build-compositions awslambdatarget` splices them.
 - `python3 tools/test_compositions.py --update awslambdatarget` regenerates `example/expected/`; review that diff like code, it is the behaviour change.
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
+- Shared with other compositions (symlinks into `compositions/_shared/`): `00-cloud-identity.yaml`.
 - The function URL's public-access Permission carries a pinned external-name (FunctionURLAllowPublicAccess); without it the provider retries AddPermission and gets 409 forever.
 
 Contract: `tools/airframe-capabilities verify awslambdatarget`; schema: `xrds/awslambdatarget.yaml`.

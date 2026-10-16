@@ -8,6 +8,7 @@
 #   tenantsRepo: gitops-cluster-kind-prod-tenants
 #   aliases: []                      # other names this cluster also answers to (one ConfigMap each)
 #   airframe: { crossplaneReady: true }   # cicdReady, crossplaneReady, infisicalHost, autopilotReady (dev only)
+#   serviceAccountIssuer: https://hangarplatform.dev/oidc/kind-prod   # optional: the cluster's public issuer
 clusters: []
 # The fleet's one Infisical server (review C9): the top-level `infisical:` block of the same clusters.yaml.
 #   infisical:
@@ -17,6 +18,15 @@ clusters: []
 # Rendered into every record as infisicalUrl (inClusterUrl on the infisicalHost cluster, url elsewhere) and
 # infisicalOrgId; the SecretStore Composition reads both instead of hard-coding them.
 infisical: {}
+
+# The AWS account cloud targets live in: the top-level `aws:` block of the same clusters.yaml. Optional.
+#   aws:
+#     accountId: "123456789012"                       # quoted: 12 digits, a leading zero must survive
+#     permissionsBoundaryPolicy: HangarCloudTargetBoundary   # customer managed policy name in that account
+# Rendered into every record as awsAccountId and awsPermissionsBoundaryArn. The AwsLambdaTarget and AwsEcsTarget
+# Compositions put that boundary on every IAM role they create; the Crossplane identity's policy refuses any other
+# (airframe docs/admin/cloud-credentials.md).
+aws: {}
 
 # Where the Compositions look the records up (ExtraResources matchName in crossplane-system).
 namespace: crossplane-system

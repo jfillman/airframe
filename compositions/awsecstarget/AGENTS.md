@@ -31,6 +31,7 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - Edit `compositions/awsecstarget/templates/`, never the inline blocks in `composition.yaml`: `python3 tools/build-compositions awsecstarget` splices them.
 - `python3 tools/test_compositions.py --update awsecstarget` regenerates `example/expected/`; review that diff like code, it is the behaviour change.
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
+- Shared with other compositions (symlinks into `compositions/_shared/`): `00-cloud-identity.yaml`.
 - terraform-provider-aws revokes AWS's default egress rule when it creates a security group, so the composition adds an explicit egress SecurityGroupRule.
 
 Contract: `tools/airframe-capabilities verify awsecstarget`; schema: `xrds/awsecstarget.yaml`.

@@ -6,6 +6,9 @@
 # Every managed resource in this directory references the AWS ClusterProviderConfig named `default`
 # (gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml).
 #
+# The execution role carries the fleet's permissions boundary ($awsBoundaryArn, from 00-cloud-identity.yaml, which
+# sorts first) whenever the cluster registry provides one.
+#
 # The execution role is what Fargate uses to pull the image and ship logs: AWS's own
 # AmazonECSTaskExecutionRolePolicy plus logs:CreateLogGroup, because the task definition asks the
 # awslogs driver to create its log group on first use (awslogs-create-group) - that keeps a
@@ -50,6 +53,9 @@ spec:
       - name: create-log-group
         policy: |
           {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["logs:CreateLogGroup"],"Resource":"*"}]}
+    <<- if $awsBoundaryArn >>
+    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    <<- end >>
     tags:
       <<- range $k, $v := $tags >>
       <<$k>>: <<$v | quote>>

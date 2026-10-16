@@ -1,0 +1,29 @@
+# --required fixture for the cloud-target compositions (00-cloud-identity.yaml): the control-plane record carries the
+# fleet's aws block, as charts/cluster-registry renders it. The upper record carries a DIFFERENT boundary on purpose:
+# the lookup must take the type: dev record, so this decoy must never appear in a render.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: "true"
+data:
+  type: dev
+  cicdReady: "true"
+  awsAccountId: "012345678901"
+  awsPermissionsBoundaryArn: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
+  serviceAccountIssuer: https://issuer.example/oidc/kind-dev
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kind-prod
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: "true"
+data:
+  type: upper
+  crossplaneReady: "true"
+  awsAccountId: "012345678901"
+  awsPermissionsBoundaryArn: arn:aws:iam::012345678901:policy/DECOY-must-not-be-used

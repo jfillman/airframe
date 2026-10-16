@@ -1,0 +1,9 @@
+# Must fail: unquoted, the account id is a YAML number (helm renders a 12-digit one as a float, and a leading zero
+# would be lost), so the chart insists on a quoted string.
+aws:
+  accountId: 700017004810
+  permissionsBoundaryPolicy: HangarCloudTargetBoundary
+clusters:
+  - name: kind-dev
+    zone: lower
+    roles: [control-plane, workloads]

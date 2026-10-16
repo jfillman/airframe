@@ -11,8 +11,18 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
   infisicalUrl     infisical.inClusterUrl on the airframe.infisicalHost cluster, infisical.url elsewhere
   infisicalOrgId   infisical.orgId
   zone, roles      the taxonomy, for gates that move from `type` to `zone` (glidepath ADR-0024)
+  awsAccountId               aws.accountId                (the AWS account cloud targets live in)
+  awsPermissionsBoundaryArn  aws.permissionsBoundaryPolicy, as an ARN in that account (every IAM role a cloud-target
+                             Composition creates carries it; the Crossplane identity may create no other kind)
+  serviceAccountIssuer       serviceAccountIssuer         (the cluster's public ServiceAccount token issuer, apron
+                             clusterIdentity; cloud deploy roles trust it)
 */ -}}
 {{- $seen := dict }}
+{{- $aws := .Values.aws | default dict }}
+{{- if $aws }}
+{{- if not (regexMatch "^[0-9]{12}$" (toString $aws.accountId)) }}{{ fail "aws: 'accountId' must be the 12-digit account id, quoted" }}{{ end }}
+{{- if not $aws.permissionsBoundaryPolicy }}{{ fail "aws: 'permissionsBoundaryPolicy' is required once the aws block is set" }}{{ end }}
+{{- end }}
 {{- $inf := .Values.infisical | default dict }}
 {{- if $inf }}
 {{- range list "orgId" "url" "inClusterUrl" }}
@@ -73,5 +83,13 @@ data:
   {{- end }}
   zone: {{ $zone }}
   roles: {{ $roles | join "," | quote }}
+  {{- if $aws }}
+  awsAccountId: {{ toString $aws.accountId | quote }}
+  awsPermissionsBoundaryArn: {{ printf "arn:aws:iam::%s:policy/%s" (toString $aws.accountId) $aws.permissionsBoundaryPolicy | quote }}
+  {{- end }}
+  {{- with $rec.serviceAccountIssuer }}
+  {{- if not (hasPrefix "https://" .) }}{{ fail (printf "clusters: '%s' serviceAccountIssuer must be an https URL" $rec.name) }}{{ end }}
+  serviceAccountIssuer: {{ . | quote }}
+  {{- end }}
 {{- end }}
 {{- end }}

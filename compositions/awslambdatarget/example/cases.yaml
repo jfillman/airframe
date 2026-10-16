@@ -52,3 +52,27 @@ cases:
   expect:
     conditions:
       TargetReady: AwsLambdaTargetBootstrapping
+# Regression (incident 2026-10-16): switching an existing, key-based target to federation while its deploy role is not
+# observed yet must keep the Job (in key mode, unchanged), the function, its URL and its permission.
+- name: switch-keeps-existing
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  - observed-job-succeeded.yaml
+  - observed-function-and-url.yaml
+  expect:
+    conditions:
+      TargetReady: AwsLambdaTargetReady
+# A function whose bootstrap Job is gone (deleted to retry) stays in the desired state.
+- name: job-gone-keeps-function
+  xr: xr-defaults.yaml
+  observed:
+  - observed-repository.yaml
+  - observed-role.yaml
+  - observed-function-and-url.yaml
+  expect:
+    conditions:
+      TargetReady: AwsLambdaTargetReady

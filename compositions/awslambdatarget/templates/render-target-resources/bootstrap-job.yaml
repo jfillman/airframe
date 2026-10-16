@@ -33,7 +33,15 @@
 <<- $deployRoleArn := dig "resource" "status" "atProvider" "arn" "" $deployRoleObs >>
 <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
 <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
-<<- if and $repoUrl (or (not $federated) $deployRoleArn) >>
+<<- /* Once the Job exists, keep rendering it, in the mode it was created with: dropping it from the desired state
+       makes Crossplane delete it (and, before 2026-10-16, the function with it), and a Job's pod template cannot be
+       updated in place. Incident 2026-10-16: the federation switch dropped smoke-fn's Job for one reconcile while
+       its deploy role did not exist yet, and the function, URL and permission were deleted and re-created. */ ->>
+<<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
+<<- if $jobObs >>
+<<- $federated = eq (dig "resource" "spec" "template" "spec" "serviceAccountName" "" $jobObs) "glidepath-cloud-deployer" >>
+<<- end >>
+<<- if and $repoUrl (or $jobObs (not $federated) $deployRoleArn) >>
 <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
 apiVersion: batch/v1
 kind: Job

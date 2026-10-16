@@ -101,7 +101,15 @@ spec:
             <<- $deployRoleArn := dig "resource" "status" "atProvider" "arn" "" $deployRoleObs >>
             <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
             <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
-            <<- if and $repoUrl (or (not $federated) $deployRoleArn) >>
+            <<- /* Once the Job exists, keep rendering it, in the mode it was created with: dropping it from the desired state
+                   makes Crossplane delete it (and, before 2026-10-16, the function with it), and a Job's pod template cannot be
+                   updated in place. Incident 2026-10-16: the federation switch dropped smoke-fn's Job for one reconcile while
+                   its deploy role did not exist yet, and the function, URL and permission were deleted and re-created. */ ->>
+            <<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
+            <<- if $jobObs >>
+            <<- $federated = eq (dig "resource" "spec" "template" "spec" "serviceAccountName" "" $jobObs) "glidepath-cloud-deployer" >>
+            <<- end >>
+            <<- if and $repoUrl (or $jobObs (not $federated) $deployRoleArn) >>
             <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
             apiVersion: batch/v1
             kind: Job
@@ -420,7 +428,11 @@ spec:
             <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
             <<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
             <<- $jobSucceeded := dig "resource" "status" "succeeded" 0 $jobObs >>
-            <<- if and $repoUrl (ge (int $jobSucceeded) 1) >>
+            <<- /* A function that exists stays in the desired state whatever happens to the bootstrap Job (deleted to retry,
+                   re-created, gated on something new): leaving the desired state means Crossplane deletes it in AWS, with the
+                   deployed code and the Function URL (a new URL comes back). The Job only decides when it is first created. */ ->>
+            <<- $fnObs := index (.observed.resources | default dict) "lambda-function" | default dict >>
+            <<- if or $fnObs (and $repoUrl (ge (int $jobSucceeded) 1)) >>
             apiVersion: lambda.aws.m.upbound.io/v1beta1
             kind: Function
             metadata:

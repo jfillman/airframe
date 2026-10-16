@@ -76,9 +76,8 @@ spec:
         promotionOrder:
           - dev
 
-      secrets:
-        - name: aws-access-key-id
-        - name: aws-secret-access-key
+      # No secrets: the deploy reaches AWS through this function's own IAM role, assumed with a one-hour token
+      # (Glidepath docs/admin/cloud-deploy-identity.md). There is no AWS key to store.
 
       notifications:
         backstage:

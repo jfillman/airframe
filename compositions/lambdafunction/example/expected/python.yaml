@@ -92,8 +92,9 @@ resources:
         \ # no test script exists yet - add one, then flip this on\n\npipelines:\n  ci:\n    trigger:\n      source: git\n\
         \      event: push\n      branch: main\n    steps:\n      - stage: build\n      - stage: deploy\n        env: dev\n\
         deploy:\n  target: aws-lambda\n  lambda:\n    functionName: resize-py\n    region: us-east-1\n  lowerEnvironments:\n\
-        \    - dev\n  upperEnvironments: []\n  strategy: rollout\n  promotionOrder:\n    - dev\n\nsecrets:\n  - name: aws-access-key-id\n\
-        \  - name: aws-secret-access-key\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in\
+        \    - dev\n  upperEnvironments: []\n  strategy: rollout\n  promotionOrder:\n    - dev\n\n# No secrets: the deploy\
+        \ reaches AWS through this function's own IAM role, assumed with a one-hour token\n# (Glidepath docs/admin/cloud-deploy-identity.md).\
+        \ There is no AWS key to store.\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in\
         \ Backstage and Tower\n"
       file: cicd.yaml
       overwriteOnCreate: true
@@ -203,18 +204,20 @@ resources:
         ```
 
 
-        **Deploys to an existing Lambda function.** Glidepath updates the function''s container image
+        **Deploys to a Lambda function the platform creates.** Glidepath updates the function''s container
 
-        (`deploy.target: aws-lambda` in `cicd.yaml`); it never creates the function. Create the function
+        image (`deploy.target: aws-lambda` in `cicd.yaml`); it never creates the function. An Airframe
 
-        (package type `Image`), its execution role and its ECR repository first, then add
+        `AwsLambdaTarget` does: the function, its ECR repository, its execution role, and a deploy role that
 
-        `aws-access-key-id` and `aws-secret-access-key` to this app''s Infisical project.
+        may only push to that repository and update that function. Glidepath copies each image from
+
+        `ghcr.io` into the ECR repository (Lambda pulls only from ECR) and deploys it.
 
 
-        **Known gap:** Lambda can only pull from Amazon ECR, and Glidepath currently pushes every image to
+        **No AWS key.** The deploy step assumes the function''s deploy role with a one-hour token Kubernetes
 
-        `ghcr.io`, so the deploy stage reports that until ECR support lands in Glidepath.
+        signs for it, so there is nothing to put in Infisical for AWS.
 
         '
       file: README.md

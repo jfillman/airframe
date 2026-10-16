@@ -1,0 +1,64 @@
+# The function's deploy role: what Glidepath's deploy-lambda Task and this target's bootstrap Job assume, instead of
+# an access key (glidepath ADR / ~/tech/SPEC-glidepath-deployer-federation.md). One role per function, named
+# glidepath-deploy-<functionName> (cut to IAM's 64 characters: 17 + 47; Glidepath's deploy-lambda computes the
+# same name).
+#
+# Trust: AssumeRoleWithWebIdentity from the control-plane cluster's ServiceAccount issuer ($saIssuer, from the
+# cluster registry), only for the ServiceAccount glidepath-cloud-deployer in this XR's namespace (the app's -cicd
+# namespace; glidepath-app creates the ServiceAccount), only with audience sts.amazonaws.com.
+#
+# Permissions: push to and read this target's repository, read and update this function's code, ECR login. Nothing
+# else - no other function or repository, no configuration change, no delete. The fleet's permissions boundary
+# caps it again, and the Crossplane identity cannot create it without that boundary.
+#
+# Rendered only once the registry carries the account, the boundary and the issuer; until then the target keeps
+# the access-key path (spec.credentialsSecret).
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $functionName := $spec.functionName | default $xrName >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- if and $awsAccountId $awsBoundaryArn $saIssuer >>
+<<- $issuerHost := trimPrefix "https://" $saIssuer >>
+<<- $deployRoleName := printf "glidepath-deploy-%s" (trunc 47 $functionName) >>
+<<- $trust := dict "Version" "2012-10-17" "Statement" (list (dict
+      "Effect" "Allow"
+      "Principal" (dict "Federated" (printf "arn:aws:iam::%s:oidc-provider/%s" $awsAccountId $issuerHost))
+      "Action" "sts:AssumeRoleWithWebIdentity"
+      "Condition" (dict "StringEquals" (dict
+        (printf "%s:aud" $issuerHost) "sts.amazonaws.com"
+        (printf "%s:sub" $issuerHost) (printf "system:serviceaccount:%s:glidepath-cloud-deployer" $xrNamespace))))) >>
+<<- $repoArn := printf "arn:aws:ecr:%s:%s:repository/%s" $region $awsAccountId $functionName >>
+<<- $functionArn := printf "arn:aws:lambda:%s:%s:function:%s" $region $awsAccountId $functionName >>
+<<- $policy := dict "Version" "2012-10-17" "Statement" (list
+      (dict "Sid" "EcrLogin" "Effect" "Allow" "Action" "ecr:GetAuthorizationToken" "Resource" "*")
+      (dict "Sid" "ThisRepository" "Effect" "Allow"
+        "Action" (list "ecr:BatchCheckLayerAvailability" "ecr:BatchGetImage" "ecr:GetDownloadUrlForLayer"
+                       "ecr:DescribeImages" "ecr:DescribeRepositories" "ecr:InitiateLayerUpload"
+                       "ecr:UploadLayerPart" "ecr:CompleteLayerUpload" "ecr:PutImage")
+        "Resource" $repoArn)
+      (dict "Sid" "ThisFunctionsCode" "Effect" "Allow"
+        "Action" (list "lambda:GetFunction" "lambda:GetFunctionConfiguration" "lambda:UpdateFunctionCode")
+        "Resource" $functionArn)) >>
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-deploy
+  annotations:
+    <<setResourceNameAnnotation "deploy-role">>
+    crossplane.io/external-name: <<$deployRoleName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    description: <<printf "Deploys the %s Lambda function from %s (Airframe AwsLambdaTarget %s)" $functionName $xrNamespace $xrName | toJson>>
+    assumeRolePolicy: <<toJson $trust | quote>>
+    inlinePolicy:
+      - name: deploy-this-function
+        policy: <<toJson $policy | quote>>
+    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    tags:
+      hangar.io/target: <<$xrName>>
+      hangar.io/component: aws-lambda-target
+<<- end >>

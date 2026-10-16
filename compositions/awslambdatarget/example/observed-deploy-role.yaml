@@ -1,0 +1,12 @@
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: smoke-fn-deploy
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: deploy-role
+status:
+  atProvider:
+    arn: arn:aws:iam::012345678901:role/glidepath-deploy-glidepath-smoke-fn
+  conditions:
+    - {type: Ready, status: "True", reason: Available}

@@ -10,7 +10,7 @@ standalone HTML.
 | `02-token-exchange` | How a pod's ServiceAccount token becomes a one-hour AWS session |
 | `03-trust-chain` | Issuer, published keys, IAM identity provider and roles, with the permissions boundary |
 | `04-guardrails` | The six independent checks on a keyless deploy |
-| `05-deploy-credentials` | How Glidepath's deploy step chooses between the role and the stored key |
+| `05-deploy-credentials` | How Glidepath's deploy step gets its access: three checks, the role, or an error (no stored key since phase 4) |
 | `06-incident` | 2026-10-16: the federation switch deleted and re-created smoke-fn's function |
 
 Regenerate: `python3 gen.py <out-dir>` writes the HTML files; render PNGs with any headless browser at

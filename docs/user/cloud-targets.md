@@ -28,17 +28,16 @@ being tested.
   format and the checks, and explains why that identity is not the one Glidepath deploys with. Without
   them, every target reports `TargetReady: False`, with the provider's own credentials error on its managed
   resources.
-- For a Lambda target, credentials for the bootstrap Job that pushes the placeholder image, one of:
-  - **Federated (no stored key):** when the cluster registry carries the AWS account, the permissions
-    boundary and the cluster's `serviceAccountIssuer`, the target also creates
-    `glidepath-deploy-<functionName>`. That's an IAM role trusted only by the ServiceAccount
-    `glidepath-cloud-deployer` in the app's `-cicd` namespace, allowed only this repository and this
-    function's code. The Job assumes it, and so does Glidepath's deploy step. The ServiceAccount comes from
-    the app's Glidepath chart; the Job's pod can't start until it exists.
-  - **Otherwise (legacy):** the Secret named by `credentialsSecret` (`app-secrets` by default) with
-    `aws-access-key-id` / `aws-secret-access-key`; the Job's pod waits, Pending, until it exists. Since
-    2026-10-16 Glidepath deploys a Lambda only through the deploy role, so a target bootstrapped this way
-    gets a function nothing can deploy to. Use a cluster with web identity.
+- For a Lambda target, **web identity**: the cluster registry must carry the AWS account, the permissions
+  boundary and the cluster's `serviceAccountIssuer`. The target then creates `glidepath-deploy-<functionName>`,
+  an IAM role trusted only by the ServiceAccount `glidepath-cloud-deployer` in the app's `-cicd` namespace and
+  allowed only this repository and this function's code. The bootstrap Job that pushes the placeholder image
+  assumes it, and so does Glidepath's deploy step. The ServiceAccount comes from the app's Glidepath chart; the
+  Job's pod can't start until it exists. No AWS key is stored anywhere. On a cluster without those three
+  registry fields the target creates the repository and the execution role, then stops with
+  `TargetReady: AwsLambdaTargetNeedsWebIdentity`. (Until v0.3.147 the Job could use an access key from
+  `spec.credentialsSecret` instead; that mode is gone, because Glidepath can't deploy to a function bootstrapped
+  that way.)
 
 ## What a target never does
 
@@ -51,7 +50,7 @@ Deleting the XR is the only way to remove the function, its URL and its roles.
 ## Requesting one
 
 Commit the XR into the app's own `tenants/<app>/xr-requests/` in the dev cluster's tenants repo, next
-to the app's other requests, so it lands in `app-<app>-cicd` (where `app-secrets` lives):
+to the app's other requests, so it lands in `app-<app>-cicd` (whose `glidepath-cloud-deployer` ServiceAccount the deploy role trusts):
 
 ```yaml
 apiVersion: catalog.hangar.io/v1alpha1

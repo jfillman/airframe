@@ -70,21 +70,19 @@ spec:
             # no Crossplane provider can push one. This Job seeds the repository with the public AWS Lambda base
             # image for the chosen runtime, under the tag `bootstrap`, for the function's one architecture
             # (Lambda rejects multi-architecture indexes, hence crane's --platform). Same two images and the
-            # same login dance as Glidepath's deploy-lambda.yaml, with the same credentials:
-            #   - federated (the registry carries the account, the boundary and the issuer): the Job runs as the
-            #     ServiceAccount glidepath-cloud-deployer and assumes this target's deploy role (deploy-role.yaml) with a
-            #     projected token. Nothing is stored. Rendered only once that role has been observed with its ARN.
-            #   - otherwise: the aws-access-key-id / aws-secret-access-key keys of spec.credentialsSecret (app-secrets by
-            #     default) in this XR's namespace.
+            # same login dance as Glidepath's deploy-lambda.yaml, with the same credentials: the Job runs as the
+            # ServiceAccount glidepath-cloud-deployer and assumes this target's deploy role (deploy-role.yaml) with a
+            # projected token. Nothing is stored. There is no access-key mode any more (removed 2026-10-16, after phase 4 of
+            # the deploy federation): on a cluster whose registry lacks the AWS account, the boundary or the issuer, no Job is
+            # created and TargetReady says AwsLambdaTargetNeedsWebIdentity.
             #
-            # Rendered only once the Repository has been observed with its URL (one reconcile after creation).
+            # Created once the Repository has been observed with its URL and the deploy role with its ARN.
             # A Job's pod template is immutable, so a later change of spec.runtime or spec.architecture cannot
-            # be applied to it: delete the Job and the function and let the next reconcile recreate both, or
+            # be applied to it: delete the Job and let the next reconcile recreate it (the function stays), or
             # recreate the XR. Never given a ttlSecondsAfterFinished - Crossplane would recreate a pruned Job on
-            # the next reconcile and re-run it. No activeDeadlineSeconds either: while the credentials Secret
-            # does not exist yet (an app whose secrets have not been planted in Infisical), the pod simply stays
-            # Pending on the missing volume and starts the moment the Secret appears - a deadline would turn
-            # that wait into a failure. Only a real error (bad credentials, no egress) consumes backoffLimit.
+            # the next reconcile and re-run it. No activeDeadlineSeconds either: until the app's glidepath-app chart has
+            # created the ServiceAccount, the Job controller simply cannot create the pod and retries; a deadline would turn
+            # that wait into a failure. Only a real error (trust, no egress) consumes backoffLimit.
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $region := $spec.region | default "us-east-1" >>
@@ -95,32 +93,35 @@ spec:
             <<- $bootstrapImage := "public.ecr.aws/lambda/nodejs:22" >>
             <<- if eq $runtime "python3.13" >><<- $bootstrapImage = "public.ecr.aws/lambda/python:3.13" >><<- end >>
             <<- if eq $runtime "go" >><<- $bootstrapImage = "public.ecr.aws/lambda/provided:al2023" >><<- end >>
-            <<- $credsSecret := $spec.credentialsSecret | default "app-secrets" >>
-            <<- $federated := and $awsAccountId $awsBoundaryArn $saIssuer >>
             <<- $deployRoleObs := index (.observed.resources | default dict) "deploy-role" | default dict >>
             <<- $deployRoleArn := dig "resource" "status" "atProvider" "arn" "" $deployRoleObs >>
             <<- $repoObs := index (.observed.resources | default dict) "ecr-repository" | default dict >>
             <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" $repoObs >>
-            <<- /* Once the Job exists, keep rendering it, in the mode it was created with: dropping it from the desired state
-                   makes Crossplane delete it (and, before 2026-10-16, the function with it), and a Job's pod template cannot be
-                   updated in place. Incident 2026-10-16: the federation switch dropped smoke-fn's Job for one reconcile while
-                   its deploy role did not exist yet, and the function, URL and permission were deleted and re-created. */ ->>
+            <<- /* Once the Job exists, keep rendering it: dropping it from the desired state makes Crossplane delete it, and a
+                   Job's pod template cannot be updated in place. Incident 2026-10-16: the federation switch dropped smoke-fn's Job
+                   for one reconcile while its deploy role did not exist yet, and (before v0.3.144) the function, URL and
+                   permission went with it. Nor may it hang on an observed value that can be missing for a reconcile (an informer
+                   resync, an etcd stall: on 2026-10-16 a missing Repository URL deleted both of kiac-dev's Jobs twice). The
+                   repository URL and the role ARN come back from the Job's own spec, which this template wrote; and the Job is
+                   rendered even if that fails too: a wrong spec is an apply error, a missing one is a deletion. A Job created by
+                   the old access-key mode (before v0.3.147) renders as an apply error ("field is immutable"); delete it and the
+                   next reconcile creates a web-identity one. */ ->>
             <<- $jobObs := index (.observed.resources | default dict) "bootstrap-job" | default dict >>
             <<- if $jobObs >>
-            <<- $federated = eq (dig "resource" "spec" "template" "spec" "serviceAccountName" "" $jobObs) "glidepath-cloud-deployer" >>
-            <<- end >>
-            <<- /* The same rule must not hang on the Repository's observed URL either: it can be missing for a reconcile (an
-                   informer resync, an etcd stall), and on 2026-10-16 that dropped and deleted both of kiac-dev's Jobs twice. Take
-                   the URL from the Job's own copy destination ("<repoUrl>:bootstrap", written below), and keep rendering an
-                   existing Job even if that fails too: a wrong spec is an apply error, a missing one is a deletion. */ ->>
-            <<- if and $jobObs (not $repoUrl) >>
             <<- range (dig "resource" "spec" "template" "spec" "containers" list $jobObs) >>
-            <<- if and (eq (.name | default "") "copy-bootstrap-image") .args >>
+            <<- if and (not $repoUrl) (eq (.name | default "") "copy-bootstrap-image") .args >>
             <<- $repoUrl = trimSuffix ":bootstrap" (last .args) >>
             <<- end >>
             <<- end >>
+            <<- range (dig "resource" "spec" "template" "spec" "initContainers" list $jobObs) >>
+            <<- range (.env | default list) >>
+            <<- if and (not $deployRoleArn) (eq (.name | default "") "AWS_ROLE_ARN") >>
+            <<- $deployRoleArn = .value | default "" >>
             <<- end >>
-            <<- if or $jobObs (and $repoUrl (or (not $federated) $deployRoleArn)) >>
+            <<- end >>
+            <<- end >>
+            <<- end >>
+            <<- if or $jobObs (and $repoUrl $deployRoleArn) >>
             <<- $registryHost := index (splitList "/" $repoUrl) 0 >>
             apiVersion: batch/v1
             kind: Job
@@ -140,12 +141,9 @@ spec:
                     hangar.io/target: <<$xrName>>
                 spec:
                   restartPolicy: Never
-                  <<- if $federated >>
                   serviceAccountName: glidepath-cloud-deployer
                   automountServiceAccountToken: false
-                  <<- end >>
                   volumes:
-                    <<- if $federated >>
                     - name: aws-web-identity
                       projected:
                         sources:
@@ -153,31 +151,15 @@ spec:
                               audience: sts.amazonaws.com
                               expirationSeconds: 3600
                               path: token
-                    <<- else >>
-                    - name: aws-credentials
-                      secret:
-                        secretName: <<$credsSecret>>
-                        items:
-                          - key: aws-access-key-id
-                            path: aws-access-key-id
-                          - key: aws-secret-access-key
-                            path: aws-secret-access-key
-                    <<- end >>
                     - name: work
                       emptyDir: {}
                   initContainers:
                     - name: ecr-login
                       image: public.ecr.aws/aws-cli/aws-cli:2.37.9
                       volumeMounts:
-                        <<- if $federated >>
                         - name: aws-web-identity
                           mountPath: /var/run/secrets/aws-web-identity
                           readOnly: true
-                        <<- else >>
-                        - name: aws-credentials
-                          mountPath: /var/run/secrets/aws
-                          readOnly: true
-                        <<- end >>
                         - name: work
                           mountPath: /work
                       env:
@@ -185,7 +167,6 @@ spec:
                           value: <<$region>>
                         - name: REGISTRY_HOST
                           value: <<$registryHost>>
-                        <<- if $federated >>
                         # The AWS CLI exchanges the token for a session itself when these two are set.
                         - name: AWS_ROLE_ARN
                           value: <<$deployRoleArn>>
@@ -193,15 +174,10 @@ spec:
                           value: /var/run/secrets/aws-web-identity/token
                         - name: AWS_ROLE_SESSION_NAME
                           value: <<printf "bootstrap-%s" $xrName | trunc 64>>
-                        <<- end >>
                       command: ["bash", "-c"]
                       args:
                         - |
                           set -euo pipefail
-                          <<- if not $federated >>
-                          export AWS_ACCESS_KEY_ID="$(cat /var/run/secrets/aws/aws-access-key-id)"
-                          export AWS_SECRET_ACCESS_KEY="$(cat /var/run/secrets/aws/aws-secret-access-key)"
-                          <<- end >>
                           TOKEN="$(aws ecr get-login-password)"
                           AUTH="$(printf 'AWS:%s' "${TOKEN}" | base64 -w0)"
                           mkdir -p /work/docker
@@ -238,14 +214,32 @@ spec:
             # else - no other function or repository, no configuration change, no delete. The fleet's permissions boundary
             # caps it again, and the Crossplane identity cannot create it without that boundary.
             #
-            # Rendered only once the registry carries the account, the boundary and the issuer; until then the target keeps
-            # the access-key path (spec.credentialsSecret).
+            # Created only once the registry carries the account, the boundary and the issuer; until then the target creates no
+            # Job either and reports AwsLambdaTargetNeedsWebIdentity (there is no access-key mode since v0.3.147). Once the role
+            # exists it is always rendered: if the registry can't be read for a reconcile, the role is re-declared from its own
+            # observed spec instead of being dropped, which would delete it in AWS (business rule CRED-09).
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $functionName := $spec.functionName | default $xrName >>
             <<- $region := $spec.region | default "us-east-1" >>
-            <<- if and $awsAccountId $awsBoundaryArn $saIssuer >>
+            <<- $deployRoleObs := index (.observed.resources | default dict) "deploy-role" | default dict >>
+            <<- if and $deployRoleObs (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+            <<- $observedForProvider := dig "resource" "spec" "forProvider" dict $deployRoleObs >>
+            apiVersion: iam.aws.m.upbound.io/v1beta1
+            kind: Role
+            metadata:
+              name: <<$xrName>>-deploy
+              annotations:
+                <<setResourceNameAnnotation "deploy-role">>
+                crossplane.io/external-name: <<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "glidepath-deploy-%s" (trunc 47 $functionName)) $deployRoleObs>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                <<- toYaml $observedForProvider | nindent 4 >>
+            <<- else if and $awsAccountId $awsBoundaryArn $saIssuer >>
             <<- $issuerHost := trimPrefix "https://" $saIssuer >>
             <<- $deployRoleName := printf "glidepath-deploy-%s" (trunc 47 $functionName) >>
             <<- $trust := dict "Version" "2012-10-17" "Statement" (list (dict
@@ -379,8 +373,14 @@ spec:
             # The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
             # AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
             # characters, hence the trunc. It carries the fleet's permissions boundary ($awsBoundaryArn, from
-            # 00-cloud-identity.yaml) whenever the cluster registry provides one.
+            # 00-cloud-identity.yaml) whenever the cluster registry provides one, and keeps the one it has if the registry can't
+            # be read for a reconcile: omitting the field would ask the provider to remove the boundary, which the Crossplane
+            # identity's policy refuses (an error loop, and a weaker role if it ever succeeded).
             <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $boundary := $awsBoundaryArn >>
+            <<- if not $boundary >>
+            <<- $boundary = dig "resource" "spec" "forProvider" "permissionsBoundary" "" (index (.observed.resources | default dict) "iam-role" | default dict) >>
+            <<- end >>
             <<- $spec := .observed.composite.resource.spec >>
             <<- $functionName := $spec.functionName | default $xrName >>
             apiVersion: iam.aws.m.upbound.io/v1beta1
@@ -398,8 +398,8 @@ spec:
                 description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
                 assumeRolePolicy: |
                   {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
-                <<- if $awsBoundaryArn >>
-                permissionsBoundary: <<$awsBoundaryArn | quote>>
+                <<- if $boundary >>
+                permissionsBoundary: <<$boundary | quote>>
                 <<- end >>
                 tags:
                   hangar.io/target: <<$xrName>>
@@ -487,6 +487,45 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL (compositions/_shared/render-target-resources/00-cloud-identity.yaml): the cloud-target compositions'
+            # templates/render-target-resources/00-cloud-identity.yaml are symlinks to this file. Edit here, run
+            # tools/build-compositions, then tools/test_compositions.py and review every affected composition's expected/ diff.
+            #
+            # Reads the fleet's AWS facts from the cluster registry (charts/cluster-registry, the hub's clusters.yaml): the
+            # record of the control-plane cluster (type: dev), which is where these XRs, their Crossplane providers and the
+            # Glidepath pipelines that deploy into them run. A cloud-target XR does not know its cluster's name, hence a label
+            # selector and a filter rather than matchName.
+            #
+            #   $awsBoundaryArn  aws.permissionsBoundaryPolicy as an ARN. Every IAM role these compositions create carries it,
+            #                    because the Crossplane identity's policy (HangarCrossplaneCloudTargets) refuses to create a role,
+            #                    or grant one anything, without it (docs/admin/cloud-credentials.md).
+            #   $awsAccountId    aws.accountId.
+            #   $saIssuer        the control-plane cluster's public ServiceAccount issuer (serviceAccountIssuer), or "".
+            #
+            # All three are "" until the registry carries them, and the templates then render what they did before (no
+            # boundary). The cloud account's policy, not this template, is what enforces the boundary.
+            <<- $registryItems := index (.extraResources | default dict) "cluster-registry" | default dict >>
+            <<- $awsBoundaryArn := "" >>
+            <<- $awsAccountId := "" >>
+            <<- $saIssuer := "" >>
+            <<- range (index $registryItems "items" | default list) >>
+              <<- $data := .resource.data | default dict >>
+              <<- if eq (index $data "type" | default "") "dev" >>
+                <<- $awsBoundaryArn = index $data "awsPermissionsBoundaryArn" | default "" >>
+                <<- $awsAccountId = index $data "awsAccountId" | default "" >>
+                <<- $saIssuer = index $data "serviceAccountIssuer" | default "" >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              cluster-registry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchLabels:
+                  hangar.io/cluster-registry: "true"
+            ---
             # TargetReady (a closed reason set, see xrds/awslambdatarget.meta.yaml) plus the XR's own status
             # fields: everything an app or an agent needs to point a cicd.yaml at this target, including the
             # deploy block itself as text (status.cicd), without reading AWS. The composite document below
@@ -504,6 +543,7 @@ spec:
             <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" (index $obs "ecr-repository" | default dict) >>
             <<- $roleArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "iam-role" | default dict) >>
             <<- $jobObs := index $obs "bootstrap-job" | default dict >>
+            <<- $deployRoleObs := index $obs "deploy-role" | default dict >>
             <<- $jobSucceeded := int (dig "resource" "status" "succeeded" 0 $jobObs) >>
             <<- $jobFailed := int (dig "resource" "status" "failed" 0 $jobObs) >>
             <<- $fnObs := index $obs "lambda-function" | default dict >>
@@ -521,7 +561,10 @@ spec:
               <<- $message = printf "Lambda function %s exists in %s with an ECR image; Glidepath can deploy to it (status.cicd has the deploy block)." $functionName $region >>
             <<- else if and $jobObs (ge $jobFailed 1) (lt $jobSucceeded 1) >>
               <<- $reason = "AwsLambdaTargetBootstrapFailed" >>
-              <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (credentials in the %s Secret, network egress); delete the Job to retry." $xrName $repoUrl ($spec.credentialsSecret | default "app-secrets") >>
+              <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (the deploy role's trust of glidepath-cloud-deployer in this namespace, network egress); delete the Job to retry." $xrName $repoUrl >>
+            <<- else if and (not $jobObs) (not $deployRoleObs) (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+              <<- $reason = "AwsLambdaTargetNeedsWebIdentity" >>
+              <<- $message = "This cluster has no web identity for AWS: its clusters.yaml entry needs aws.accountId, aws.permissionsBoundaryPolicy and serviceAccountIssuer (Airframe docs/admin/cloud-credentials.md). The function is created only through its deploy role; there is no access-key mode." >>
             <<- else if $repoUrl >>
               <<- $reason = "AwsLambdaTargetBootstrapping" >>
               <<- $message = printf "Copying the placeholder image into %s (Job %s-ecr-bootstrap); the function is created once that succeeds." $repoUrl $xrName >>

@@ -15,6 +15,7 @@
 <<- $repoUrl := dig "resource" "status" "atProvider" "repositoryUrl" "" (index $obs "ecr-repository" | default dict) >>
 <<- $roleArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "iam-role" | default dict) >>
 <<- $jobObs := index $obs "bootstrap-job" | default dict >>
+<<- $deployRoleObs := index $obs "deploy-role" | default dict >>
 <<- $jobSucceeded := int (dig "resource" "status" "succeeded" 0 $jobObs) >>
 <<- $jobFailed := int (dig "resource" "status" "failed" 0 $jobObs) >>
 <<- $fnObs := index $obs "lambda-function" | default dict >>
@@ -32,7 +33,10 @@
   <<- $message = printf "Lambda function %s exists in %s with an ECR image; Glidepath can deploy to it (status.cicd has the deploy block)." $functionName $region >>
 <<- else if and $jobObs (ge $jobFailed 1) (lt $jobSucceeded 1) >>
   <<- $reason = "AwsLambdaTargetBootstrapFailed" >>
-  <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (credentials in the %s Secret, network egress); delete the Job to retry." $xrName $repoUrl ($spec.credentialsSecret | default "app-secrets") >>
+  <<- $message = printf "The bootstrap Job %s-ecr-bootstrap failed to copy the placeholder image into %s - check its pod logs (the deploy role's trust of glidepath-cloud-deployer in this namespace, network egress); delete the Job to retry." $xrName $repoUrl >>
+<<- else if and (not $jobObs) (not $deployRoleObs) (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+  <<- $reason = "AwsLambdaTargetNeedsWebIdentity" >>
+  <<- $message = "This cluster has no web identity for AWS: its clusters.yaml entry needs aws.accountId, aws.permissionsBoundaryPolicy and serviceAccountIssuer (Airframe docs/admin/cloud-credentials.md). The function is created only through its deploy role; there is no access-key mode." >>
 <<- else if $repoUrl >>
   <<- $reason = "AwsLambdaTargetBootstrapping" >>
   <<- $message = printf "Copying the placeholder image into %s (Job %s-ecr-bootstrap); the function is created once that succeeds." $repoUrl $xrName >>

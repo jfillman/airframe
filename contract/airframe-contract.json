@@ -2475,8 +2475,13 @@
               "status": "False"
             },
             {
-              "meaning": "The bootstrap Job failed (bad credentials in the credentialsSecret, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.",
+              "meaning": "The bootstrap Job failed (the deploy role does not trust this namespace's glidepath-cloud-deployer, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.",
               "reason": "AwsLambdaTargetBootstrapFailed",
+              "status": "False"
+            },
+            {
+              "meaning": "The cluster has no web identity for AWS (its clusters.yaml entry lacks aws.accountId, aws.permissionsBoundaryPolicy or serviceAccountIssuer), so no deploy role or bootstrap Job is created. There is no access-key mode; add the three fields.",
+              "reason": "AwsLambdaTargetNeedsWebIdentity",
               "status": "False"
             }
           ],
@@ -2619,8 +2624,8 @@
     "AwsLambdaTarget": {
       "agentSummary": "Stand up the AWS infrastructure a container-image Lambda function deploys into (ECR repository, execution role, function, public URL) - disposable, for a LambdaFunction app's deploy.target: aws-lambda.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 9,
-      "fieldsTotal": 9,
+      "fieldsDescribed": 8,
+      "fieldsTotal": 8,
       "file": "awslambdatarget.yaml",
       "group": "catalog.hangar.io",
       "plural": "awslambdatargets"

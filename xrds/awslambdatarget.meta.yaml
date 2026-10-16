@@ -24,7 +24,10 @@ conditions:
         meaning: The bootstrap Job is copying the placeholder image into the repository (or waiting for the credentials Secret to exist - its pod stays Pending until then); the function is rendered once it succeeds.
       - reason: AwsLambdaTargetBootstrapFailed
         status: "False"
-        meaning: The bootstrap Job failed (bad credentials in the credentialsSecret, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.
+        meaning: The bootstrap Job failed (the deploy role does not trust this namespace's glidepath-cloud-deployer, no network, or the placeholder image could not be copied). Check the Job's pod logs in this namespace; delete the Job to retry.
+      - reason: AwsLambdaTargetNeedsWebIdentity
+        status: "False"
+        meaning: The cluster has no web identity for AWS (its clusters.yaml entry lacks aws.accountId, aws.permissionsBoundaryPolicy or serviceAccountIssuer), so no deploy role or bootstrap Job is created. There is no access-key mode; add the three fields.
 verify:
   - id: xr-ready
     check: The AwsLambdaTarget XR's TargetReady condition has reason AwsLambdaTargetReady.

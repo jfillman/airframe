@@ -1,8 +1,14 @@
 # The function's execution role: trusted by lambda.amazonaws.com, with AWS's own
 # AWSLambdaBasicExecutionRole (CloudWatch Logs) and nothing else. IAM role names are capped at 64
 # characters, hence the trunc. It carries the fleet's permissions boundary ($awsBoundaryArn, from
-# 00-cloud-identity.yaml) whenever the cluster registry provides one.
+# 00-cloud-identity.yaml) whenever the cluster registry provides one, and keeps the one it has if the registry can't
+# be read for a reconcile: omitting the field would ask the provider to remove the boundary, which the Crossplane
+# identity's policy refuses (an error loop, and a weaker role if it ever succeeded).
 <<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $boundary := $awsBoundaryArn >>
+<<- if not $boundary >>
+<<- $boundary = dig "resource" "spec" "forProvider" "permissionsBoundary" "" (index (.observed.resources | default dict) "iam-role" | default dict) >>
+<<- end >>
 <<- $spec := .observed.composite.resource.spec >>
 <<- $functionName := $spec.functionName | default $xrName >>
 apiVersion: iam.aws.m.upbound.io/v1beta1
@@ -20,8 +26,8 @@ spec:
     description: <<printf "Execution role for the %s Lambda function (Airframe AwsLambdaTarget %s)" $functionName $xrName | toJson>>
     assumeRolePolicy: |
       {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"lambda.amazonaws.com"},"Action":"sts:AssumeRole"}]}
-    <<- if $awsBoundaryArn >>
-    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    <<- if $boundary >>
+    permissionsBoundary: <<$boundary | quote>>
     <<- end >>
     tags:
       hangar.io/target: <<$xrName>>

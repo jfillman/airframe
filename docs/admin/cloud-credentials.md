@@ -51,7 +51,8 @@ The region is a hard boundary: ECR and Lambda through the resource ARN, ECS and 
 ```bash
 export AWS_PAGER=""
 REGION=us-east-1
-ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)   # the account the role and the targets live in
+CLUSTER=kiac-dev
 
 cat > hangar-crossplane-policy.json <<EOF
 {
@@ -208,8 +209,7 @@ the discovery document and keys are published under hangar's `web/public/oidc/<c
 (`gitops-cluster-dev/00-bootstrap/cluster-identity/README.md` has kiac-dev's). With that in place:
 
 ```bash
-CLUSTER=kiac-dev
-ISSUER=hangarplatform.dev/oidc/${CLUSTER}
+ISSUER=hangarplatform.dev/oidc/${CLUSTER}     # CLUSTER and ACCOUNT from the policy step
 
 aws iam create-open-id-connect-provider --url "https://${ISSUER}" --client-id-list sts.amazonaws.com
 

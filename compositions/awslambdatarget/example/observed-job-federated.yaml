@@ -1,0 +1,20 @@
+# A finished federated bootstrap Job as it is stored, with the pod template this composition rendered (trimmed to what
+# the composition reads back: the ServiceAccount and the copy destination).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: smoke-fn-ecr-bootstrap
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: bootstrap-job
+spec:
+  template:
+    spec:
+      serviceAccountName: glidepath-cloud-deployer
+      containers:
+        - name: copy-bootstrap-image
+          args: ["copy", "--platform", "linux/arm64", "public.ecr.aws/lambda/nodejs:22", "158233516926.dkr.ecr.us-east-1.amazonaws.com/glidepath-smoke-fn:bootstrap"]
+status:
+  succeeded: 1
+  conditions:
+    - {type: Complete, status: "True"}

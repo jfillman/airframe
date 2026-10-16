@@ -1,0 +1,10 @@
+# The Repository as Crossplane can observe it for one reconcile after an informer resync or an etcd stall: present,
+# but without status.atProvider (incident 2026-10-16, second form).
+apiVersion: ecr.aws.m.upbound.io/v1beta1
+kind: Repository
+metadata:
+  name: smoke-fn-repository
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: ecr-repository
+    crossplane.io/external-name: glidepath-smoke-fn

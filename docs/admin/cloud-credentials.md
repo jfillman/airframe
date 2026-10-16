@@ -101,6 +101,15 @@ Function URL. v0.3.144 (#90) keeps every resource that already exists in the des
 When you add a condition to a composition, ask whether it decides **creation** or **presence**. Only the first is
 safe to gate.
 
+The same afternoon showed the rule covers inputs as well as conditions. v0.3.144 still rendered an existing Job only
+while the Repository's observed URL was present, and for one reconcile it wasn't (an etcd stall on kiac-dev):
+both targets' finished Jobs were deleted and re-run, twice. Nothing broke, because the function no longer hangs on
+the Job, but a composition that needs an observed value to *render* something that already exists must recover it
+(the Job's own copy destination, here) or render it anyway: a wrong spec is an apply error, a missing one is a
+deletion. v0.3.145 does both; the `repository-url-missing-keeps-job` render case holds it. One more detail: a Job
+that Crossplane deletes is deleted with orphan propagation (the API default for Jobs), so the garbage collector must
+be able to remove its `orphan` finalizer; an admission policy on Job updates has to allow that.
+
 ## AWS: `hangar-crossplane` (Crossplane)
 
 **Created by:** an account administrator, once per AWS account and cluster: an IAM OIDC provider for

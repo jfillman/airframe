@@ -172,8 +172,8 @@ places to configure them, matching the two tiers:
   *(Apps onboarded before 2026-10-03 have neither and need the manual steps in section 06.)*
 - **Flight** — you use Tower's **App Configuration** tab (section 07). That tab
   edits `gitops-<app>/<cluster>/<env>/values.yaml` through pull requests, and it
-  only lists **flight** environments — the ones your `cicd.yaml` declares under
-  `deploy.upperEnvironments`. It can't see a ground env, and it can't see a flight
+  only lists **flight** environments — the `tier: flight` entries your `cicd.yaml` declares
+  under `deploy.environments`. It can't see a ground env, and it can't see a flight
   env until `cicd.yaml` declares it.
 
 ## 06 — Ground: a running environment on the dev cluster
@@ -183,7 +183,7 @@ pipeline stage that puts an image in it.
 
 **Step 1 — declare the environment.** New apps already have this file: the
 onboarding PR adds `platform/envs/dev.yaml` (plus `platform/base.yaml` and
-`platform/pr-env.yaml`) for every environment in `deploy.lowerEnvironments`. For an app
+`platform/pr-env.yaml`) for every `tier: ground` entry in `deploy.environments`. For an app
 onboarded earlier, create `platform/envs/dev.yaml` in the `boarding-api` repo:
 
 ```yaml
@@ -215,7 +215,8 @@ build:
     enabled: true         # runs ./test.sh, which the code you copied in provides
 
 deploy:
-  lowerEnvironments: [dev]
+  environments:
+    - { name: dev, tier: ground }
 
 pipelines:
   ci:
@@ -279,13 +280,13 @@ To change ground settings (replicas, ports, probes, resources), edit
 
 Add the flight env and a `release` stage. The `release` stage is what supplies
 the image to a flight env, and Tower's App Configuration tab builds its
-environment list from this `upperEnvironments` block:
+environment list from the `tier: flight` entries here:
 
 ```yaml
 deploy:
-  lowerEnvironments: [dev]
-  upperEnvironments:
-    - { name: staging, cluster: prod }
+  environments:             # promotion order (ADR-0019)
+    - { name: dev, tier: ground }
+    - { name: staging, tier: flight, cluster: prod }
 
 governance:
   allowedCommitSigners:
@@ -497,8 +498,8 @@ the chart's own values, but no canary has been run with this app yet.
   builds and deploys to `dev` (the scaffold has both `platform/envs/dev.yaml` and a
   `deploy` stage). Flight needs an `ApplicationEnvironment`, App Configuration, and a
   `release` stage.
-- **App Configuration is flight-only**, and only lists envs declared in
-  `deploy.upperEnvironments`.
+- **App Configuration is flight-only**, and only lists `tier: flight` envs declared in
+  `deploy.environments`.
 - **`envName`, never `env`**, as the environment's name key in
   `platform/envs/*.yaml`.
 - **No `rollout:` key means a service** (the chart default, rendered once a release sets

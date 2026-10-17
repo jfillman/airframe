@@ -191,12 +191,10 @@ spec:
                     azureContainerApps:
                       resourceGroup: <<$resourceGroup>>
                       appName: <<$appName>>
-                    lowerEnvironments:
-                      - dev
-                    upperEnvironments: []
                     strategy: rollout
-                    promotionOrder:
-                      - dev
+                    environments:          # promotion order; ground = this cluster, flight = upper clusters (ADR-0019)
+                      - name: dev
+                        tier: ground
 
                   secrets:
                     - name: azure-client-id

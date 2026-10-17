@@ -78,10 +78,10 @@ resources:
         \  unitTest:\n    enabled: false # no test script exists yet - add one, then flip this on\n\npipelines:\n  ci:\n \
         \   trigger:\n      source: git\n      event: push\n      branch: main\n    steps:\n      - stage: build\n      -\
         \ stage: deploy\n        env: dev\ndeploy:\n  target: azure-container-apps\n  azureContainerApps:\n    resourceGroup:\
-        \ glidepath-thumb-fn-rg\n    appName: thumb-fn\n  lowerEnvironments:\n    - dev\n  upperEnvironments: []\n  strategy:\
-        \ rollout\n  promotionOrder:\n    - dev\n\nsecrets:\n  - name: azure-client-id\n  - name: azure-client-secret\n  -\
-        \ name: azure-tenant-id\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in Backstage\
-        \ and Tower\n"
+        \ glidepath-thumb-fn-rg\n    appName: thumb-fn\n  strategy: rollout\n  environments:          # promotion order; ground\
+        \ = this cluster, flight = upper clusters (ADR-0019)\n    - name: dev\n      tier: ground\n\nsecrets:\n  - name: azure-client-id\n\
+        \  - name: azure-client-secret\n  - name: azure-tenant-id\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy\
+        \ results show in Backstage and Tower\n"
       file: cicd.yaml
       overwriteOnCreate: true
       repository: thumb-fn

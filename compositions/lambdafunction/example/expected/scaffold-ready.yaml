@@ -67,10 +67,11 @@ resources:
         \ just run under emulation for nothing.\n  platforms:\n    - arm64\n  unitTest:\n    enabled: false # no test script\
         \ exists yet - add one, then flip this on\n\npipelines:\n  ci:\n    trigger:\n      source: git\n      event: push\n\
         \      branch: main\n    steps:\n      - stage: build\n      - stage: deploy\n        env: dev\ndeploy:\n  target:\
-        \ aws-lambda\n  lambda:\n    functionName: resize-fn\n    region: us-east-1\n  lowerEnvironments:\n    - dev\n  upperEnvironments:\
-        \ []\n  strategy: rollout\n  promotionOrder:\n    - dev\n\n# No secrets: the deploy reaches AWS through this function's\
-        \ own IAM role, assumed with a one-hour token\n# (Glidepath docs/admin/cloud-deploy-identity.md). There is no AWS\
-        \ key to store.\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in Backstage and Tower\n"
+        \ aws-lambda\n  lambda:\n    functionName: resize-fn\n    region: us-east-1\n  strategy: rollout\n  environments:\
+        \          # promotion order; ground = this cluster, flight = upper clusters (ADR-0019)\n    - name: dev\n      tier:\
+        \ ground\n\n# No secrets: the deploy reaches AWS through this function's own IAM role, assumed with a one-hour token\n\
+        # (Glidepath docs/admin/cloud-deploy-identity.md). There is no AWS key to store.\n\nnotifications:\n  backstage:\n\
+        \    enabled: true # build/deploy results show in Backstage and Tower\n"
       file: cicd.yaml
       overwriteOnCreate: true
       repository: resize-fn

@@ -18,7 +18,7 @@ metadata:
   name: <<$xrName>>-cluster
   annotations:
     <<setResourceNameAnnotation "ecs-cluster">>
-    crossplane.io/external-name: <<$appName>>
+    crossplane.io/external-name: <<$clusterName>>
 spec:
   providerConfigRef:
     kind: ClusterProviderConfig

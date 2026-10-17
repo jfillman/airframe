@@ -1587,7 +1587,7 @@
                       "properties": {
                         "appName": {
                           "type": "string",
-                          "description": "The app this target serves. Defaults to this XR's own name. Names everything: the ECS cluster (<appName>), the service and task-definition family (<appName>-<env>, Glidepath's own default family name) and the container (<appName>, the deploy.ecs.containerName the app's cicd.yaml must carry).",
+                          "description": "The app this target serves. Defaults to this XR's own name. Names everything: the ECS cluster, the service and task-definition family (all <appName>-<env>, Glidepath's own default family name) and the container (<appName>, the deploy.ecs.containerName the app's cicd.yaml must carry). One target per environment: a second target of the same app (env: prod) gets its own cluster, service, network, ECR repository and deploy role. A target created before 2026-10-17 keeps its cluster named <appName>.",
                           "pattern": "^[a-z][a-z0-9-]{0,30}$"
                         },
                         "env": {
@@ -2108,6 +2108,42 @@
                           ],
                           "default": "1.23"
                         },
+                        "deployTarget": {
+                          "type": "string",
+                          "description": "Where this app deploys, chosen once at creation. kubernetes (default): an Argo Rollout on this platform's clusters, with a Ground dev environment on the dev cluster. aws-ecs: an AWS ECS Fargate service; the app composes an AwsEcsTarget for dev (cluster and service <name>-dev, its ECR repository and deploy role) and its cicd.yaml deploys dev there, with no AWS key. The cluster registry must name the AWS account (web identity). Can't be changed later: delete and re-create the app instead.",
+                          "enum": [
+                            "kubernetes",
+                            "aws-ecs"
+                          ],
+                          "default": "kubernetes",
+                          "x-kubernetes-validations": [
+                            {
+                              "rule": "self == oldSelf",
+                              "message": "deployTarget can't change after creation; delete and re-create the app to deploy elsewhere"
+                            }
+                          ]
+                        },
+                        "ecs": {
+                          "type": "object",
+                          "description": "Settings for deployTarget aws-ecs; ignored otherwise.",
+                          "properties": {
+                            "region": {
+                              "type": "string",
+                              "description": "AWS region of the ECS service and its ECR repository.",
+                              "default": "us-east-1"
+                            },
+                            "architecture": {
+                              "type": "string",
+                              "description": "The Fargate task's CPU architecture; the build produces only this one. arm64 builds natively on the dev cluster (Go amd64 builds crash there, Glidepath known gap 37).",
+                              "enum": [
+                                "arm64",
+                                "x86_64"
+                              ],
+                              "default": "arm64"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "port": {
                           "type": "integer",
                           "description": "Port the boilerplate HTTP server listens on (also the Containerfile's EXPOSE). Matches airframe-application's own rollout.ports default convention.",
@@ -2356,6 +2392,42 @@
                           ],
                           "default": "npm"
                         },
+                        "deployTarget": {
+                          "type": "string",
+                          "description": "Where this app deploys, chosen once at creation. kubernetes (default): an Argo Rollout on this platform's clusters, with a Ground dev environment on the dev cluster. aws-ecs: an AWS ECS Fargate service; the app composes an AwsEcsTarget for dev (cluster and service <name>-dev, its ECR repository and deploy role) and its cicd.yaml deploys dev there, with no AWS key. The cluster registry must name the AWS account (web identity). Can't be changed later: delete and re-create the app instead.",
+                          "enum": [
+                            "kubernetes",
+                            "aws-ecs"
+                          ],
+                          "default": "kubernetes",
+                          "x-kubernetes-validations": [
+                            {
+                              "rule": "self == oldSelf",
+                              "message": "deployTarget can't change after creation; delete and re-create the app to deploy elsewhere"
+                            }
+                          ]
+                        },
+                        "ecs": {
+                          "type": "object",
+                          "description": "Settings for deployTarget aws-ecs; ignored otherwise.",
+                          "properties": {
+                            "region": {
+                              "type": "string",
+                              "description": "AWS region of the ECS service and its ECR repository.",
+                              "default": "us-east-1"
+                            },
+                            "architecture": {
+                              "type": "string",
+                              "description": "The Fargate task's CPU architecture; the build produces only this one. arm64 builds natively on the dev cluster (Go amd64 builds crash there, Glidepath known gap 37).",
+                              "enum": [
+                                "arm64",
+                                "x86_64"
+                              ],
+                              "default": "arm64"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
                         "port": {
                           "type": "integer",
                           "description": "Port the boilerplate HTTP server listens on (also exposed as package.json's start script and Containerfile's EXPOSE). Matches airframe-application's own rollout.ports default convention.",
@@ -2485,6 +2557,42 @@
                             "uv"
                           ],
                           "default": "pip"
+                        },
+                        "deployTarget": {
+                          "type": "string",
+                          "description": "Where this app deploys, chosen once at creation. kubernetes (default): an Argo Rollout on this platform's clusters, with a Ground dev environment on the dev cluster. aws-ecs: an AWS ECS Fargate service; the app composes an AwsEcsTarget for dev (cluster and service <name>-dev, its ECR repository and deploy role) and its cicd.yaml deploys dev there, with no AWS key. The cluster registry must name the AWS account (web identity). Can't be changed later: delete and re-create the app instead.",
+                          "enum": [
+                            "kubernetes",
+                            "aws-ecs"
+                          ],
+                          "default": "kubernetes",
+                          "x-kubernetes-validations": [
+                            {
+                              "rule": "self == oldSelf",
+                              "message": "deployTarget can't change after creation; delete and re-create the app to deploy elsewhere"
+                            }
+                          ]
+                        },
+                        "ecs": {
+                          "type": "object",
+                          "description": "Settings for deployTarget aws-ecs; ignored otherwise.",
+                          "properties": {
+                            "region": {
+                              "type": "string",
+                              "description": "AWS region of the ECS service and its ECR repository.",
+                              "default": "us-east-1"
+                            },
+                            "architecture": {
+                              "type": "string",
+                              "description": "The Fargate task's CPU architecture; the build produces only this one. arm64 builds natively on the dev cluster (Go amd64 builds crash there, Glidepath known gap 37).",
+                              "enum": [
+                                "arm64",
+                                "x86_64"
+                              ],
+                              "default": "arm64"
+                            }
+                          },
+                          "additionalProperties": false
                         },
                         "port": {
                           "type": "integer",
@@ -2925,6 +3033,42 @@
                           "description": "Maven groupId / Gradle group - also this app's single Java package (see this XRD's own header for why it's one flat package, not groupId+artifactId nested). Lowercase, dot-separated Java package name.",
                           "pattern": "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)*$",
                           "default": "io.idp.apps"
+                        },
+                        "deployTarget": {
+                          "type": "string",
+                          "description": "Where this app deploys, chosen once at creation. kubernetes (default): an Argo Rollout on this platform's clusters, with a Ground dev environment on the dev cluster. aws-ecs: an AWS ECS Fargate service; the app composes an AwsEcsTarget for dev (cluster and service <name>-dev, its ECR repository and deploy role) and its cicd.yaml deploys dev there, with no AWS key. The cluster registry must name the AWS account (web identity). Can't be changed later: delete and re-create the app instead.",
+                          "enum": [
+                            "kubernetes",
+                            "aws-ecs"
+                          ],
+                          "default": "kubernetes",
+                          "x-kubernetes-validations": [
+                            {
+                              "rule": "self == oldSelf",
+                              "message": "deployTarget can't change after creation; delete and re-create the app to deploy elsewhere"
+                            }
+                          ]
+                        },
+                        "ecs": {
+                          "type": "object",
+                          "description": "Settings for deployTarget aws-ecs; ignored otherwise.",
+                          "properties": {
+                            "region": {
+                              "type": "string",
+                              "description": "AWS region of the ECS service and its ECR repository.",
+                              "default": "us-east-1"
+                            },
+                            "architecture": {
+                              "type": "string",
+                              "description": "The Fargate task's CPU architecture; the build produces only this one. arm64 builds natively on the dev cluster (Go amd64 builds crash there, Glidepath known gap 37).",
+                              "enum": [
+                                "arm64",
+                                "x86_64"
+                              ],
+                              "default": "arm64"
+                            }
+                          },
+                          "additionalProperties": false
                         },
                         "port": {
                           "type": "integer",

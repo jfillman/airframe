@@ -1,0 +1,6 @@
+# A target created before 2026-10-17, when the cluster was named <appName> (smoke-ecs's dev target): its cluster keeps
+# that name. Renaming it would create a second cluster and orphan the service.
+apiVersion: ecs.aws.m.upbound.io/v1beta1
+kind: Cluster
+metadata: {name: smoke-ecs-cluster, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: ecs-cluster, crossplane.io/external-name: smoke-ecs}}
+status: {conditions: [{type: Ready, status: "True"}]}

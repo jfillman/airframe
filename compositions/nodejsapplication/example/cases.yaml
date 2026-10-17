@@ -49,3 +49,8 @@ cases:
         - src-repo-index-js
         - src-repo-package-json
         - src-repo-readme
+# deployTarget aws-ecs: the AwsEcsTarget child is composed and the scaffolded cicd.yaml deploys dev to ECS.
+- name: aws-ecs
+  xr: xr-aws-ecs.yaml
+  expect:
+    present: [aws-ecs-target-dev, src-repo-cicd-yaml]

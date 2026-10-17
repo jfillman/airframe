@@ -155,6 +155,36 @@ spec:
                     boilerplate README and Containerfile reference.
                   enum: [npm, pnpm, yarn]
                   default: npm
+                deployTarget:
+                  type: string
+                  description: >-
+                    Where this app deploys, chosen once at creation. kubernetes (default): an Argo Rollout on
+                    this platform's clusters, with a Ground dev environment on the dev cluster. aws-ecs: an AWS
+                    ECS Fargate service; the app composes an AwsEcsTarget for dev (cluster and service
+                    <name>-dev, its ECR repository and deploy role) and its cicd.yaml deploys dev there, with no
+                    AWS key. The cluster registry must name the AWS account (web identity). Can't be changed
+                    later: delete and re-create the app instead.
+                  enum: ["kubernetes", "aws-ecs"]
+                  default: kubernetes
+                  x-kubernetes-validations:
+                    - rule: "self == oldSelf"
+                      message: "deployTarget can't change after creation; delete and re-create the app to deploy elsewhere"
+                ecs:
+                  type: object
+                  description: >-
+                    Settings for deployTarget aws-ecs; ignored otherwise.
+                  properties:
+                    region:
+                      type: string
+                      description: AWS region of the ECS service and its ECR repository.
+                      default: us-east-1
+                    architecture:
+                      type: string
+                      description: >-
+                        The Fargate task's CPU architecture; the build produces only this one. arm64 builds
+                        natively on the dev cluster (Go amd64 builds crash there, Glidepath known gap 37).
+                      enum: ["arm64", "x86_64"]
+                      default: arm64
                 port:
                   type: integer
                   description: >-

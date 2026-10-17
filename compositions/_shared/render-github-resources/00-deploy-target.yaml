@@ -1,0 +1,16 @@
+# SHARED PARTIAL (compositions/_shared/render-github-resources/00-deploy-target.yaml): the app compositions'
+# templates/render-github-resources/00-deploy-target.yaml (goapplication, nodejsapplication, pythonapplication,
+# springbootapplication) are symlinks to this file. Variables only; no output.
+#
+# Where the app deploys, chosen when it is created (spec.deployTarget, 2026-10-17): kubernetes (the default, an
+# Argo Rollout on this platform's clusters) or aws-ecs (an ECS Fargate service, on its own cluster <app>-dev). With aws-ecs the app composes an
+# AwsEcsTarget for dev (ecs-target-child.yaml) and its scaffolded cicd.yaml already deploys dev there, so there is no
+# Kubernetes dev environment to delete and no cloud environment to add by hand (found setting up smoke-ecs). The XRD
+# makes the field immutable: a target change is a delete and re-create.
+<<- $deployTarget := .observed.composite.resource.spec.deployTarget | default "kubernetes" >>
+<<- $ecsSpec := .observed.composite.resource.spec.ecs | default dict >>
+<<- $ecsRegion := $ecsSpec.region | default "us-east-1" >>
+<<- $ecsArch := $ecsSpec.architecture | default "arm64" >>
+<<- $ecsPlatform := "arm64" >>
+<<- if eq $ecsArch "x86_64" >><<- $ecsPlatform = "amd64" >><<- end >>
+<<- $appPort := .observed.composite.resource.spec.port | default 8080 >>

@@ -2665,8 +2665,8 @@
     "GoApplication": {
       "agentSummary": "Onboard a new Go service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 6,
-      "fieldsTotal": 6,
+      "fieldsDescribed": 10,
+      "fieldsTotal": 10,
       "file": "goapplication.yaml",
       "group": "catalog.hangar.io",
       "plural": "goapplications"
@@ -2701,8 +2701,8 @@
     "NodeJSApplication": {
       "agentSummary": "Onboard a new Node.js service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 9,
-      "fieldsTotal": 9,
+      "fieldsDescribed": 13,
+      "fieldsTotal": 13,
       "file": "nodejsapplication.yaml",
       "group": "catalog.hangar.io",
       "plural": "nodejsapplications"
@@ -2719,8 +2719,8 @@
     "PythonApplication": {
       "agentSummary": "Onboard a new Python service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 7,
-      "fieldsTotal": 7,
+      "fieldsDescribed": 11,
+      "fieldsTotal": 11,
       "file": "pythonapplication.yaml",
       "group": "catalog.hangar.io",
       "plural": "pythonapplications"
@@ -2773,8 +2773,8 @@
     "SpringBootApplication": {
       "agentSummary": "Onboard a new Java/Spring Boot service - creates its source repo (with boilerplate) and an empty GitOps deploy repo, then wires up CI/CD.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 8,
-      "fieldsTotal": 8,
+      "fieldsDescribed": 12,
+      "fieldsTotal": 12,
       "file": "springbootapplication.yaml",
       "group": "catalog.hangar.io",
       "plural": "springbootapplications"

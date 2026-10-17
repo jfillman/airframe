@@ -45,6 +45,9 @@ spec:
 
       build:
         agent: <<printf "python-%s" $pythonVersion>>
+        <<- if eq $deployTarget "aws-ecs" >>
+        platforms: [<<$ecsPlatform>>]   # only the ECS task's architecture (spec.ecs.architecture)
+        <<- end >>
         unitTest:
           enabled: false # no test script exists yet - add one, then flip this on
 
@@ -59,10 +62,20 @@ spec:
             - stage: deploy
               env: dev
       deploy:
+        <<- if eq $deployTarget "aws-ecs" >>
+        target: aws-ecs        # chosen at creation (spec.deployTarget); every environment deploys to ECS
+        <<- end >>
         strategy: rollout
         environments:          # promotion order; ground = this cluster, flight = upper clusters (ADR-0019)
           - name: dev
             tier: ground
+        <<- if eq $deployTarget "aws-ecs" >>
+            ecs:               # the AwsEcsTarget <<$xrName>>-dev this app composes (its status.cicd)
+              cluster: <<printf "%s-dev" $xrName>>
+              service: <<printf "%s-dev" $xrName>>
+              containerName: <<$xrName>>
+              region: <<$ecsRegion>>
+        <<- end >>
 
       notifications:
         backstage:

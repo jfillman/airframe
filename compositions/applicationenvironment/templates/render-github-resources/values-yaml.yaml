@@ -88,7 +88,9 @@ spec:
   forProvider:
     repository: <<$gitopsRepo>>
     file: <<printf "%s/%s/values.yaml" $cluster $env>>
-    overwriteOnCreate: true
+    # false: Create against an existing file refuses instead of overwriting it. An XR
+    # recreate (empty scaffold ledger) adopts the file through the pinned external-name.
+    overwriteOnCreate: false
     content: |
       appName: <<$appName>>
       appType: <<$appType>>

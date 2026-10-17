@@ -40,7 +40,9 @@ spec:
   forProvider:
     repository: <<$xrName>>
     file: cicd.yaml
-    overwriteOnCreate: true
+    # false: Create against an existing file refuses instead of overwriting it. An XR
+    # recreate (empty scaffold ledger) adopts the file through the pinned external-name.
+    overwriteOnCreate: false
     content: |
       apiVersion: platform/v1
       kind: PipelineConfig

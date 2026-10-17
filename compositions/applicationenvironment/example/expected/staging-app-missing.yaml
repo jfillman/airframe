@@ -124,7 +124,7 @@ resources:
 
         '
       file: kind-prod/staging/values.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: gitops-widget-service
     managementPolicies:
     - Create

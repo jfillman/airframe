@@ -95,14 +95,20 @@ Crossplane deletes the MR -> next reconcile observes nothing -> "brand new" -> c
 calls in 4 minutes). The ledger is the durable memory, declared in each XRD's status schema so the API
 server keeps it. A file leaves the render only on the reconcile *after* it entered the ledger, so the
 status write always lands before the MR is garbage-collected; with no `Delete` policy the GitHub file
-stays. Cluster rebuild: ledger empty -> everything composes -> the pinned external-name adopts the
-existing file (Observe, no write) -> Ready -> ledgered -> retired. Zero writes, two reconciles.
+stays. XR recreate or cluster rebuild: ledger empty -> everything composes -> the pinned external-name
+adopts the existing file (Observe, no write) -> Ready -> ledgered -> retired. Zero writes, two reconciles,
+because every scaffold also sets `overwriteOnCreate: false`: if Create is ever reached against an existing
+file, terraform-provider-github refuses instead of committing the template (checked live on kiac-dev
+2026-10-17). Until then the gitops README, the infraservice `cicd.yaml` stub, the app `cicd.yaml` and the
+AppEnv `values.yaml` still had `true` (the first two also no external-name), and recreating the
+skyport-auth/broker InfraServices rewrote `cicd.yaml` and `README.md` in both gitops-infra repos.
 
 The harness enforces it: a create-once `RepositoryFile` named in the case XR's `status.scaffold.done`
-must not render (`tools/test_compositions.py`), and every composition has `scaffold-ready` /
+must not render, and one that renders must pin its external-name and set `overwriteOnCreate: false`
+(`tools/test_compositions.py`), and every composition has `scaffold-ready` /
 `scaffold-retired` cases (nodejs also `scaffold-partial`) built from observed-Ready fixtures.
 
 Adding a scaffold file: give it `managementPolicies: ["Create", "Observe", "LateInitialize"]`, a
-`setResourceNameAnnotation`, the pinned external-name, and the gate line pair. Forgetting the gate is
+`setResourceNameAnnotation`, the pinned external-name, `overwriteOnCreate: false`, and the gate line pair. Forgetting the gate is
 safe (today's behaviour: composed forever, but also listed in the ledger); forgetting the policy makes
 it a managed file that is never retired.

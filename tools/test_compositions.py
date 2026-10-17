@@ -18,7 +18,8 @@ Each composition with an example/ directory declares its cases in example/cases.
 Invariants checked on every case, whatever the expectation file says: every composed resource has an
 apiVersion and a kind, and a create-once RepositoryFile (managementPolicies without "Update") whose name
 is already in the XR's status.scaffold.done is never rendered again (the scaffold ledger, review C4; see
-compositions/_shared/render-github-resources/00-scaffold-done.yaml).
+compositions/_shared/render-github-resources/00-scaffold-done.yaml), and one that does render pins its
+crossplane.io/external-name and sets overwriteOnCreate: false (so a rebuild adopts, never rewrites).
 
 The render is normalized (composed resources sorted by composition-resource-name with apiVersion,
 kind, metadata.name/namespace/labels/annotations minus what Crossplane adds, and spec; the XR's
@@ -302,6 +303,19 @@ def check_case(comp_dir: Path, case: dict, renderer: str, update: bool) -> list[
         pol = ((r.get("spec") or {}).get("managementPolicies")) or []
         if r.get("kind") == "RepositoryFile" and r["name"] in ledger and pol and "Update" not in pol:
             problems.append(f"{case['name']}: create-once RepositoryFile {r['name']!r} is in status.scaffold.done but rendered again")
+    # A create-once RepositoryFile rendered again (empty ledger after an XR recreate or cluster
+    # rebuild) must adopt the existing GitHub file, never commit over it: a pinned external-name
+    # (Observe finds the file) and overwriteOnCreate false (a Create against an existing file is
+    # refused). overwriteOnCreate true rewrote cicd.yaml/README.md in two repos on 2026-10-17.
+    for r in actual["resources"]:
+        spec = r.get("spec") or {}
+        pol = spec.get("managementPolicies") or []
+        if r.get("kind") != "RepositoryFile" or not pol or "Update" in pol:
+            continue
+        if (spec.get("forProvider") or {}).get("overwriteOnCreate") is not False:
+            problems.append(f"{case['name']}: create-once RepositoryFile {r['name']!r} must set overwriteOnCreate: false")
+        if not ((r["metadata"].get("annotations") or {}).get("crossplane.io/external-name")):
+            problems.append(f"{case['name']}: create-once RepositoryFile {r['name']!r} has no crossplane.io/external-name")
     names = {r["name"] for r in actual["resources"]}
     for n in expect.get("present") or []:
         if n not in names:

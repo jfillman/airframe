@@ -48,6 +48,7 @@ metadata:
   name: <<$xrName>>-gitops-readme
   annotations:
     <<setResourceNameAnnotation "gitops-repo-readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "gitops-repo-readme" | default dict) | default (printf "gitops-%s:README.md:" $xrName)>>"
 spec:
   # No "Update" - same fix, same reasoning as src-repo.yaml's own scaffold files
   # and applicationenvironment's values-yaml.yaml (which had the actual live bug,
@@ -63,7 +64,11 @@ spec:
   forProvider:
     repository: <<printf "gitops-%s" $xrName>>
     file: README.md
-    overwriteOnCreate: true
+    # false: Create against an existing file refuses instead of overwriting it. An XR
+    # recreate (empty scaffold ledger) adopts the file through the pinned external-name.
+    # Tradeoff: autoInit already wrote GitHub's own README.md, so a brand-new repo adopts
+    # that one and this content is never committed (same as the src repo's README).
+    overwriteOnCreate: false
     content: |
       # gitops-<<$xrName>>
 

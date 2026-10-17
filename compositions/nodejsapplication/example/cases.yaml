@@ -52,6 +52,8 @@ cases:
 # deployTarget aws-ecs: the AwsEcsTarget child is composed and the scaffolded cicd.yaml deploys dev to ECS.
 - name: aws-ecs
   xr: xr-aws-ecs.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
   expect:
     present: [aws-ecs-target-dev, src-repo-cicd-yaml]
 - name: registry-ready

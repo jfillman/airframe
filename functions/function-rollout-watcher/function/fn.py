@@ -59,11 +59,13 @@ from crossplane.function.proto.v1 import run_function_pb2_grpc as grpcv1
 DEGRADED_PHASES = {"Degraded", "Error"}
 ROLLOUT_REQUIREMENT_NAME = "rollout"
 
-# The GitHub owner the app's repos live under. No default: it is the fleet's scm.owner, read from this
-# cluster's registry record (crossplane-system ConfigMap named after spec.cluster, rendered by Airframe's
-# cluster-registry chart as data.scmOwner). The Composition's function input (cfg.gitopsOwner) still wins
-# when set, for a fleet that wants to pin it there instead. Neither: no diagnosis is dispatched and the XR
-# says why (see RunFunction), rather than opening PRs against a guessed owner.
+# The GitHub owner the app's repos live under. No default: it is the fleet's
+# scm.owner, read from this cluster's registry record (crossplane-system ConfigMap
+# named after spec.cluster, rendered by Airframe's cluster-registry chart as
+# data.scmOwner). The Composition's function input (cfg.gitopsOwner) still wins
+# when set, for a fleet that wants to pin it there instead. Neither: no diagnosis
+# is dispatched and the XR says why (see RunFunction), rather than opening PRs
+# against a guessed owner.
 REGISTRY_REQUIREMENT_NAME = "cluster-registry-entry"
 
 
@@ -150,9 +152,13 @@ DISPATCH_GRACE_SECONDS = 120
 
 
 def observed_job_owner(req, job_key):
-    """GITOPS_OWNER of an already-composed diagnosis Job, so re-declaring it without the registry at hand
-    (a transient read gap) reproduces the identical, immutable spec rather than an empty owner."""
-    job = req.observed.resources[job_key].resource if job_key in req.observed.resources else None
+    """Return GITOPS_OWNER of an already-composed diagnosis Job.
+
+    Re-declaring the Job without the registry at hand (a transient read gap) then
+    reproduces the identical, immutable spec rather than an empty owner.
+    """
+    observed = req.observed.resources
+    job = observed[job_key].resource if job_key in observed else None
     for c in safe_get(job, "spec", "template", "spec", "containers", default=[]) or []:
         for e in safe_get(c, "env", default=[]) or []:
             if safe_get(e, "name") == "GITOPS_OWNER":
@@ -342,7 +348,8 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             else None
         )
 
-        # The fleet's GitHub owner, from this cluster's registry record (see REGISTRY_REQUIREMENT_NAME).
+        # The fleet's GitHub owner, from this cluster's registry record
+        # (see REGISTRY_REQUIREMENT_NAME).
         registry_owner = ""
         if cluster:
             response.require_resources(
@@ -354,7 +361,7 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 namespace="crossplane-system",
             )
             registry_cm = request.get_required_resource(req, REGISTRY_REQUIREMENT_NAME)
-            registry_owner = (safe_get(registry_cm, "data", "scmOwner", default="") or "") if registry_cm else ""
+            registry_owner = safe_get(registry_cm, "data", "scmOwner", default="") or ""
 
         prev_status = safe_get(xr, "status", default={}) or {}
         last_handled_revision = safe_get(prev_status, "lastDiagnosisRevision")
@@ -387,16 +394,21 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             new_status["rolloutPhase"] = phase
 
         owner_known = bool(safe_get(cfg, "gitopsOwner", default="") or registry_owner)
-        if phase in DEGRADED_PHASES and revision and revision != last_handled_revision and not owner_known:
-            # No GitHub owner (no registry record for spec.cluster yet, or it lacks scmOwner): dispatching
-            # would open PRs against a guessed owner. Wait; lastDiagnosisRevision stays unset, so the next
-            # reconcile that has the owner dispatches.
+        new_degraded = (
+            phase in DEGRADED_PHASES and revision and revision != last_handled_revision
+        )
+        if new_degraded and not owner_known:
+            # No GitHub owner (no registry record for spec.cluster yet, or it lacks
+            # scmOwner): dispatching would open PRs against a guessed owner. Wait;
+            # lastDiagnosisRevision stays unset, so the next reconcile that has the
+            # owner dispatches.
             response.warning(
                 rsp,
-                f"Rollout {xr_name} is {phase}, but no diagnosis was dispatched: cluster registry record "
-                f"{cluster!r} has no scmOwner (add scm.owner to the hub's clusters.yaml)",
+                f"Rollout {xr_name} is {phase}, but no diagnosis was dispatched: "
+                f"cluster registry record {cluster!r} has no scmOwner "
+                "(add scm.owner to the hub's clusters.yaml)",
             )
-        elif phase in DEGRADED_PHASES and revision and revision != last_handled_revision:
+        elif new_degraded:
             job_name = f"diagnosis-{app_name}-{revision}"[:63]
             gitops = resolve_gitops_config(app_name, cluster, env, cfg, registry_owner)
             src = resolve_src_config(app_name, gitops)
@@ -495,7 +507,11 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 and (job_is_live or recently_dispatched(prev_status))
             ):
                 gitops = resolve_gitops_config(
-                    app_name, cluster, env, cfg, registry_owner or observed_job_owner(req, job_key)
+                    app_name,
+                    cluster,
+                    env,
+                    cfg,
+                    registry_owner or observed_job_owner(req, job_key),
                 )
                 src = resolve_src_config(app_name, gitops)
                 notifications = safe_get(spec, "notifications", default={}) or {}

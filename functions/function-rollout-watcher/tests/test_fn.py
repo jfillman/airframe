@@ -63,10 +63,14 @@ def make_req(  # noqa: PLR0913
             "apiVersion": "v1",
             "kind": "ConfigMap",
             "metadata": {"name": "example-prod", "namespace": "crossplane-system"},
-            "data": {"type": "upper", "scmOwner": registry_owner} if registry_owner else {"type": "upper"},
+            "data": {"type": "upper", "scmOwner": registry_owner}
+            if registry_owner
+            else {"type": "upper"},
         }
         req.required_resources[fn.REGISTRY_REQUIREMENT_NAME].CopyFrom(
-            fnv1.Resources(items=[fnv1.Resource(resource=resource.dict_to_struct(registry))])
+            fnv1.Resources(
+                items=[fnv1.Resource(resource=resource.dict_to_struct(registry))]
+            )
         )
     if job_observed:
         req.observed.resources[JOB_KEY].CopyFrom(
@@ -134,10 +138,13 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
     async def test_owner_comes_from_the_cluster_registry(self) -> None:
         rsp = await self.run_fn(make_req("Degraded"))
         job = resource.struct_to_dict(rsp.desired.resources[JOB_KEY].resource)
-        env = {e["name"]: e.get("value") for e in job["spec"]["template"]["spec"]["containers"][0]["env"]}
+        container = job["spec"]["template"]["spec"]["containers"][0]
+        env = {e["name"]: e.get("value") for e in container["env"]}
         self.assertEqual(env["GITOPS_OWNER"], "example-org")
         self.assertEqual(env["SRC_OWNER"], "example-org")
-        self.assertEqual(env["GITOPS_MANIFEST_PATH"], "example-prod/staging/values.yaml")
+        self.assertEqual(
+            env["GITOPS_MANIFEST_PATH"], "example-prod/staging/values.yaml"
+        )
 
     async def test_no_owner_in_the_registry_dispatches_nothing(self) -> None:
         for owner in ("", None):  # record without scmOwner, and no record at all
@@ -145,7 +152,9 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn(JOB_KEY, rsp.desired.resources)
             status = resource.struct_to_dict(rsp.desired.composite.resource)["status"]
             self.assertNotIn("lastDiagnosisRevision", status)
-            warnings = [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING]
+            warnings = [
+                r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING
+            ]
             self.assertTrue(any("no scmOwner" in w for w in warnings), warnings)
 
     async def test_degraded_same_revision_redeclares_full_observed_job(self) -> None:

@@ -13,7 +13,7 @@ spec:
   ecs:
     region: us-east-1
     architecture: arm64
-  devCluster: kind-dev
+  devCluster: example-dev
   goVersion: "1.23"
   port: 8080
   visibility: private

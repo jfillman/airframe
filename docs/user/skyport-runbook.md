@@ -121,8 +121,8 @@ done
 
 ### The gotchas every part shares
 
-- **The scaffold's starter `cicd.yaml` fails `preflight`** (it still writes the removed
-  `lowerEnvironments` keys): replace it in each app's first push. Each guide shows the replacement.
+- **The scaffold's starter `cicd.yaml`** writes `deploy.environments` with ground dev only (and
+  `target: aws-ecs` when the app was created with that deploy target); add flight envs as each part shows.
 - **Merge release PRs by fast-forwarding the signed commit**, never with GitHub's button (all three
   strategies create an unsigned commit and `provenance` fails).
 - **PR pipelines need the `preview` label.**

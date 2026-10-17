@@ -2,7 +2,7 @@
 
 Converted from [`../user/quickstart-baggage-api.md`](../user/quickstart-baggage-api.md).
 
-Placeholders: `<dev-context>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+Placeholders: `<dev-context>`, `<github-owner>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
 
 ## The MongoDB XRD is installed on both clusters
 
@@ -24,7 +24,7 @@ kubectl --context "<dev-context>" get pythonapplication baggage-api -n app-bagga
 ## The real code replaced the scaffold, with exactly one container file
 
 ```bash
-gh api repos/jfillman/baggage-api/contents --jq '.[].name'
+gh api repos/<github-owner>/baggage-api/contents --jq '.[].name'
 ```
 
 **Expected:** baggage.py, events.py and Containerfile are present, and there is no Dockerfile beside it
@@ -32,7 +32,7 @@ gh api repos/jfillman/baggage-api/contents --jq '.[].name'
 ## The Containerfile is the alpine one that removes pip and setuptools (image-scan gate)
 
 ```bash
-gh api repos/jfillman/baggage-api/contents/Containerfile --jq .content | base64 -d
+gh api repos/<github-owner>/baggage-api/contents/Containerfile --jq .content | base64 -d
 ```
 
 **Expected:** FROM python:3.13-alpine and a `pip uninstall -y setuptools pip` line
@@ -40,7 +40,7 @@ gh api repos/jfillman/baggage-api/contents/Containerfile --jq .content | base64 
 ## cicd.yaml uses deploy.environments, not the removed lowerEnvironments/upperEnvironments
 
 ```bash
-gh api repos/jfillman/baggage-api/contents/cicd.yaml --jq .content | base64 -d
+gh api repos/<github-owner>/baggage-api/contents/cicd.yaml --jq .content | base64 -d
 ```
 
 **Expected:** a deploy.environments list with dev (tier: ground); no lowerEnvironments/upperEnvironments/promotionOrder
@@ -79,7 +79,7 @@ curl -s http://localhost:18083/api/events/status
 curl -s http://localhost:18083/api/bags
 ```
 
-**Expected:** {"mode": "connected", "received": N} with N > 0, and /api/bags lists at least one flight. Read-only: this does not move a gate itself; the flight-api simulator produces the events.
+**Expected:** {"mode": "connected", "received": N} with N > 0, and /api/bags lists at least one flight. Read-only: this does not move a gate itself; the flight-api simulator produces the events. Once part 5 turns on token enforcement these endpoints need a bearer token: the check sends one when boarding-api's Dex client (board-oauth) exists, and none before part 5.
 
 ## Flight: the staging ApplicationEnvironment is Synced/Ready with ClusterReady and AppResolved
 

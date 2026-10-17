@@ -6,9 +6,39 @@ every check at the end.
 
 **Names.** `<dev-cluster>` and `<prod-cluster>` are the names chosen when the clusters were built (in
 the owner's lab this time, `hangar-dev` and `hangar-prod`). Each is a record's `name:` in the fleet's
-`clusters.yaml` (in the hub repo, `gitops-cluster-dev`) and, by the one-name rule, also the cluster's
+`clusters.yaml` (in the hub cluster repo, the dev cluster's) and, by the one-name rule, also the cluster's
 `kubectl` context. Nothing in these guides assumes a particular name. Infisical projects are
-`<app>-<cluster>`; `<owner>` is the GitHub owner of the app repos.
+`<app>-<cluster>`; `<github-owner>` is the GitHub owner of the app repos. Each cluster has its own
+**tenants repo**, chosen when it was set up with Apron: the guides call it "the cluster's tenants
+repo", its `tenantsRepo` in `clusters.yaml`.
+
+## Configure
+
+Set the names once. Every guide uses them as placeholders, and `tools/walkthrough-runner` needs them to
+replay the checks; there are no defaults. Create `.walkthrough.env` in your Airframe checkout (the runner
+reads it from the current directory, or from `--env-file PATH`; real environment variables win over it):
+
+```bash
+# .walkthrough.env - your lab's names; not committed
+HANGAR_GITHUB_OWNER=<github-owner>
+HANGAR_CLUSTERS_FILE=<hub-cluster-repo>/clusters.yaml   # the hub repo's clusters.yaml: dev = control-plane, prod = upper/workloads
+# or name them directly instead of HANGAR_CLUSTERS_FILE:
+# HANGAR_DEV_CLUSTER=<dev-cluster>
+# HANGAR_PROD_CLUSTER=<prod-cluster>
+# Contexts default to the cluster names (one-name rule); set these only if yours differ:
+# HANGAR_DEV_CONTEXT=...
+# HANGAR_PROD_CONTEXT=...
+```
+
+The GitHub owner can also come from `scm.owner`: at the top level of `clusters.yaml` if it has one, or
+from an Apron `cluster.yaml` given with `--cluster-config PATH` (`HANGAR_CLUSTER_CONFIG`). Check the
+configuration renders before going further:
+
+```bash
+tools/walkthrough-runner docs/walkthroughs/part6-gate-api.yaml --render /tmp/check.md && grep -m3 context /tmp/check.md
+```
+
+A missing value stops a replay with exit 2 and names the setting.
 
 ## Before you start: leftovers from a previous run
 
@@ -20,24 +50,24 @@ apply:
 
 | Leftover | Where | What to do |
 |---|---|---|
-| Source repos | GitHub `<owner>/boarding-api`, `flight-api`, `baggage-api`, `gate-api`, `checkin-api` | Delete, or rename/archive to keep history. **Irreversible if deleted.** Back up issues/PRs you want. |
-| GitOps repos | `<owner>/gitops-boarding-api`, `gitops-flight-api`, `gitops-baggage-api`, `gitops-gate-api`, `gitops-checkin-api`, `gitops-infra-skyport-broker`, `gitops-infra-skyport-auth` | Same. They hold the old cluster's `<old-cluster>/<env>/` folders and release records. |
-| Container images | GHCR packages `ghcr.io/<owner>/<app>` for the five apps | Delete the packages (or accept that old tags stay; new tags carry new SHAs). |
-| Tenants files | `tenants/<app>/` in each cluster's tenants repo: its `tenantsRepo` in `clusters.yaml`, else `gitops-cluster-<name>-tenants`. In the old lab these were `gitops-cluster-dev-tenants` and `gitops-cluster-kind-prod-tenants`; GitHub repo names don't change when clusters are renamed, so set `tenantsRepo` if the default no longer matches. | `git rm -r tenants/<app>` for every Skyport app **before** the new cluster's `xr-requests` ApplicationSet syncs, or it recreates the old XRs, with the old cluster names, at once. |
+| Source repos | GitHub `<github-owner>/boarding-api`, `flight-api`, `baggage-api`, `gate-api`, `checkin-api` | Delete, or rename/archive to keep history. **Irreversible if deleted.** Back up issues/PRs you want. |
+| GitOps repos | `<github-owner>/gitops-boarding-api`, `gitops-flight-api`, `gitops-baggage-api`, `gitops-gate-api`, `gitops-checkin-api`, `gitops-infra-skyport-broker`, `gitops-infra-skyport-auth` | Same. They hold the old cluster's `<old-cluster>/<env>/` folders and release records. |
+| Container images | GHCR packages `ghcr.io/<github-owner>/<app>` for the five apps | Delete the packages (or accept that old tags stay; new tags carry new SHAs). |
+| Old tenants repos | the previous clusters' tenants repos | Each rebuilt cluster gets a **new** tenants repo, so the old ones are not read again. Archive them; just make sure no new cluster's `tenantsRepo` points at one (it would recreate the old XRs, with the old cluster names, at once). |
 | Adoption ids | the prod cluster repo's `10-crds-operators/crossplane/secretstore-provisioner.yaml` | No `<app>-<cluster>` keys from old projects. A stale key makes a new app adopt a dead project. |
 | Infisical projects | the Infisical org | Starting from a fresh Infisical, there are none. If an org is reused, delete `<app>-<old-cluster>` for every app. |
-| Dex client registrations | the old Dex server's sqlite volume | Gone with the old cluster. |
+| Dex client registrations | the old Dex servers' sqlite volumes | Gone with the old clusters. |
 | Local checkouts | your machine | Move `./boarding-api`, `./flight-api`, `./baggage-api`, `./gate-api`, `./checkin-api` aside: every guide's `git clone` fails into an existing directory. |
 
 Check with:
 
 ```bash
 for r in boarding-api flight-api baggage-api gate-api checkin-api; do
-  gh repo view <owner>/$r --json name -q .name 2>/dev/null && echo "still exists: $r"
-  gh repo view <owner>/gitops-$r --json name -q .name 2>/dev/null && echo "still exists: gitops-$r"
+  gh repo view <github-owner>/$r --json name -q .name 2>/dev/null && echo "still exists: $r"
+  gh repo view <github-owner>/gitops-$r --json name -q .name 2>/dev/null && echo "still exists: gitops-$r"
 done
 for r in gitops-infra-skyport-broker gitops-infra-skyport-auth; do
-  gh repo view <owner>/$r --json name -q .name 2>/dev/null && echo "still exists: $r"
+  gh repo view <github-owner>/$r --json name -q .name 2>/dev/null && echo "still exists: $r"
 done
 ```
 
@@ -48,8 +78,8 @@ done
 
 ### The platform (once, for every part)
 
-- **Both clusters built and their root apps synced** from `gitops-cluster-dev` (dev) and
-  `gitops-cluster-kind-prod` (prod), per those repos' and [Apron](https://github.com/jfillman/apron)'s
+- **Both clusters built and their root apps synced** from their cluster repos (made from Apron's template),
+  per those repos' and [Apron](https://github.com/jfillman/apron)'s
   bootstrap steps.
 - **`clusters.yaml` records** for both names (`zone`, `roles`, `tenantsRepo`, `serviceAccountIssuer`,
   `glidepath.relaySecretName: cluster-<prod-cluster>-relay-token` on the prod record), the
@@ -75,12 +105,15 @@ done
   is down, pushes trigger nothing and nothing says so (Glidepath known gap 8).
 - **Tower is up as the `backstage` app's prod environment.** Tower (Backstage) is redeployed as an
   Airframe `NodeJSApplication` named `backstage`, with its prod environment on the prod cluster. That app
-  itself is onboarded by a **git PR** to the tenants repo, not through Tower (there is no Tower yet to
+  itself is onboarded by a **git PR** to the dev cluster's tenants repo (`tenantsRepo` in `clusters.yaml`), not through Tower (there is no Tower yet to
   use). Its deployment is prepared in
   [jfillman/backstage `deploy/airframe/`](https://github.com/jfillman/backstage/tree/airframe-app/deploy/airframe)
   (branch `airframe-app`). Every step that uses Tower needs it first: the Create forms (parts 1 to 5, 7),
   the App Configuration and Environments tabs, the Pull Requests tab and its gate view, and all of part 7.
   Part 6 does not need it.
+- **Dex on both clusters.** The dev cluster's repo installs `function-dex` and the `Dex` XRD; on the prod
+  cluster they come from **Apron's prod profile** (Dex's XRD, composition and function). Part 5 needs
+  both; `ghcr.io/jfillman/function-dex` must be a public package.
 - **gitsign** on the machine you commit from: `git config gpg.x509.program gitsign`,
   `git config gpg.format x509`, `git config commit.gpgsign true`, and your signing address in each app's
   `governance.allowedCommitSigners`
@@ -108,7 +141,7 @@ done
 | [2 flight-api](quickstart-flight-api.md) | CloudNativePG, `PostgreSQL` XRD | the same | part 1 (boarding-api calls it) |
 | [3 skyport-broker](quickstart-broker.md) | RabbitMQ cluster + messaging-topology operators, cert-manager, `RabbitMQ` XRD | the same | parts 1 and 2 (the publisher and the first consumer) |
 | [4 baggage-api](quickstart-baggage-api.md) | MongoDB Controllers for Kubernetes, `MongoDB` XRD | the same, and a node kernel check | part 3's broker, with `app-baggage-api-<env>` in `allowedNamespaces` |
-| [5 skyport-auth](quickstart-skyport-auth.md) | `function-dex` (public GHCR package), `Dex` XRD | **not installed**: dev only | parts 2 and 4 (the apps that attach) |
+| [5 skyport-auth](quickstart-skyport-auth.md) | `function-dex` (public GHCR package), `Dex` XRD | the same, **from the Apron prod profile** (Dex's XRD, composition and function on prod) | parts 1, 2 and 4 on the `dex-tokens` app branches (enforcement code) |
 | [7 checkin-api](quickstart-checkin-api.md) | platform only | platform only | Tower; part 6 is the same path in the terminal |
 
 All of these operators and XRDs are in the two cluster repos (`10-crds-operators/` and
@@ -120,8 +153,10 @@ for ctx in <dev-cluster> <prod-cluster>; do
   kubectl --context $ctx get xrd redis.catalog.hangar.io postgresqls.catalog.hangar.io \
     rabbitmqs.catalog.hangar.io mongodbs.catalog.hangar.io 2>&1 | sed "s/^/$ctx: /"
 done
-kubectl --context <dev-cluster> get xrd dexes.catalog.hangar.io
-kubectl --context <dev-cluster> get function function-dex
+for ctx in <dev-cluster> <prod-cluster>; do
+  kubectl --context $ctx get xrd dexes.catalog.hangar.io
+  kubectl --context $ctx get function function-dex
+done
 ```
 
 ## The order
@@ -135,23 +170,25 @@ kubectl --context <dev-cluster> get function function-dex
 5. **Part 3, skyport-broker**; attach flight-api (publisher) and boarding-api (consumer). List
    `app-baggage-api-<env>` in `allowedNamespaces` now.
 6. **Part 4, baggage-api** + MongoDB, consuming the broker; staging needs the broker's staging env first.
-7. **Part 5, skyport-auth** (dev only); attach flight-api and baggage-api. Stops before token enforcement,
-   which is not built.
+7. **Part 5, skyport-auth** on both clusters (Dex on prod is from the Apron prod profile): the server,
+   a client per app, then the apps' `dex-tokens` code, boarding-api first so the gate board keeps
+   working. From here on `flight-api` and `baggage-api` refuse API calls without a token. Only
+   boarding-api calls them; gate-api and checkin-api call no other service.
 8. **Part 7, checkin-api**, through Tower.
 
 ## Replaying every check
 
-Each part has an executable walkthrough in [`../walkthroughs/`](../walkthroughs/README.md). Run them all,
-reading the cluster names from the fleet's `clusters.yaml`:
+Each part has an executable walkthrough in [`../walkthroughs/`](../walkthroughs/README.md). With
+`.walkthrough.env` in place ([Configure](#configure)), run them all:
 
 ```bash
-tools/walkthrough-runner --all --clusters ../gitops-cluster-dev/clusters.yaml
+tools/walkthrough-runner --all
 ```
 
-or name them directly:
+or give everything on the command line:
 
 ```bash
-tools/walkthrough-runner --all --dev-cluster <dev-cluster> --prod-cluster <prod-cluster>
+tools/walkthrough-runner --all --clusters <hub-repo>/clusters.yaml --github-owner <github-owner>
 # kubectl contexts default to the cluster names; override with --dev-context / --prod-context
 ```
 

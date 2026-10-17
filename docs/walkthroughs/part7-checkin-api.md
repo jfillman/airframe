@@ -2,7 +2,7 @@
 
 Converted from [`../user/quickstart-checkin-api.md`](../user/quickstart-checkin-api.md).
 
-Placeholders: `<dev-context>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+Placeholders: `<dev-context>`, `<github-owner>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
 
 ## checkin-api passes the PythonApplication verify contract
 
@@ -24,8 +24,8 @@ kubectl --context "<dev-context>" get pythonapplication checkin-api -n app-check
 ## The repo has the alpine Containerfile without pip, and a cicd.yaml on deploy.environments
 
 ```bash
-gh api repos/jfillman/checkin-api/contents/Containerfile --jq .content | base64 -d
-gh api repos/jfillman/checkin-api/contents/cicd.yaml --jq .content | base64 -d
+gh api repos/<github-owner>/checkin-api/contents/Containerfile --jq .content | base64 -d
+gh api repos/<github-owner>/checkin-api/contents/cicd.yaml --jq .content | base64 -d
 ```
 
 **Expected:** FROM python:3.12-alpine with pip uninstall -y setuptools pip; deploy.environments with dev (ground) and staging (flight)
@@ -50,7 +50,7 @@ tools/airframe-verify applicationenvironment app-checkin-api-cicd/checkin-api-<p
 ## App Configuration was saved: staging values set replicas, /healthz probes and canary steps
 
 ```bash
-gh api repos/jfillman/gitops-checkin-api/contents/<prod-cluster>/staging/values.yaml --jq .content | base64 -d
+gh api repos/<github-owner>/gitops-checkin-api/contents/<prod-cluster>/staging/values.yaml --jq .content | base64 -d
 ```
 
 **Expected:** rollout.replicas set, liveness and readiness on /healthz, rollout.steps with setWeight entries

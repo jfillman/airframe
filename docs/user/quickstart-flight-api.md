@@ -115,7 +115,7 @@ adding `.tekton/`. **Merge it**, or pushes do nothing.
 
 ```bash
 git clone https://github.com/jfillman/airframe.git /tmp/airframe   # skip if you still have it
-git clone https://github.com/jfillman/flight-api.git && cd flight-api
+git clone https://github.com/<github-owner>/flight-api.git && cd flight-api
 
 cp -R /tmp/airframe/examples/skyport/flight-api/. .
 git add -A && git commit -m "flight-api: flights and gates in Postgres"
@@ -290,6 +290,10 @@ kubectl port-forward -n app-flight-api-dev svc/flight-api 8081:8080
 curl -s localhost:8081/api/flights/AC123
 curl -s localhost:8081/api/flights/AC123/events
 ```
+
+> **After [part 5](quickstart-skyport-auth.md)** these API calls need a bearer token (`401` without one).
+> Mint one with `. docs/walkthroughs/lib/dex.sh; tok="$(dex_token <dev-cluster> app-boarding-api-dev board-oauth)"`
+> and add `-H "Authorization: Bearer $tok"`. Probes and `/api/whoami` stay open.
 
 The simulator writes an event about every 30 seconds; watch `events` grow.
 

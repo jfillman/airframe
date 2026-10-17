@@ -120,15 +120,18 @@ steps:
       curl -s http://localhost:18083/api/bags
     expected: >-
       {"mode": "connected", "received": N} with N > 0, and /api/bags lists at least one flight. Read-only:
-      this does not move a gate itself; the flight-api simulator produces the events.
+      this does not move a gate itself; the flight-api simulator produces the events. Once part 5 turns on
+      token enforcement these endpoints need a bearer token: the check sends one when boarding-api's Dex
+      client (board-oauth) exists, and none before part 5.
     verify: |
       set -euo pipefail
-      kubectl --context "${DEV_CONTEXT}" port-forward -n app-baggage-api-dev svc/baggage-api 18084:8080 >/tmp/wt-baggage-ev-pf.log 2>&1 &
-      pf=$!
-      trap "kill $pf 2>/dev/null" EXIT
-      sleep 2
-      status="$(curl -s http://localhost:18084/api/events/status)"
-      bags="$(curl -s http://localhost:18084/api/bags)"
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      tok=""
+      if kubectl --context "${DEV_CONTEXT}" get secret board-oauth-oauth-credentials -n app-boarding-api-dev >/dev/null 2>&1; then
+        tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      fi
+      status="$(http_body "${DEV_CONTEXT}" app-baggage-api-dev baggage-api 8080 /api/events/status "$tok")"
+      bags="$(http_body "${DEV_CONTEXT}" app-baggage-api-dev baggage-api 8080 /api/bags "$tok")"
       echo "$status"
       STATUS="$status" BAGS="$bags" python3 -c '
       import json, os

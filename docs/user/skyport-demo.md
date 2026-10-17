@@ -13,8 +13,9 @@ you (see the [quickstart](quickstart.md), section 03).
 > **Status (2026-10-16).** All five services and both shared pieces were built and ran in the previous
 > lab, on its dev cluster and its prod cluster's staging, except `skyport-auth`, which ran on dev only.
 > Every component exists in Airframe: Redis, PostgreSQL, RabbitMQ (broker + attach), MongoDB, and Dex
-> (server + attach) as the OAuth server. What is **not built**: token enforcement in any app (Phase 4's
-> second half), the Dex component on the prod cluster, and every AI-workload phase. The lab is being
+> (server + attach) as the OAuth server. Token enforcement (Phase 4's second half) is written, on the
+> apps' `dex-tokens` branches, and Dex comes to the prod cluster with Apron's prod profile; neither has
+> run on a cluster yet. The AI-workload phases are not built. The lab is being
 > rebuilt from scratch; nothing has been replayed on the new clusters yet. The order to stand it all
 > up again is the [Skyport runbook](skyport-runbook.md).
 >
@@ -29,7 +30,7 @@ you (see the [quickstart](quickstart.md), section 03).
 | **boarding-api** | `NodeJSApplication` | Redis · RabbitMQ (consumer) | The passenger-facing **gate board**: flight/gate lookups, boarding-pass scans, and the canary visualizer. Caches lookups in Redis. |
 | **flight-api** | `SpringBootApplication` | Postgres · RabbitMQ (producer) · OAuth (resource server) | System of record for flights and gates. A scheduled simulator delays flights and changes gates, recording an event each time (published to the broker from Phase 2). |
 | **baggage-api** | `PythonApplication` | RabbitMQ (consumer) · MongoDB | Tracks each bag's journey as a document. Consumes flight events to re-route bags when a gate changes. |
-| **skyport-auth** | `InfraService` | `dex` (server) | The OIDC provider (Dex, `client_credentials` only). Issues the tokens `flight-api` and `baggage-api` are meant to validate; neither validates yet. |
+| **skyport-auth** | `InfraService` | `dex` (server) | The OIDC provider (Dex, `client_credentials` only). Issues the tokens `flight-api` and `baggage-api` validate and `boarding-api` sends. |
 | **skyport-broker** | `InfraService` | `rabbitmq` | The shared message broker `flight-api`, `baggage-api` and `boarding-api` all attach to. |
 
 `GoApplication` is deliberately left out; the other four Bootstrap stacks
@@ -89,7 +90,7 @@ two unrelated consumers of one fact, which is exactly what a queue is for.
 | Postgres | flight-api | A relational system of record, schema migration on deploy, credentials read straight from the component's Secret |
 | RabbitMQ | flight-api → boarding-api, baggage-api | Fan-out events; a shared broker via `InfraService` |
 | MongoDB | baggage-api | Document storage that doesn't fit rows |
-| Dex (OAuth server) | flight-api, baggage-api (attach); boarding-api planned | Service-to-service tokens; one issuer for the platform. Clients and token issuance are built; no app checks tokens yet |
+| Dex (OAuth server) | flight-api, baggage-api (resource servers), boarding-api (caller) | Service-to-service tokens; one issuer per cluster/env |
 | SLO / RolloutWatch / SecretStore | all five | The components that already exist, on every service |
 
 ## The canary test bench
@@ -141,7 +142,7 @@ replayed on the rebuilt clusters yet, and each part's walkthrough is how that ge
 | 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Built; ran on dev and on prod staging with a two-instance database (previous lab).** boarding-api's staging call to flight-api was not exercised. |
 | 2 | `skyport-broker` (RabbitMQ), flight events, cache eviction — [part 3](quickstart-broker.md) | `rabbitmq` component (built) | **Built; walked on dev; broker staging env existed on prod (previous lab).** The prod half of part 3 was not walked end to end. |
 | 3 | `baggage-api` (Python) + MongoDB, consuming flight events — [part 4](quickstart-baggage-api.md) | `mongodb` component (built) | **Built; ran on dev and on prod staging with its MongoDB and broker attach (previous lab).** One replica, by design (one queue). |
-| 4 | `skyport-auth` and enforced JWTs — [part 5](quickstart-skyport-auth.md) | `dex` component (built; chosen over Keycloak) | **Half built.** Dex server ran on dev (previous lab); attach clients are built but not verified live; **token enforcement in the apps is not built**; no Dex on the prod cluster. |
+| 4 | `skyport-auth` and enforced JWTs — [part 5](quickstart-skyport-auth.md) | `dex` component (built; chosen over Keycloak); Dex on prod from Apron's prod profile | **Built, not yet run.** Dex server ran on dev (previous lab). Enforcement is on the apps' `dex-tokens` branches: baggage-api and boarding-api tested; flight-api written but not yet compiled. |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |
 | 6 | **First agent: `flight-briefer`** (task) | Autopilot core: Clearance, `AgentRun`, a model proxy | Planned; not started |
 | 7 | **`gate-copilot`** (session) | session channel and Tower's Agent tab | Planned |

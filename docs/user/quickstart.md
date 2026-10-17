@@ -87,7 +87,7 @@ created with any other value gets a store nobody reads, its ExternalSecret never
 `CreateContainerConfigError`. Don't remove or rename a cluster in the registry while apps are pinned to it:
 their stores turn `InvalidProviderConfig` fleet-wide.
 
-Submitting opens a pull request into `gitops-cluster-dev-tenants` at
+Submitting opens a pull request into the dev cluster's tenants repo (its `tenantsRepo` in `clusters.yaml`) at
 `tenants/boarding-api/xr-requests/boarding-api.yaml`. **Merge it** — the
 `xr-requests` ApplicationSet applies that file to the dev cluster as a
 `NodeJSApplication` XR:
@@ -140,7 +140,7 @@ when the delivery path dies, pushes trigger nothing, silently).
 labelled `preview`; adding the label is what starts them (Glidepath known gap 7).
 
 Once merged, a push to `main` runs the scaffolded `build` stage and publishes a
-multi-arch image to `ghcr.io/<owner>/boarding-api`.
+multi-arch image to `ghcr.io/<github-owner>/boarding-api`.
 
 ## 04 — Pull in the code
 
@@ -149,7 +149,7 @@ The scaffold's `index.js` is hello-world. The real `boarding-api` lives in the
 
 ```bash
 git clone https://github.com/jfillman/airframe.git /tmp/airframe
-git clone https://github.com/jfillman/boarding-api.git && cd boarding-api   # fails if ./boarding-api already exists
+git clone https://github.com/<github-owner>/boarding-api.git && cd boarding-api   # fails if ./boarding-api already exists
 
 cp -R /tmp/airframe/examples/skyport/boarding-api/. .
 git add -A && git commit -m "boarding-api: gate board with Redis-backed lookups"
@@ -267,7 +267,7 @@ or you'll be rebasing over the bot's commit.
 # glidepath/envs/dev.release.yaml after the first deploy (machine-owned)
 release:
   image:
-    repository: ghcr.io/<owner>/boarding-api
+    repository: ghcr.io/<github-owner>/boarding-api
     tag: 1.1.0-a1b2c3d
 ```
 
@@ -341,7 +341,7 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 |---|---|---|
 | Name | `boarding-api-<prod-cluster>-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
 | Namespace | `app-boarding-api-cicd` | The app's tenant namespace, `app-<app>-cicd` (`infra-<app>-cicd` for an InfraService). The `xr-requests` AppProject permits only these two prefixes, and the XR must be in the same namespace as its app. |
-| Owner | `group:default/jfillman` | Same as every existing env. |
+| Owner | a Backstage group, e.g. `group:default/<your-team>` | Who owns the env in the catalog. |
 | `appName` | `boarding-api` | Required. Labels the env and drives a deletion-protection `Usage` on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist. |
 | `cluster` | `<prod-cluster>` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
 | `env` | `staging` | Required. A DNS label, max 20 characters (`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) — it becomes part of the namespace `app-boarding-api-staging` and a git path. |
@@ -349,7 +349,7 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 
 The Crossplane Settings page can stay at its defaults.
 
-Submitting opens a PR into `gitops-cluster-dev-tenants`
+Submitting opens a PR into the dev cluster's tenants repo
 (`tenants/boarding-api/xr-requests/boarding-api-<prod-cluster>-staging.yaml`). Merge
 it. Crossplane then commits a bootstrap `values.yaml` to
 `gitops-boarding-api/<prod-cluster>/staging/` and an onboarding entry to

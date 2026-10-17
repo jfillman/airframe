@@ -13,7 +13,7 @@ without recreating or tearing down anything.
 | [part2-flight-api.yaml](part2-flight-api.yaml) | [quickstart-flight-api.md](../user/quickstart-flight-api.md) - Spring Boot + PostgreSQL |
 | [part3-broker.yaml](part3-broker.yaml) | [quickstart-broker.md](../user/quickstart-broker.md) - shared RabbitMQ, publisher and consumer |
 | [part4-baggage-api.yaml](part4-baggage-api.yaml) | [quickstart-baggage-api.md](../user/quickstart-baggage-api.md) - Python + MongoDB, broker consumer |
-| [part5-skyport-auth.yaml](part5-skyport-auth.yaml) | [quickstart-skyport-auth.md](../user/quickstart-skyport-auth.md) - shared Dex, attached clients (dev only; token enforcement not built) |
+| [part5-skyport-auth.yaml](part5-skyport-auth.yaml) | [quickstart-skyport-auth.md](../user/quickstart-skyport-auth.md) - shared Dex on both clusters, attached clients, enforced tokens (401/200) |
 | [part6-gate-api.yaml](part6-gate-api.yaml) | [quickstart-gate-api.md](../user/quickstart-gate-api.md) - terminal path to a canary |
 | [part7-checkin-api.yaml](part7-checkin-api.yaml) | [quickstart-checkin-api.md](../user/quickstart-checkin-api.md) - Tower path |
 
@@ -48,14 +48,21 @@ well as `${DEV_CONTEXT}`):
 | `${PROD_CLUSTER}` | the prod (upper) cluster's registry name | `--prod-cluster`, `HANGAR_PROD_CLUSTER`, or `--clusters` |
 | `${DEV_CONTEXT}` | kubectl context for the dev cluster | `--dev-context`, `HANGAR_DEV_CONTEXT`; default: the dev cluster's name |
 | `${PROD_CONTEXT}` | kubectl context for the prod cluster | `--prod-context`, `HANGAR_PROD_CONTEXT`; default: the prod cluster's name |
-| `${GITHUB_OWNER}` | owner of the app repos | `--github-owner`, `GITHUB_OWNER`; default `jfillman` |
+| `${GITHUB_OWNER}` | owner of the app repos (required, no default) | `--github-owner`, `HANGAR_GITHUB_OWNER`, or `scm.owner` in the `--clusters` file or an Apron `--cluster-config` |
 
 `--clusters PATH` (or `HANGAR_CLUSTERS_FILE`) reads the fleet's `clusters.yaml`: the dev cluster is the
 one record with the `control-plane` role, the prod cluster the one `zone: upper` record with the
 `workloads` role. More than one candidate is an error unless a flag or env var names it. Contexts
 default to the cluster names (the one-name rule: a cluster's registry name is also its context). A run
-that needs a name nobody gave exits 2 and says which. Every `verify` also gets `AIRFRAME_ROOT`, this
-checkout, for `"$AIRFRAME_ROOT/tools/airframe-verify" ...`.
+that needs a name nobody gave exits 2 and says which.
+
+All of these can live in an env file: `--env-file PATH`, `HANGAR_WALKTHROUGH_ENV`, or `./.walkthrough.env`
+when it exists (`KEY=VALUE` lines with the `HANGAR_*` names; real environment variables win). See the
+runbook's [Configure](../user/skyport-runbook.md#configure) step. Every `verify` also gets `AIRFRAME_ROOT`, this
+checkout, for `"$AIRFRAME_ROOT/tools/airframe-verify" ...` and for
+`. "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"`: `dex_token` (mint a Dex `client_credentials` token
+for an attach client, never printed), `http_status` / `http_body` (a GET through a port-forward, with
+an optional bearer token) and `expect_enforced` (401 without a token, 200 with one).
 
 ## Running
 

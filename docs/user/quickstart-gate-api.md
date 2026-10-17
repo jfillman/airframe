@@ -11,7 +11,7 @@ Dev, Staging, A real bug, Signed release, More bugs, Canary, The canary in Tower
 
 Cluster names: `<dev-cluster>` and `<prod-cluster>` are the names chosen when the clusters were built
 (for example `hangar-dev` and `hangar-prod`), as explained at the top of [part 1](quickstart.md).
-`<owner>` is the GitHub owner of the app repos.
+`<github-owner>` is the GitHub owner of the app repos (set once, see the runbook's [Configure](skyport-runbook.md#configure) step).
 
 **What has and hasn't been verified.**
 - **Verified live, recorded 2026-09-27/28:** the whole path, in the previous lab. The recording found
@@ -41,8 +41,7 @@ dependencies; Node's built-in test runner).
 ## 02 — Ask: write the XR request
 
 Instead of the Tower form, write the request file yourself, in a branch of the dev cluster's tenants
-repo (`gitops-cluster-dev-tenants` in the owner's lab; the tenants repo named by the dev cluster's
-`tenantsRepo` in `clusters.yaml`):
+repo (the repo named by the dev cluster's `tenantsRepo` in `clusters.yaml`):
 
 ```yaml
 # tenants/gate-api/xr-requests/gate-api.yaml
@@ -82,8 +81,8 @@ tools/airframe-verify nodejsapplication app-gate-api-cicd/gate-api --context <de
 `gitops-gate-api` repos exist. Then merge the two onboarding PRs Glidepath opens (one on each repo):
 
 ```bash
-gh pr list -R <owner>/gate-api
-gh pr list -R <owner>/gitops-gate-api
+gh pr list -R <github-owner>/gate-api
+gh pr list -R <github-owner>/gitops-gate-api
 ```
 
 If a previous run left `gate-api` or `gitops-gate-api` behind, the composition adopts nothing cleanly:
@@ -95,7 +94,7 @@ Clone the repo (move any old `./gate-api` aside first), copy the code in, and re
 `cicd.yaml`, which still uses the removed `lowerEnvironments` keys (see [part 1](quickstart.md#02--create-the-app)):
 
 ```bash
-git clone https://github.com/<owner>/gate-api.git && cd gate-api
+git clone https://github.com/<github-owner>/gate-api.git && cd gate-api
 cp -R /tmp/airframe/examples/skyport/gate-api/. .
 npm test
 ```
@@ -169,7 +168,7 @@ tools/airframe-verify applicationenvironment app-gate-api-cicd/gate-api-<prod-cl
 
 ## 05 — Build and dev
 
-The push after the `.tekton/` merge builds the image (`ghcr.io/<owner>/gate-api:<package.json version>-<sha>`)
+The push after the `.tekton/` merge builds the image (`ghcr.io/<github-owner>/gate-api:<package.json version>-<sha>`)
 and deploys it to dev, committing `glidepath/envs/dev.release.yaml`:
 
 ```bash

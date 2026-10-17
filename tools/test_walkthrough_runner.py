@@ -95,8 +95,16 @@ steps:
 """
 
 
-CLEAN_ENV = {k: v for k, v in os.environ.items()
-             if not k.startswith("HANGAR_") and k != "GITHUB_OWNER"}
+OWNER_CHECK = """\
+title: "owner fixture"
+steps:
+  - id: owner
+    title: the GitHub owner is substituted
+    command: "gh api repos/${GITHUB_OWNER}/x"
+    verify: 'test "$GITHUB_OWNER" = acme'
+"""
+
+CLEAN_ENV = {k: v for k, v in os.environ.items() if not k.startswith("HANGAR_")}
 
 
 def run(*args, env=None):
@@ -148,7 +156,7 @@ def main():
             print(f"FAIL: placeholders not substituted/exported: {r.stdout} {r.stderr}"); failed = 1
 
         r = run(str(ph), env={"HANGAR_DEV_CLUSTER": "c-dev", "HANGAR_PROD_CLUSTER": "c-prod",
-                              "HANGAR_DEV_CONTEXT": "ctx-dev", "GITHUB_OWNER": "acme"})
+                              "HANGAR_DEV_CONTEXT": "ctx-dev", "HANGAR_GITHUB_OWNER": "acme"})
         if r.returncode != 0:
             print(f"FAIL: env vars should supply the names: {r.stdout} {r.stderr}"); failed = 1
 
@@ -193,6 +201,41 @@ def main():
         r = run(str(cc), "--clusters", str(amb), "--prod-cluster", "lab-prod")
         if r.returncode != 0:
             print(f"FAIL: a flag should resolve an ambiguous clusters.yaml: {r.stdout} {r.stderr}"); failed = 1
+
+        # --- GitHub owner: required, no default; from flag, env, env file, clusters.yaml or cluster.yaml ---
+        own = Path(td) / "own.yaml"
+        own.write_text(OWNER_CHECK)
+        r = run(str(own))
+        if r.returncode != 2 or "GITHUB_OWNER is not set" not in r.stderr or "--github-owner" not in r.stderr:
+            print(f"FAIL: an unset GitHub owner must exit 2 with a clear message: {r.stderr}"); failed = 1
+        r = run(str(own), env={"GITHUB_OWNER": "acme"})
+        if r.returncode != 2:
+            print("FAIL: plain GITHUB_OWNER must not be read (HANGAR_GITHUB_OWNER is the variable)"); failed = 1
+        r = run(str(own), env={"HANGAR_GITHUB_OWNER": "acme"})
+        if r.returncode != 0:
+            print(f"FAIL: HANGAR_GITHUB_OWNER should supply the owner: {r.stderr}"); failed = 1
+        clo = Path(td) / "clusters-owner.yaml"
+        clo.write_text("scm: {host: github.com, owner: acme}\n" + CLUSTERS)
+        r = run(str(own), "--clusters", str(clo))
+        if r.returncode != 0:
+            print(f"FAIL: scm.owner in clusters.yaml should supply the owner: {r.stderr}"); failed = 1
+        cfg = Path(td) / "cluster.yaml"
+        cfg.write_text("clusterName: x\nscm:\n  host: github.com\n  owner: acme\n")
+        r = run(str(own), "--cluster-config", str(cfg))
+        if r.returncode != 0:
+            print(f"FAIL: scm.owner in an Apron cluster.yaml should supply the owner: {r.stderr}"); failed = 1
+        envf = Path(td) / "wt.env"
+        envf.write_text("# lab settings\nexport HANGAR_GITHUB_OWNER=acme\nHANGAR_CLUSTERS_FILE=%s\n" % cl)
+        r = run(str(cc), "--env-file", str(envf))
+        r2 = run(str(own), "--env-file", str(envf))
+        if r.returncode != 0 or r2.returncode != 0:
+            print(f"FAIL: --env-file should supply the owner and the clusters file: {r.stderr} {r2.stderr}"); failed = 1
+        r = run(str(own), "--env-file", str(envf), env={"HANGAR_GITHUB_OWNER": "other"})
+        if r.returncode != 1:
+            print("FAIL: a real env var should win over the env file"); failed = 1
+        r = run(str(own), "--env-file", str(Path(td) / "missing.env"))
+        if r.returncode != 2:
+            print("FAIL: a missing --env-file must exit 2"); failed = 1
 
         # --all over a directory: every part*.yaml, one summary line
         d = Path(td) / "wt"

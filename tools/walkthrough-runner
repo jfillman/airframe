@@ -18,16 +18,20 @@ exported to bash as environment variables (so plain `$DEV_CONTEXT` works too):
     ${PROD_CLUSTER}  the prod (upper) cluster's registry name
     ${DEV_CONTEXT}   kubectl context for the dev cluster   (default: DEV_CLUSTER, the one-name rule)
     ${PROD_CONTEXT}  kubectl context for the prod cluster  (default: PROD_CLUSTER)
-    ${GITHUB_OWNER}  GitHub owner of the app repos          (default: jfillman)
+    ${GITHUB_OWNER}  GitHub owner of the app repos (required when a walkthrough uses it; no default)
 
 Every verify also gets AIRFRAME_ROOT (this checkout), for "$AIRFRAME_ROOT/tools/airframe-verify ...".
 
 Where each comes from, highest precedence first:
     1. flags          --dev-cluster --prod-cluster --dev-context --prod-context --github-owner
-    2. env vars       HANGAR_DEV_CLUSTER HANGAR_PROD_CLUSTER HANGAR_DEV_CONTEXT HANGAR_PROD_CONTEXT GITHUB_OWNER
-    3. --clusters PATH (or HANGAR_CLUSTERS_FILE): the fleet's clusters.yaml. Dev is the one record with the
-       control-plane role; prod is the one zone: upper record with the workloads role. More than one
-       candidate is an error unless the flag/env var names it.
+    2. env vars       HANGAR_DEV_CLUSTER HANGAR_PROD_CLUSTER HANGAR_DEV_CONTEXT HANGAR_PROD_CONTEXT
+                      HANGAR_GITHUB_OWNER HANGAR_CLUSTERS_FILE HANGAR_CLUSTER_CONFIG
+    3. an env file    --env-file PATH (or HANGAR_WALKTHROUGH_ENV; default ./.walkthrough.env if it exists):
+                      KEY=VALUE lines with the env var names above; # comments; real env vars win over it
+    4. --clusters PATH: the fleet's clusters.yaml. Dev is the one record with the control-plane role; prod
+       is the one zone: upper record with the workloads role. More than one candidate is an error unless
+       the flag/env var names it. Its top-level scm.owner, when present, is the GitHub owner.
+    5. --cluster-config PATH: an Apron cluster.yaml; its scm.owner is the GitHub owner.
 A run that needs a cluster name nobody gave stops with exit 2 and says which. --render never fails on a
 missing name: it prints the placeholder as <dev-cluster>, <prod-context>, ... instead.
 
@@ -54,7 +58,7 @@ VARS = {
     "PROD_CLUSTER": ("prod_cluster", "HANGAR_PROD_CLUSTER", None, "<prod-cluster>"),
     "DEV_CONTEXT": ("dev_context", "HANGAR_DEV_CONTEXT", "@DEV_CLUSTER", "<dev-context>"),
     "PROD_CONTEXT": ("prod_context", "HANGAR_PROD_CONTEXT", "@PROD_CLUSTER", "<prod-context>"),
-    "GITHUB_OWNER": ("github_owner", "GITHUB_OWNER", "jfillman", "<github-owner>"),
+    "GITHUB_OWNER": ("github_owner", "HANGAR_GITHUB_OWNER", None, "<github-owner>"),
 }
 PLACEHOLDER = re.compile(r"\$\{(" + "|".join(VARS) + r")\}|\$(" + "|".join(VARS) + r")\b")
 
@@ -97,17 +101,56 @@ def from_clusters_file(path):
     return (dev[0] if len(dev) == 1 else None), (prod[0] if len(prod) == 1 else None), errors
 
 
+def read_env_file(path):
+    """KEY=VALUE per line; blank lines and # comments ignored; optional `export ` and quotes."""
+    out = {}
+    for n, line in enumerate(Path(path).read_text().splitlines(), 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export "):]
+        if "=" not in line:
+            raise ConfigError(f"{path}:{n}: expected KEY=VALUE")
+        k, v = line.split("=", 1)
+        v = v.strip()
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
+            v = v[1:-1]
+        out[k.strip()] = v
+    return out
+
+
+def scm_owner(path):
+    """scm.owner from a clusters.yaml or an Apron cluster.yaml, or None."""
+    data = yaml.safe_load(Path(path).read_text()) or {}
+    scm = data.get("scm") if isinstance(data, dict) else None
+    return (scm or {}).get("owner") if isinstance(scm, dict) else None
+
+
 def resolve(args, environ=None):
     """{placeholder: value or None} plus {placeholder: why it is unset}."""
-    environ = os.environ if environ is None else environ
+    environ = dict(os.environ if environ is None else environ)
+    env_file = getattr(args, "env_file", None) or environ.get("HANGAR_WALKTHROUGH_ENV")
+    if env_file and not Path(env_file).is_file():
+        raise ConfigError(f"--env-file {env_file}: no such file")
+    if not env_file and Path(".walkthrough.env").is_file():
+        env_file = ".walkthrough.env"
+    if env_file:
+        for k, v in read_env_file(env_file).items():
+            environ.setdefault(k, v)  # a real environment variable wins over the file
     values, why = {}, {}
     file_vals, file_errors = {}, {}
-    clusters = args.clusters or environ.get("HANGAR_CLUSTERS_FILE")
+    clusters = getattr(args, "clusters", None) or environ.get("HANGAR_CLUSTERS_FILE")
     if clusters:
         if not Path(clusters).is_file():
             raise ConfigError(f"--clusters {clusters}: no such file")
         d, p, file_errors = from_clusters_file(clusters)
-        file_vals = {"DEV_CLUSTER": d, "PROD_CLUSTER": p}
+        file_vals = {"DEV_CLUSTER": d, "PROD_CLUSTER": p, "GITHUB_OWNER": scm_owner(clusters)}
+    config = getattr(args, "cluster_config", None) or environ.get("HANGAR_CLUSTER_CONFIG")
+    if config:
+        if not Path(config).is_file():
+            raise ConfigError(f"--cluster-config {config}: no such file")
+        file_vals["GITHUB_OWNER"] = file_vals.get("GITHUB_OWNER") or scm_owner(config)
     for name in ("DEV_CLUSTER", "PROD_CLUSTER", "GITHUB_OWNER", "DEV_CONTEXT", "PROD_CONTEXT"):
         dest, env, default, _ = VARS[name]
         v = getattr(args, dest, None) or environ.get(env) or file_vals.get(name)
@@ -120,8 +163,10 @@ def resolve(args, environ=None):
                 # A context defaults to its cluster's name, so the real gap is the cluster name.
                 why[name] = why[default[1:]] + f" (or pass {flag})"
                 continue
+            hint = ("give an Apron cluster.yaml (scm.owner) with --cluster-config" if name == "GITHUB_OWNER"
+                    else "give the fleet's clusters.yaml with --clusters")
             why[name] = file_errors.get(name) or (
-                f"{name} is not set: pass {flag}, set {env}, or give the fleet's clusters.yaml with --clusters")
+                f"{name} is not set: pass {flag}, set {env} (in the environment or the --env-file), or {hint}")
     return values, why
 
 
@@ -197,7 +242,9 @@ def main(argv=None):
     ap.add_argument("--dir", default=str(DEFAULT_DIR))
     ap.add_argument("--format", choices=["text", "json"], default="text")
     ap.add_argument("--render", help="write markdown instead of running (one FILE only)")
-    ap.add_argument("--clusters", help="the fleet's clusters.yaml, to pick the dev/prod cluster names from")
+    ap.add_argument("--clusters", help="the fleet's clusters.yaml, to pick the dev/prod cluster names (and scm.owner) from")
+    ap.add_argument("--cluster-config", help="an Apron cluster.yaml, to read scm.owner (the GitHub owner) from")
+    ap.add_argument("--env-file", help="KEY=VALUE file of HANGAR_* settings (default ./.walkthrough.env if present)")
     for name, (dest, env, default, _) in VARS.items():
         ap.add_argument("--" + dest.replace("_", "-"), dest=dest, help=f"{name} (env {env})")
     a = ap.parse_args(argv)

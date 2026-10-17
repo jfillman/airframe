@@ -2,7 +2,7 @@
 
 Converted from [`../user/quickstart-gate-api.md`](../user/quickstart-gate-api.md).
 
-Placeholders: `<dev-context>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+Placeholders: `<dev-context>`, `<github-owner>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
 
 ## gate-api passes the NodeJSApplication verify contract (dev cluster ready, CI/CD onboarded, both repos exist)
 
@@ -15,7 +15,7 @@ tools/airframe-verify nodejsapplication app-gate-api-cicd/gate-api --context "<d
 ## The onboarding PR was merged (.tekton/ exists in the source repo)
 
 ```bash
-gh api repos/jfillman/gate-api/contents/.tekton --jq '.[].name'
+gh api repos/<github-owner>/gate-api/contents/.tekton --jq '.[].name'
 ```
 
 **Expected:** flow-ci.yaml and onboarding-resync.yaml are present
@@ -23,7 +23,7 @@ gh api repos/jfillman/gate-api/contents/.tekton --jq '.[].name'
 ## cicd.yaml declares dev (ground) and staging (flight, on the prod cluster), with a signer
 
 ```bash
-gh api repos/jfillman/gate-api/contents/cicd.yaml --jq .content | base64 -d
+gh api repos/<github-owner>/gate-api/contents/cicd.yaml --jq .content | base64 -d
 ```
 
 **Expected:** deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; allowedCommitSigners not empty; no removed keys
@@ -48,10 +48,10 @@ curl -s http://localhost:18086/api/whoami
 ## Staging was released: release.yaml in the gitops repo names a gate-api image
 
 ```bash
-gh api repos/jfillman/gitops-gate-api/contents/<prod-cluster>/staging/release.yaml --jq .content | base64 -d
+gh api repos/<github-owner>/gitops-gate-api/contents/<prod-cluster>/staging/release.yaml --jq .content | base64 -d
 ```
 
-**Expected:** release.image.repository is ghcr.io/<owner>/gate-api with a tag
+**Expected:** release.image.repository is ghcr.io/<github-owner>/gate-api with a tag
 
 ## Staging: the Rollout is a canary with steps, fully available, on the released image
 

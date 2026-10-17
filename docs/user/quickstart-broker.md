@@ -290,6 +290,10 @@ curl -s localhost:8080/api/boarding/AC123   # gate is B2 at once, "cached":false
 curl -s localhost:8080/api/whoami           # "eventsReceived" went up
 ```
 
+> **After [part 5](quickstart-skyport-auth.md)** these API calls need a bearer token (`401` without one).
+> Mint one with `. docs/walkthroughs/lib/dex.sh; tok="$(dex_token <dev-cluster> app-boarding-api-dev board-oauth)"`
+> and add `-H "Authorization: Bearer $tok"`. Probes and `/api/whoami` stay open.
+
 In part 2 that last lookup showed the old gate for up to three minutes. Now the change reaches every
 `boarding-api` pod as soon as it is committed, because each pod's consumer receives the event and
 evicts the entry. (With two replicas the queue is shared, so one pod handles each event; the cache is

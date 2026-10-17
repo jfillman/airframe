@@ -88,7 +88,7 @@ kubectl --context <dev-cluster> get pythonapplication baggage-api -n app-baggage
 
 ```bash
 git clone https://github.com/jfillman/airframe.git /tmp/airframe   # skip if you still have it
-git clone https://github.com/<owner>/baggage-api.git && cd baggage-api   # fails if ./baggage-api exists
+git clone https://github.com/<github-owner>/baggage-api.git && cd baggage-api   # fails if ./baggage-api exists
 
 cp -R /tmp/airframe/examples/skyport/baggage-api/. .
 ./test.sh                # 12 passing (installs requirements + mongomock first)
@@ -234,6 +234,10 @@ curl -s -X PUT -H 'Content-Type: application/json' -d '{"gate":"C4"}' localhost:
 curl -s localhost:8083/api/bags/AC123         # carousel 3 now, reroutes went up
 curl -s localhost:8083/api/reroutes           # the move, newest first
 ```
+
+> **After [part 5](quickstart-skyport-auth.md)** these API calls need a bearer token (`401` without one).
+> Mint one with `. docs/walkthroughs/lib/dex.sh; tok="$(dex_token <dev-cluster> app-boarding-api-dev board-oauth)"`
+> and add `-H "Authorization: Bearer $tok"`. Probes and `/api/whoami` stay open.
 
 A flight appears in `/api/bags` only after its first event (the first sighting assigns a carousel, it
 doesn't re-route). The simulator in `flight-api` changes a flight about every 30 seconds, so the list

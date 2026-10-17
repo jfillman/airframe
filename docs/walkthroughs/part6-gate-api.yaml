@@ -75,7 +75,7 @@ steps:
     title: "Staging was released: release.yaml in the gitops repo names a gate-api image"
     command: |
       gh api repos/${GITHUB_OWNER}/gitops-gate-api/contents/${PROD_CLUSTER}/staging/release.yaml --jq .content | base64 -d
-    expected: "release.image.repository is ghcr.io/<owner>/gate-api with a tag"
+    expected: "release.image.repository is ghcr.io/<github-owner>/gate-api with a tag"
     verify: |
       set -euo pipefail
       gh api "repos/${GITHUB_OWNER}/gitops-gate-api/contents/${PROD_CLUSTER}/staging/release.yaml" --jq .content | base64 -d > /tmp/wt-gate-release.yaml

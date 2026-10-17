@@ -2,7 +2,7 @@
 
 Converted from [`../user/quickstart.md`](../user/quickstart.md).
 
-Placeholders: `<dev-context>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+Placeholders: `<dev-context>`, `<github-owner>`, `<prod-cluster>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
 
 ## The app exists as a synced, ready NodeJSApplication XR
 
@@ -15,7 +15,7 @@ kubectl --context "<dev-context>" get nodejsapplication boarding-api -n app-boar
 ## The pipeline onboarding PR was merged (.tekton/ exists in the source repo)
 
 ```bash
-gh api repos/jfillman/boarding-api/contents/.tekton --jq '.[].name'
+gh api repos/<github-owner>/boarding-api/contents/.tekton --jq '.[].name'
 ```
 
 **Expected:** flow-ci.yaml, flow-pr-build.yaml and onboarding-resync.yaml are all present
@@ -23,7 +23,7 @@ gh api repos/jfillman/boarding-api/contents/.tekton --jq '.[].name'
 ## The real app code replaced the hello-world scaffold
 
 ```bash
-gh api repos/jfillman/boarding-api/contents --jq '.[].name'
+gh api repos/<github-owner>/boarding-api/contents --jq '.[].name'
 ```
 
 **Expected:** app.js, store.js, reservations.js and public/ are present (the scaffold's index.js alone would mean this step never happened)

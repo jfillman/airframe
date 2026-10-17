@@ -1,0 +1,116 @@
+# What Glidepath's deploy-ecs.yaml needs to deploy to this service with no stored key (2026-10-16, the ECS half of
+# ~/tech/SPEC-glidepath-deployer-federation.md; Airframe docs/admin/cloud-credentials.md).
+#
+# ECR repository <family> (the service's name): deploy-ecs copies every build here from ghcr.io, because Fargate can
+# pull a private image only from ECR (or with a Secrets Manager credential per task definition). The task's
+# execution role already may pull from it (AmazonECSTaskExecutionRolePolicy). forceDelete so deleting the XR removes
+# a repository that holds images - this target is disposable by design.
+#
+# Deploy role glidepath-deploy-ecs-<family cut to 43> (IAM's 64 characters: 21 + 43; deploy-ecs computes the same
+# name from deploy.ecs.service). Trust: AssumeRoleWithWebIdentity from the control-plane cluster's ServiceAccount
+# issuer, only for the ServiceAccount glidepath-cloud-deployer in this XR's namespace, only with audience
+# sts.amazonaws.com. Permissions: push to and read this repository; describe and register task definitions (ECS
+# can't narrow those by ARN: a new revision has none yet); describe and update this one service; pass this target's
+# execution role to ECS (registering a task definition that names it requires that). Nothing else. The fleet's
+# permissions boundary caps it again, and the Crossplane identity can't create it without that boundary.
+#
+# The role is created only once the registry carries the account, the boundary and the issuer (no access-key mode;
+# TargetReady then says AwsEcsTargetNeedsWebIdentity). Once it exists it is always rendered: if the registry can't be
+# read for a reconcile, it is re-declared from its own observed spec instead of being dropped, which would delete it
+# in AWS (business rule CRED-09).
+<<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
+<<- $repoName := $family >>
+<<- $clusterName := $appName >>
+<<- $deployRoleName := printf "glidepath-deploy-ecs-%s" (trunc 43 $family) >>
+<<- $execRoleName := printf "%s-ecs-exec" (trunc 55 $family) >>
+apiVersion: ecr.aws.m.upbound.io/v1beta1
+kind: Repository
+metadata:
+  name: <<$xrName>>-repository
+  annotations:
+    <<setResourceNameAnnotation "ecr-repository">>
+    crossplane.io/external-name: <<$repoName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    imageTagMutability: MUTABLE
+    forceDelete: true
+    imageScanningConfiguration:
+      scanOnPush: false
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- $deployRoleObs := index (.observed.resources | default dict) "deploy-role" | default dict >>
+<<- if and $deployRoleObs (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-deploy
+  annotations:
+    <<setResourceNameAnnotation "deploy-role">>
+    crossplane.io/external-name: <<dig "resource" "metadata" "annotations" "crossplane.io/external-name" $deployRoleName $deployRoleObs>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    <<- toYaml (dig "resource" "spec" "forProvider" dict $deployRoleObs) | nindent 4 >>
+<<- else if and $awsAccountId $awsBoundaryArn $saIssuer >>
+<<- $issuerHost := trimPrefix "https://" $saIssuer >>
+<<- $trust := dict "Version" "2012-10-17" "Statement" (list (dict
+      "Effect" "Allow"
+      "Principal" (dict "Federated" (printf "arn:aws:iam::%s:oidc-provider/%s" $awsAccountId $issuerHost))
+      "Action" "sts:AssumeRoleWithWebIdentity"
+      "Condition" (dict "StringEquals" (dict
+        (printf "%s:aud" $issuerHost) "sts.amazonaws.com"
+        (printf "%s:sub" $issuerHost) (printf "system:serviceaccount:%s:glidepath-cloud-deployer" $xrNamespace))))) >>
+<<- $repoArn := printf "arn:aws:ecr:%s:%s:repository/%s" $region $awsAccountId $repoName >>
+<<- $serviceArn := printf "arn:aws:ecs:%s:%s:service/%s/%s" $region $awsAccountId $clusterName $family >>
+<<- $execRoleArn := printf "arn:aws:iam::%s:role/%s" $awsAccountId $execRoleName >>
+<<- $policy := dict "Version" "2012-10-17" "Statement" (list
+      (dict "Sid" "EcrLogin" "Effect" "Allow" "Action" "ecr:GetAuthorizationToken" "Resource" "*")
+      (dict "Sid" "ThisRepository" "Effect" "Allow"
+        "Action" (list "ecr:BatchCheckLayerAvailability" "ecr:BatchGetImage" "ecr:GetDownloadUrlForLayer"
+                       "ecr:DescribeImages" "ecr:DescribeRepositories" "ecr:InitiateLayerUpload"
+                       "ecr:UploadLayerPart" "ecr:CompleteLayerUpload" "ecr:PutImage")
+        "Resource" $repoArn)
+      (dict "Sid" "TaskDefinitions" "Effect" "Allow"
+        "Action" (list "ecs:DescribeTaskDefinition" "ecs:RegisterTaskDefinition" "ecs:TagResource")
+        "Resource" "*"
+        "Condition" (dict "StringEquals" (dict "aws:RequestedRegion" $region)))
+      (dict "Sid" "ThisService" "Effect" "Allow"
+        "Action" (list "ecs:DescribeServices" "ecs:UpdateService")
+        "Resource" $serviceArn)
+      (dict "Sid" "PassThisExecutionRole" "Effect" "Allow"
+        "Action" "iam:PassRole"
+        "Resource" $execRoleArn
+        "Condition" (dict "StringEquals" (dict "iam:PassedToService" "ecs-tasks.amazonaws.com")))) >>
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata:
+  name: <<$xrName>>-deploy
+  annotations:
+    <<setResourceNameAnnotation "deploy-role">>
+    crossplane.io/external-name: <<$deployRoleName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    description: <<printf "Deploys the %s ECS service from %s (Airframe AwsEcsTarget %s)" $family $xrNamespace $xrName | toJson>>
+    assumeRolePolicy: <<toJson $trust | quote>>
+    inlinePolicy:
+      - name: deploy-this-service
+        policy: <<toJson $policy | quote>>
+    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- end >>

@@ -9,7 +9,7 @@ minimum infrastructure up, and tear it down, on request:
 | XRD | Stands up | For |
 |---|---|---|
 | `AwsLambdaTarget` | ECR repository, execution role, the function (image-packaged, seeded with a public Lambda base image), a public Function URL | a `LambdaFunction` app |
-| `AwsEcsTarget` | execution role, a small dedicated public network (or your own), ECS cluster, task definition, Fargate service with a public IP | any app with `deploy.target: aws-ecs` |
+| `AwsEcsTarget` | execution role, ECR repository and deploy role, a small dedicated public network (or your own), ECS cluster, task definition, Fargate service with a public IP | any app with `deploy.target: aws-ecs` |
 | `AzureContainerAppTarget` | resource group, Container Apps environment, the app with public ingress (seeded with the Azure Functions base image) | an `AzureFunction` app, or any app deploying to Container Apps |
 
 They are **stand-alone and disposable**: create the XR to get the infrastructure, delete it to remove
@@ -38,6 +38,13 @@ being tested.
   `TargetReady: AwsLambdaTargetNeedsWebIdentity`. (Until v0.3.147 the Job could use an access key from
   `spec.credentialsSecret` instead; that mode is gone, because Glidepath can't deploy to a function bootstrapped
   that way.)
+- For an ECS target, the same **web identity**: the target creates an ECR repository named after the service
+  (`<appName>-<env>`) and `glidepath-deploy-ecs-<appName>-<env>`, a role trusted only by `glidepath-cloud-deployer`
+  in the app's `-cicd` namespace and allowed only to push to that repository, register task definitions, update
+  that one service and pass its execution role to ECS. Glidepath's `deploy-ecs` copies each build from `ghcr.io`
+  into the repository (so a private package deploys) and assumes the role; no AWS key is stored. Without the three
+  registry fields the infrastructure is still created, but `TargetReady` stops at
+  `AwsEcsTargetNeedsWebIdentity` and nothing can deploy.
 
 ## What a target never does
 

@@ -1,0 +1,28 @@
+# The ECR repository, the deploy role and the execution role as stored once deploys work, with the role specs this
+# composition rendered (trimmed): for the ready case and for the case where the cluster registry can't be read, in
+# which both roles must be re-declared from here, never dropped or weakened.
+apiVersion: ecr.aws.m.upbound.io/v1beta1
+kind: Repository
+metadata: {name: smoke-ecs-repository, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: ecr-repository, crossplane.io/external-name: smoke-ecs-dev}}
+status: {atProvider: {repositoryUrl: 012345678901.dkr.ecr.us-east-1.amazonaws.com/smoke-ecs-dev}, conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata: {name: smoke-ecs-deploy, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: deploy-role, crossplane.io/external-name: glidepath-deploy-ecs-smoke-ecs-dev}}
+spec:
+  forProvider:
+    description: Deploys the smoke-ecs-dev ECS service from app-smoke-ecs-cicd (Airframe AwsEcsTarget smoke-ecs)
+    assumeRolePolicy: '{"Statement":[{"Action":"sts:AssumeRoleWithWebIdentity","Effect":"Allow"}],"Version":"2012-10-17"}'
+    inlinePolicy:
+      - name: deploy-this-service
+        policy: '{"Statement":[{"Action":"ecr:GetAuthorizationToken","Effect":"Allow","Resource":"*","Sid":"EcrLogin"}],"Version":"2012-10-17"}'
+    permissionsBoundary: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
+status: {atProvider: {arn: "arn:aws:iam::012345678901:role/glidepath-deploy-ecs-smoke-ecs-dev"}, conditions: [{type: Ready, status: "True"}]}
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: Role
+metadata: {name: smoke-ecs-exec, namespace: app-smoke-ecs-cicd, annotations: {crossplane.io/composition-resource-name: iam-role, crossplane.io/external-name: smoke-ecs-dev-ecs-exec}}
+spec:
+  forProvider:
+    permissionsBoundary: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
+status: {conditions: [{type: Ready, status: "True"}]}

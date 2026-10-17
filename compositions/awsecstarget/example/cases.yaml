@@ -1,22 +1,58 @@
 # Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
 # (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
 # readable assertions. Regenerate expectations with `tools/test_compositions.py --update <composition>`.
+# Deploys reach AWS only through the target's deploy role (no access-key mode), so every case but no-web-identity and
+# registry-unreadable-keeps-everything reads cluster-registry-with-aws.yaml.
 cases:
 - name: fresh
   xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
   expect:
+    present: [iam-role, ecr-repository, deploy-role, ecs-cluster, task-definition, ecs-service]
     conditions:
       TargetReady: AwsEcsTargetProvisioning
-- name: ready
+# A cluster without web identity: the infrastructure, but no deploy role, and a reason that says what to add.
+- name: no-web-identity
   xr: xr-defaults.yaml
   observed:
   - observed-ready.yaml
+  expect:
+    present: [ecr-repository, ecs-service]
+    conditions:
+      TargetReady: AwsEcsTargetNeedsWebIdentity
+# The service is up but the deploy role isn't observed yet: not Ready, Glidepath couldn't deploy.
+- name: service-up-deploy-access-pending
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-ready.yaml
+  expect:
+    conditions:
+      TargetReady: AwsEcsTargetServicePending
+- name: ready
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-ready.yaml
+  - observed-deploy-access.yaml
   expect:
     conditions:
       TargetReady: AwsEcsTargetReady
 - name: existing-network
   xr: xr-existing-network.yaml
-- name: permissions-boundary
-  xr: xr-defaults.yaml
   required:
   - cluster-registry-with-aws.yaml
+# The cluster registry can't be read for a reconcile while everything exists: nothing is dropped, the deploy role is
+# re-declared from its own spec and the execution role keeps its permissions boundary.
+- name: registry-unreadable-keeps-everything
+  xr: xr-defaults.yaml
+  observed:
+  - observed-ready.yaml
+  - observed-deploy-access.yaml
+  expect:
+    present: [iam-role, ecr-repository, deploy-role, ecs-service]
+    conditions:
+      TargetReady: AwsEcsTargetReady

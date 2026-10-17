@@ -3,7 +3,7 @@
 # definition revision with the built image and updates an EXISTING service, so the cluster, the
 # task definition family (named <appName>-<env> by Glidepath's own default), the container inside
 # it and the service all have to be there first, along with somewhere to run: a Fargate task needs
-# subnets with a route to the internet (to pull the image from ghcr.io) and a security group that
+# subnets with a route to the internet (to pull the placeholder image and reach AWS APIs) and a security group that
 # lets the smoke test reach the container port. By default this XR creates a small dedicated
 # network for exactly that (one VPC, one public subnet, an internet gateway, a route and a security
 # group), so a target is self-contained and deleting the XR removes everything; `network.mode:

@@ -4,25 +4,27 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kind-dev
+  name: example-dev
   namespace: crossplane-system
   labels:
     hangar.io/cluster-registry: "true"
 data:
+  scmOwner: example-org
   type: dev
   cicdReady: "true"
   awsAccountId: "012345678901"
   awsPermissionsBoundaryArn: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
-  serviceAccountIssuer: https://issuer.example/oidc/kind-dev
+  serviceAccountIssuer: https://issuer.example/oidc/example-dev
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kind-prod
+  name: example-prod
   namespace: crossplane-system
   labels:
     hangar.io/cluster-registry: "true"
 data:
+  scmOwner: example-org
   type: upper
   crossplaneReady: "true"
   awsAccountId: "012345678901"

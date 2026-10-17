@@ -96,7 +96,7 @@ spec:
                 cluster:
                   type: string
                   description: >-
-                    Which cluster this app is deployed to - e.g. "kind-prod". Used,
+                    Which cluster this app is deployed to: its name in the cluster registry (e.g. "example-prod", an example). Used,
                     together with env, to derive the GitOps manifest path
                     (<cluster>/<env>/values.yaml) a dispatched diagnosis Job opens
                     its fix PR against.

@@ -1,2 +1,3 @@
 appName: dead-end-test
-devClusterName: kiac-dev
+# devClusterName was removed: the chart compares no cluster names (AF-CLUSTER-001).
+devClusterName: example-dev

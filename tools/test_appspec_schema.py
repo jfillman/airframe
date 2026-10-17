@@ -56,7 +56,7 @@ def mutations():
           lambda d: d["config"].__setitem__("httpRoute", {"enabled": True, "parentRefs": [{"name": "kiac"}]})),
         m("bad component spec", lambda d: d["config"].__setitem__("components", [{"type": "redis", "name": "c", "spec": {"sise": "x"}}])),
         # platform- and release-owned chart keys are not an AppSpec's to set
-        m("platform-owned key (cluster)", lambda d: d["config"].__setitem__("cluster", "kind-prod")),
+        m("platform-owned key (cluster)", lambda d: d["config"].__setitem__("cluster", "example-prod")),
         m("platform-owned key (envName)", lambda d: d["config"].__setitem__("envName", "prod")),
         m("release-owned key (release)", lambda d: d["config"].__setitem__("release", {"image": {"tag": "x"}})),
         m("image outside a release (rollout.image)",

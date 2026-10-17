@@ -56,17 +56,6 @@ resources:
     providerConfigRef:
       kind: ClusterProviderConfig
       name: default
-- apiVersion: catalog.hangar.io/v1alpha1
-  kind: TektonCICD
-  metadata:
-    name: checkout-payments-tektoncicd
-    namespace: demo-apps
-  name: tektoncicd
-  spec:
-    appName: checkout-payments
-    appRepoUrl: https://github.com/jfillman/checkout-payments
-    devCluster: kind-dev
-    gitopsRepoUrl: https://github.com/jfillman/gitops-checkout-payments
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (checkout-payments-tektoncicd) to report its own CicdOnboarded condition
@@ -79,7 +68,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: gitops-repo, src-repo, and tektoncicd'
+  - message: 'Unready resources: gitops-repo, src-repo'
     reason: Creating
     status: 'False'
     type: Ready

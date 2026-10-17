@@ -172,6 +172,6 @@ spec:
                     exactly what this Composition renders on every drift.
                   items:
                     type: string
-                    description: A full gitops repo URL, e.g. https://github.com/jfillman/gitops-cluster-dev.
+                    description: A full gitops repo URL, e.g. https://github.com/example-org/gitops-cluster-dev (an example).
                   default: []
           required: ["spec"]

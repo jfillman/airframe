@@ -11,6 +11,6 @@ metadata:
     hangar.io/component-type: redis
 spec:
   environmentRef:
-    name: boarding-api-kind-dev-dev
+    name: boarding-api-example-dev-dev
   size: small
   persistence: false

@@ -10,6 +10,10 @@
 # instead, same "structural backstop, refuse rather than partially succeed" instinct
 # already used for the ClusterReady condition (status/status.yaml).
 #
+# clusterType (2026-10-16) is the target cluster's registry `type`, read by 00-cluster-gate.yaml
+# (always "upper" here: the gate admits nothing else). The chart decides its dev-vs-upper secret
+# layout from it instead of comparing `cluster` with a dev cluster name it used to default.
+#
 # Identity only, no rollout: key (2026-10-10). The environment gets the chart's default
 # workload (a service), and nothing renders until a release names an image (release.yaml,
 # written by Glidepath). This used to seed rollout: null as "nothing deployed yet", but that
@@ -95,6 +99,7 @@ spec:
       appName: <<$appName>>
       appType: <<$appType>>
       cluster: <<$cluster>>
+      clusterType: <<$clusterType>>
       envName: <<$env>>
     commitMessage: <<printf "Bootstrap %s environment: add %s/%s/values.yaml" $env $cluster $env | toJson>>
 <<- end >>

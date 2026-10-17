@@ -8,7 +8,7 @@ xr:
     reason: AppNotFound
     status: 'False'
     type: AppResolved
-  - message: 'widget-service-kind-prod-staging''s target cluster (kind-prod) isn''t a registered, ready upper-env cluster
+  - message: 'widget-service-example-prod-staging''s target cluster (example-prod) isn''t a registered, ready upper-env cluster
       - either it isn''t in the cluster registry yet (gitops-cluster-dev/00-bootstrap/cluster-registry/), it''s registered
       as type: dev (this XRD only ever targets upper-env clusters - see its own header comment), or crossplaneReady isn''t
       "true" yet. No resources have been created. Resolves itself once the registry entry is correct - no XR edit needed.'

@@ -16,6 +16,8 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
                              Composition creates carries it; the Crossplane identity may create no other kind)
   serviceAccountIssuer       serviceAccountIssuer         (the cluster's public ServiceAccount token issuer, apron
                              clusterIdentity; cloud deploy roles trust it)
+  scmOwner                   scm.owner                    (the GitHub user or organization every app, gitops and tenants
+                             repo lives under; the compositions build repo URLs and Go module paths from it)
 */ -}}
 {{- $seen := dict }}
 {{- $aws := .Values.aws | default dict }}
@@ -29,6 +31,9 @@ One ConfigMap per cluster (and per alias), the shape every Airframe Composition'
 {{- if not (index $inf .) }}{{ fail (printf "infisical: '%s' is required once the infisical block is set" .) }}{{ end }}
 {{- end }}
 {{- end }}
+{{- $scm := .Values.scm | default dict }}
+{{- if and .Values.clusters (not $scm.owner) }}{{ fail "scm: 'owner' is required (the GitHub user or organization the fleet's repos live under)" }}{{ end }}
+{{- if and $scm.owner (not (regexMatch "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$" (toString $scm.owner))) }}{{ fail (printf "scm: 'owner' %q is not a GitHub user or organization name" (toString $scm.owner)) }}{{ end }}
 {{- range .Values.clusters }}
 {{- if not .name }}{{ fail "clusters: every record needs a name" }}{{ end }}
 {{- $zone := .zone | default "upper" }}
@@ -81,6 +86,7 @@ data:
   infisicalUrl: {{ $infUrl | quote }}
   infisicalOrgId: {{ $inf.orgId | quote }}
   {{- end }}
+  scmOwner: {{ $scm.owner | quote }}
   zone: {{ $zone }}
   roles: {{ $roles | join "," | quote }}
   {{- if $aws }}

@@ -5,16 +5,18 @@ infisical:
 aws:
   accountId: "012345678901"
   permissionsBoundaryPolicy: HangarCloudTargetBoundary
+scm:
+  owner: example-org
 clusters:
-  - name: kind-dev
+  - name: example-dev
     zone: lower
     roles: [control-plane, workloads]
     tenantsRepo: gitops-cluster-dev-tenants
-    aliases: [kiac-dev]
+    aliases: [example-dev-alias]
     airframe: { cicdReady: true, infisicalHost: true, autopilotReady: true }
-    serviceAccountIssuer: https://issuer.example/oidc/kind-dev
-  - name: kind-prod
+    serviceAccountIssuer: https://issuer.example/oidc/example-dev
+  - name: example-prod
     zone: upper
     roles: [workloads, platform-services]
     airframe: { crossplaneReady: true }
-    glidepath: { relaySecretName: cluster-kind-prod-relay-token }
+    glidepath: { relaySecretName: cluster-example-prod-relay-token }

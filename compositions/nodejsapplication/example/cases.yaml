@@ -54,3 +54,27 @@ cases:
   xr: xr-aws-ecs.yaml
   expect:
     present: [aws-ecs-target-dev, src-repo-cicd-yaml]
+- name: registry-ready
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+  expect:
+    present:
+    - tektoncicd
+    - src-repo-cicd-yaml
+    - secretstore-xr
+    conditions:
+      DevClusterReady: DevClusterNotReady
+- name: no-registry-keeps-child
+  xr: xr-defaults.yaml
+  observed:
+  - observed-tektoncicd.yaml
+  expect:
+    present:
+    - tektoncicd
+- name: registry-without-scm-owner
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-no-scm-owner.yaml
+  expect:
+    fatal: true

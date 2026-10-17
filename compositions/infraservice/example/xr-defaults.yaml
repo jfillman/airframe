@@ -6,6 +6,6 @@ metadata:
   name: shared-cache
   namespace: infra-services
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   description: Shared Redis for the demo tenants
   visibility: private

@@ -3,7 +3,7 @@
 apiVersion: identity.infisical.m.hangar.io/v1alpha1
 kind: Identity
 metadata:
-  name: checkout-api-kind-dev
+  name: checkout-api-example-dev
   namespace: demo-apps
   annotations:
     crossplane.io/composition-resource-name: infisical-identity

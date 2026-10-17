@@ -1,0 +1,14 @@
+# --required-resources fixture: a registered, cicdReady dev cluster record as charts/cluster-registry renders it
+# (example names; scmOwner is the fleet's scm.owner). Paired with xr-defaults.yaml for the registry-ready case.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: "true"
+data:
+  scmOwner: example-org
+  type: dev
+  cicdReady: "true"
+  tenantsRepo: gitops-cluster-dev-tenants

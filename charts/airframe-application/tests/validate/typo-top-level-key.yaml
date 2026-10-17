@@ -43,7 +43,7 @@ env:
 envName: dev
 rolout:
   image:
-    repository: ghcr.io/jfillman/boarding-api
+    repository: ghcr.io/example-org/boarding-api
     tag: 1.1.0-8f9acd8
 secrets:
 - key: REDIS_PASSWORD

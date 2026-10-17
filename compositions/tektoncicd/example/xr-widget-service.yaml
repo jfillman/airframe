@@ -9,6 +9,6 @@ metadata:
   namespace: demo-apps
 spec:
   appName: widget-service
-  gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service
-  appRepoUrl: https://github.com/jfillman/widget-service
-  devCluster: kind-dev
+  gitopsRepoUrl: https://github.com/example-org/gitops-widget-service
+  appRepoUrl: https://github.com/example-org/widget-service
+  devCluster: example-dev

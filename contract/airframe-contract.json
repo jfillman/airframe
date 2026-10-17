@@ -38,7 +38,17 @@
       },
       "cluster": {
         "default": "",
-        "description": "Which cluster this release runs on. Not in the original service-catalog design's schema block - the chart needs it to know its own identity (e.g. to compare against devClusterName below), and the ApplicationEnvironment composition that commits this file already knows it.",
+        "description": "This cluster's name in the cluster registry, which is also its kubectl context name. Used to name this app's SecretStores (<appName>-<cluster>) and to label what the chart renders. The ApplicationEnvironment composition writes it for Flight environments and Glidepath sets it for Ground environments; never a literal in the chart.",
+        "type": "string"
+      },
+      "clusterType": {
+        "default": "",
+        "description": "This cluster's role, copied from its cluster-registry record's `type` (dev: the control-plane cluster that hosts Ground environments and the one shared SecretStore per app; upper: any other cluster). Decides where secrets: entries are read from. The chart compares no cluster names. Required whenever secrets: is non-empty: the render fails without it rather than guess. ApplicationEnvironment writes upper for Flight environments; Glidepath sets dev for Ground environments.",
+        "enum": [
+          "",
+          "dev",
+          "upper"
+        ],
         "type": "string"
       },
       "componentKinds": {
@@ -67,11 +77,6 @@
         "description": "Scheduled batch tasks (nightly cleanup, report generation, ...). Share env/secrets/configMaps/volumes with the main container automatically.",
         "type": "array"
       },
-      "devClusterName": {
-        "default": "kind-dev",
-        "description": "The name of this fleet's dev cluster, compared against `cluster` to decide dev-vs-upper behavior (e.g. secretsScope). Not the literal cluster context name in every case - see docs/admin - override only if a fleet's dev cluster is ever named something other than kind-dev.",
-        "type": "string"
-      },
       "env": {
         "default": [],
         "description": "Container environment variables for the main workload.",
@@ -96,7 +101,7 @@
           "path": "/",
           "pathType": "PathPrefix"
         },
-        "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.kiac.local.",
+        "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.<fleet domain> (the fleet's own local DNS suffix; nothing here assumes one).",
         "type": "object"
       },
       "ingress": {
@@ -2004,7 +2009,7 @@
       "knownFailures": [
         {
           "condition": "Synced",
-          "example": "cannot compose resources: cannot run Composition pipeline step \"render-secretstore-resources\": cannot execute template: template: manifests:61:6: executing \"manifests\" at <fail ...>: error calling fail: cluster registry record \"kind-prod\" has no infisicalUrl/infisicalOrgId: add the infisical: block to the hub's clusters.yaml and sync this cluster's cluster-registry Application",
+          "example": "cannot compose resources: cannot run Composition pipeline step \"render-secretstore-resources\": cannot execute template: template: manifests:61:6: executing \"manifests\" at <fail ...>: error calling fail: cluster registry record \"example-prod\" has no infisicalUrl/infisicalOrgId: add the infisical: block to the hub's clusters.yaml and sync this cluster's cluster-registry Application",
           "hint": "Check kubectl -n crossplane-system get cm <cluster> -o jsonpath='{.data}' for infisicalUrl and infisicalOrgId. If absent, add the infisical: block to gitops-cluster-dev/clusters.yaml and sync this cluster's cluster-registry Application (manual by design).",
           "id": "InfisicalRegistryKeysMissing",
           "match": "cluster registry record \"[^\"]+\" has no infisicalUrl/infisicalOrgId",

@@ -26,7 +26,7 @@
     },
     "cluster": {
       "type": "string",
-      "description": "Which cluster this release runs on. Not in the original service-catalog design's schema block - the chart needs it to know its own identity (e.g. to compare against devClusterName below), and the ApplicationEnvironment composition that commits this file already knows it.",
+      "description": "This cluster's name in the cluster registry, which is also its kubectl context name. Used to name this app's SecretStores (<appName>-<cluster>) and to label what the chart renders. The ApplicationEnvironment composition writes it for Flight environments and Glidepath sets it for Ground environments; never a literal in the chart.",
       "default": "",
       "x-hangar-owner": "platform",
       "x-hangar-risk": "critical"
@@ -38,10 +38,15 @@
       "x-hangar-owner": "platform",
       "x-hangar-risk": "critical"
     },
-    "devClusterName": {
+    "clusterType": {
       "type": "string",
-      "description": "The name of this fleet's dev cluster, compared against `cluster` to decide dev-vs-upper behavior (e.g. secretsScope). Not the literal cluster context name in every case - see docs/admin - override only if a fleet's dev cluster is ever named something other than kind-dev.",
-      "default": "kind-dev",
+      "enum": [
+        "",
+        "dev",
+        "upper"
+      ],
+      "description": "This cluster's role, copied from its cluster-registry record's `type` (dev: the control-plane cluster that hosts Ground environments and the one shared SecretStore per app; upper: any other cluster). Decides where secrets: entries are read from. The chart compares no cluster names. Required whenever secrets: is non-empty: the render fails without it rather than guess. ApplicationEnvironment writes upper for Flight environments; Glidepath sets dev for Ground environments.",
+      "default": "",
       "x-hangar-owner": "platform",
       "x-hangar-risk": "high"
     },
@@ -88,7 +93,7 @@
           "properties": {
             "repository": {
               "type": "string",
-              "description": "Image repository without a tag, e.g. ghcr.io/jfillman/boarding-api."
+              "description": "Image repository without a tag, e.g. ghcr.io/example-org/boarding-api (an example)."
             },
             "tag": {
               "type": "string",
@@ -775,7 +780,7 @@
           },
           "shared": {
             "type": "boolean",
-            "description": "false (default, on upper clusters) reads this env's own isolated Infisical environment. true reads the wide shared one instead. On kind-dev both read the one shared store, separated by a path prefix.",
+            "description": "false (default, on upper clusters) reads this env's own isolated Infisical environment. true reads the wide shared one instead. On the dev cluster (clusterType: dev) both read the one shared store, separated by a path prefix.",
             "default": false
           }
         },
@@ -1234,7 +1239,7 @@
     "httpRoute": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.kiac.local.",
+      "description": "Gateway API HTTPRoute, first-class alongside classic ingress. This platform's convention: <app>.<cluster-or-env-qualifier>.<fleet domain> (the fleet's own local DNS suffix; nothing here assumes one).",
       "default": {
         "enabled": false,
         "hostnames": [],

@@ -7,7 +7,7 @@
 # convention - the same deterministic string airframe-application's own environmentRef
 # helper independently computes for any Attached-tier XR in this env.
 #
-# cluster: kind-prod, not kind-dev - this XRD structurally rejects type: dev
+# cluster: example-prod (an upper cluster), not the dev cluster - this XRD structurally rejects type: dev
 # clusters (see the XRD's own header), so a meaningful gate-pass fixture has to
 # target an upper-env cluster name. Paired with cluster-registry-ready.yaml
 # (--required-resources) for the gate-pass render; cluster-registry-not-ready.yaml
@@ -15,9 +15,9 @@
 apiVersion: catalog.hangar.io/v1alpha1
 kind: ApplicationEnvironment
 metadata:
-  name: widget-service-kind-prod-staging
+  name: widget-service-example-prod-staging
   namespace: demo-apps
 spec:
   appName: widget-service
-  cluster: kind-prod
+  cluster: example-prod
   env: staging

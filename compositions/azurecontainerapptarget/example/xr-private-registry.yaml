@@ -13,7 +13,7 @@ spec:
   minReplicas: 0
   registry:
     server: ghcr.io
-    username: jfillman
+    username: example-org
     passwordSecretRef:
       name: ghcr-pull-token
       key: token

@@ -3,7 +3,7 @@ resources:
 - apiVersion: kubernetes.m.crossplane.io/v1alpha1
   kind: Object
   metadata:
-    name: checkout-api-kind-dev
+    name: checkout-api-example-dev
     namespace: app-checkout-api-cicd
   name: cluster-secret-store
   spec:
@@ -12,7 +12,7 @@ resources:
         apiVersion: external-secrets.io/v1
         kind: ClusterSecretStore
         metadata:
-          name: checkout-api-kind-dev
+          name: checkout-api-example-dev
         spec:
           conditions:
           - namespaceRegexes:
@@ -23,24 +23,24 @@ resources:
                 kubernetesAuthCredentials:
                   identityId:
                     key: identityId
-                    name: checkout-api-kind-dev-infisical-creds
+                    name: checkout-api-example-dev-infisical-creds
                     namespace: app-checkout-api-cicd
               hostAPI: http://infisical.infisical.svc.cluster.local:9999/api
               secretsScope:
                 environmentSlug: shared
-                projectSlug: checkout-api-kind-dev
+                projectSlug: checkout-api-example-dev
                 secretsPath: /
     managementPolicies:
     - '*'
 - apiVersion: identity.infisical.m.hangar.io/v1alpha1
   kind: Identity
   metadata:
-    name: checkout-api-kind-dev
+    name: checkout-api-example-dev
     namespace: app-checkout-api-cicd
   name: infisical-identity
   spec:
     forProvider:
-      name: checkout-api-kind-dev
+      name: checkout-api-example-dev
       orgId: 11111111-2222-3333-4444-555555555555
       role: no-access
     providerConfigRef:
@@ -49,7 +49,7 @@ resources:
 - apiVersion: identity.infisical.m.hangar.io/v1alpha1
   kind: IdentityKubernetesAuth
   metadata:
-    name: checkout-api-kind-dev
+    name: checkout-api-example-dev
     namespace: app-checkout-api-cicd
   name: infisical-identity-k8s-auth
   spec:
@@ -59,7 +59,7 @@ resources:
       allowedServiceAccountNames:
       - external-secrets
       identityIdRef:
-        name: checkout-api-kind-dev
+        name: checkout-api-example-dev
       kubernetesCaCertificate: '-----BEGIN CERTIFICATE-----
 
         FIXTURE
@@ -70,7 +70,7 @@ resources:
       kubernetesHost: https://kubernetes.default.svc.cluster.local
       tokenReviewerJwtSecretRef:
         key: token
-        name: checkout-api-kind-dev-token-reviewer
+        name: checkout-api-example-dev-token-reviewer
       tokenReviewerMode: api
     providerConfigRef:
       kind: ClusterProviderConfig
@@ -78,7 +78,7 @@ resources:
 - apiVersion: kubernetes.m.crossplane.io/v1alpha1
   kind: Object
   metadata:
-    name: checkout-api-kind-dev-identity-secret
+    name: checkout-api-example-dev-identity-secret
     namespace: app-checkout-api-cicd
   name: infisical-identity-secret
   spec:
@@ -89,21 +89,21 @@ resources:
           identityId: MTExMTExMTEtMjIyMi0zMzMzLTQ0NDQtNTU1NTU1NTU1NTU1
         kind: Secret
         metadata:
-          name: checkout-api-kind-dev-infisical-creds
+          name: checkout-api-example-dev-infisical-creds
           namespace: app-checkout-api-cicd
     managementPolicies:
     - '*'
 - apiVersion: project.infisical.m.hangar.io/v1alpha1
   kind: Project
   metadata:
-    name: checkout-api-kind-dev
+    name: checkout-api-example-dev
     namespace: app-checkout-api-cicd
   name: infisical-project
   spec:
     forProvider:
-      name: checkout-api-kind-dev
+      name: checkout-api-example-dev
       shouldCreateDefaultEnvs: false
-      slug: checkout-api-kind-dev
+      slug: checkout-api-example-dev
     managementPolicies:
     - Create
     - Observe
@@ -115,16 +115,16 @@ resources:
 - apiVersion: project.infisical.m.hangar.io/v1alpha1
   kind: ProjectIdentity
   metadata:
-    name: checkout-api-kind-dev
+    name: checkout-api-example-dev
     namespace: app-checkout-api-cicd
   name: infisical-project-identity
   spec:
     forProvider:
       adoptExisting: true
       identityIdRef:
-        name: checkout-api-kind-dev
+        name: checkout-api-example-dev
       projectIdRef:
-        name: checkout-api-kind-dev
+        name: checkout-api-example-dev
       roles:
       - roleSlug: viewer
     providerConfigRef:
@@ -133,14 +133,14 @@ resources:
 - apiVersion: project.infisical.m.hangar.io/v1alpha1
   kind: ProjectEnvironment
   metadata:
-    name: checkout-api-kind-dev-shared
+    name: checkout-api-example-dev-shared
     namespace: app-checkout-api-cicd
   name: infisical-project-shared-env
   spec:
     forProvider:
       name: shared
       projectIdRef:
-        name: checkout-api-kind-dev
+        name: checkout-api-example-dev
       slug: shared
     managementPolicies:
     - Create
@@ -153,7 +153,7 @@ resources:
 - apiVersion: kubernetes.m.crossplane.io/v1alpha1
   kind: Object
   metadata:
-    name: checkout-api-kind-dev-token-reviewer
+    name: checkout-api-example-dev-token-reviewer
     namespace: app-checkout-api-cicd
   name: infisical-token-reviewer-secret
   spec:
@@ -164,7 +164,7 @@ resources:
           token: ''
         kind: Secret
         metadata:
-          name: checkout-api-kind-dev-token-reviewer
+          name: checkout-api-example-dev-token-reviewer
           namespace: app-checkout-api-cicd
         type: Opaque
     managementPolicies:

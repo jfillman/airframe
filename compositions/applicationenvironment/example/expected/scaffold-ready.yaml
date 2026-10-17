@@ -3,7 +3,7 @@ resources:
 - apiVersion: protection.crossplane.io/v1beta1
   kind: Usage
   metadata:
-    name: widget-service-kind-prod-staging-app-usage
+    name: widget-service-example-prod-staging-app-usage
     namespace: demo-apps
   name: app-usage
   spec:
@@ -11,32 +11,32 @@ resources:
       apiVersion: catalog.hangar.io/v1alpha1
       kind: ApplicationEnvironment
       resourceRef:
-        name: widget-service-kind-prod-staging
+        name: widget-service-example-prod-staging
     of:
       apiVersion: catalog.hangar.io/v1alpha1
       kind: SpringBootApplication
       resourceRef:
         name: widget-service
         namespace: demo-apps
-    reason: "ApplicationEnvironment widget-service-kind-prod-staging references SpringBootApplication widget-service via spec.appName\
-      \ - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md \xA70)"
+    reason: "ApplicationEnvironment widget-service-example-prod-staging references SpringBootApplication widget-service via\
+      \ spec.appName - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md \xA70)"
     replayDeletion: true
 - apiVersion: repo.github.m.upbound.io/v1alpha1
   kind: RepositoryFile
   metadata:
     annotations:
-      crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/identity.yaml:'
-    name: widget-service-kind-prod-staging-cluster-identity-yaml
+      crossplane.io/external-name: 'gitops-cluster-example-prod-tenants:tenants/widget-service/identity.yaml:'
+    name: widget-service-example-prod-staging-cluster-identity-yaml
     namespace: demo-apps
   name: cluster-identity-yaml
   spec:
     forProvider:
-      commitMessage: 'Onboard widget-service to kind-prod: add tenants/widget-service/identity.yaml'
-      content: "platformIdentity:\n  appName: widget-service\n  type: app\n  gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service\n\
-        \  appRepoUrl: https://github.com/jfillman/widget-service\n  githubOwner: jfillman\n  catalogNamespace: platform-catalog\n"
+      commitMessage: 'Onboard widget-service to example-prod: add tenants/widget-service/identity.yaml'
+      content: "platformIdentity:\n  appName: widget-service\n  type: app\n  gitopsRepoUrl: https://github.com/example-org/gitops-widget-service\n\
+        \  appRepoUrl: https://github.com/example-org/widget-service\n  githubOwner: example-org\n  catalogNamespace: platform-catalog\n"
       file: tenants/widget-service/identity.yaml
       overwriteOnCreate: true
-      repository: gitops-cluster-kind-prod-tenants
+      repository: gitops-cluster-example-prod-tenants
     managementPolicies:
     - Create
     - Update
@@ -49,18 +49,18 @@ resources:
   kind: RepositoryFile
   metadata:
     annotations:
-      crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/xr-requests/secretstore-staging.yaml:'
-    name: widget-service-kind-prod-staging-secretstore-env-xr
+      crossplane.io/external-name: 'gitops-cluster-example-prod-tenants:tenants/widget-service/xr-requests/secretstore-staging.yaml:'
+    name: widget-service-example-prod-staging-secretstore-env-xr
     namespace: demo-apps
   name: secretstore-env-xr
   spec:
     forProvider:
       commitMessage: 'Onboard widget-service staging: add tenants/widget-service/xr-requests/secretstore-staging.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-kind-prod-staging\n\
-        spec:\n  appRef:\n    name: widget-service\n  cluster: kind-prod\n  environmentSlug: staging\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-example-prod-staging\n\
+        spec:\n  appRef:\n    name: widget-service\n  cluster: example-prod\n  environmentSlug: staging\n"
       file: tenants/widget-service/xr-requests/secretstore-staging.yaml
       overwriteOnCreate: true
-      repository: gitops-cluster-kind-prod-tenants
+      repository: gitops-cluster-example-prod-tenants
     managementPolicies:
     - Create
     - Update
@@ -73,18 +73,18 @@ resources:
   kind: RepositoryFile
   metadata:
     annotations:
-      crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/xr-requests/secretstore-shared.yaml:'
-    name: widget-service-kind-prod-staging-secretstore-shared-xr
+      crossplane.io/external-name: 'gitops-cluster-example-prod-tenants:tenants/widget-service/xr-requests/secretstore-shared.yaml:'
+    name: widget-service-example-prod-staging-secretstore-shared-xr
     namespace: demo-apps
   name: secretstore-shared-xr
   spec:
     forProvider:
       commitMessage: 'Onboard widget-service staging: add tenants/widget-service/xr-requests/secretstore-shared.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-kind-prod\nspec:\n\
-        \  appRef:\n    name: widget-service\n  cluster: kind-prod\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-example-prod\n\
+        spec:\n  appRef:\n    name: widget-service\n  cluster: example-prod\n"
       file: tenants/widget-service/xr-requests/secretstore-shared.yaml
       overwriteOnCreate: true
-      repository: gitops-cluster-kind-prod-tenants
+      repository: gitops-cluster-example-prod-tenants
     managementPolicies:
     - Create
     - Update
@@ -97,8 +97,8 @@ resources:
   kind: RepositoryFile
   metadata:
     annotations:
-      crossplane.io/external-name: 'gitops-cluster-kind-prod-tenants:tenants/widget-service/staging/identity.yaml:'
-    name: widget-service-kind-prod-staging-tenant-identity-yaml
+      crossplane.io/external-name: 'gitops-cluster-example-prod-tenants:tenants/widget-service/staging/identity.yaml:'
+    name: widget-service-example-prod-staging-tenant-identity-yaml
     namespace: demo-apps
   name: tenant-identity-yaml
   spec:
@@ -106,16 +106,16 @@ resources:
       commitMessage: 'Onboard widget-service staging: add tenants/widget-service/staging/identity.yaml'
       content: 'appName: widget-service
 
-        gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service
+        gitopsRepoUrl: https://github.com/example-org/gitops-widget-service
 
-        githubOwner: jfillman
+        githubOwner: example-org
 
         env: staging
 
         '
       file: tenants/widget-service/staging/identity.yaml
       overwriteOnCreate: true
-      repository: gitops-cluster-kind-prod-tenants
+      repository: gitops-cluster-example-prod-tenants
     managementPolicies:
     - Create
     - Update
@@ -128,24 +128,26 @@ resources:
   kind: RepositoryFile
   metadata:
     annotations:
-      crossplane.io/external-name: 'gitops-widget-service:kind-prod/staging/values.yaml:'
-    name: widget-service-kind-prod-staging-values-yaml
+      crossplane.io/external-name: 'gitops-widget-service:example-prod/staging/values.yaml:'
+    name: widget-service-example-prod-staging-values-yaml
     namespace: demo-apps
   name: values-yaml
   spec:
     forProvider:
-      commitMessage: 'Bootstrap staging environment: add kind-prod/staging/values.yaml'
+      commitMessage: 'Bootstrap staging environment: add example-prod/staging/values.yaml'
       content: 'appName: widget-service
 
         appType: app
 
-        cluster: kind-prod
+        cluster: example-prod
+
+        clusterType: upper
 
         envName: staging
 
         '
-      file: kind-prod/staging/values.yaml
-      overwriteOnCreate: false
+      file: example-prod/staging/values.yaml
+      overwriteOnCreate: true
       repository: gitops-widget-service
     managementPolicies:
     - Create
@@ -161,7 +163,7 @@ xr:
     reason: AppResolved
     status: 'True'
     type: AppResolved
-  - message: 'kind-prod is a registered upper-env cluster with crossplaneReady: "true" - widget-service-kind-prod-staging''s
+  - message: 'example-prod is a registered upper-env cluster with crossplaneReady: "true" - widget-service-example-prod-staging''s
       values.yaml, tenant identity and SecretStore requests are rendered against it.'
     reason: ClusterEligible
     status: 'True'

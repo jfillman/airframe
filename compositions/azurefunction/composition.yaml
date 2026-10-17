@@ -48,8 +48,7 @@ spec:
             # type: dev + cicdReady: "true" (not type: upper + crossplaneReady, which
             # ApplicationEnvironment's own gate checks) - a dev cluster is defined by running
             # platform-cicd's control plane, and cicdReady is exactly the field that flips true
-            # once that's GitOps-managed and live-verified on a given cluster (see kind-dev.yaml's
-            # own history).
+            # once that's GitOps-managed and live-verified on a given cluster.
             #
             # $clusterOk/$xrName/$devCluster/$tenantsRepo are declared once here, not redeclared
             # per file below - Go template variables declared at this (unindented) scope persist
@@ -60,7 +59,7 @@ spec:
             # applicationenvironment/templates/status/status.yaml does for its own gate.
             #
             # $tenantsRepo now comes from the registry entry's own data.tenantsRepo, not a
-            # hardcoded "gitops-cluster-dev-tenants" literal - kind-dev's tenants repo is a legacy
+            # hardcoded "gitops-cluster-dev-tenants" literal - the dev cluster's tenants repo is a legacy
             # name that breaks the gitops-cluster-<cluster>-tenants convention every upper cluster
             # uses (renaming the real, live repo was out of scope - too disruptive to already-wired
             # ArgoCD Applications). Recorded as registry data instead so a future second dev
@@ -80,11 +79,20 @@ spec:
             <<- $clusterType := "" >>
             <<- $cicdReady := "" >>
             <<- $tenantsRepo := "" >>
+            <<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+                   record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+                   without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+                   owner-dependent objects fall back to what they already observe or wait. */ ->>
+            <<- $scmOwner := "" >>
             <<- if gt (len $items) 0 >>
               <<- $cm := (index $items 0).resource >>
               <<- $clusterType = $cm.data.type >>
               <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
               <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+              <<- $scmOwner = index $cm.data "scmOwner" | default "" >>
+              <<- if not $scmOwner >>
+                <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+              <<- end >>
               <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
                 <<- $clusterOk = true >>
               <<- end >>
@@ -232,7 +240,7 @@ spec:
             # Commits a "shared"-mode SecretStore XR manifest into
             # tenants/<app-name>/xr-requests/secretstore.yaml - picked up by this app's own
             # devCluster's xr-requests ApplicationSet (gitops-cluster-dev/02-argocd-apps/
-            # xr-requests/, for kind-dev), the SAME mechanism every other Bootstrap XR
+            # xr-requests/, on the dev cluster), the SAME mechanism every other Bootstrap XR
             # already goes through, applied directly (no Helm release needed) into
             # app-<app-name>-cicd on that cluster.
             #
@@ -715,10 +723,11 @@ spec:
             # 00-devcluster-gate.yaml) now owns that decision; gating here too would just
             # move the duplication this extraction removes to a different file.
             #
-            # gitopsRepoUrl/appRepoUrl computed the same way gitops-repo.yaml/src-repo.yaml's
-            # own literals do ($platformOwner "jfillman" - a ProviderConfig-wide credential
-            # setting, not a per-app field, same reasoning xrds/nodejsapplication.yaml's own
-            # header gives for not exposing owner as a spec field).
+            # gitopsRepoUrl/appRepoUrl are built from $scmOwner, the registry record's scmOwner (00-devcluster-gate.yaml;
+            # the fleet's scm.owner in clusters.yaml) - a fleet-wide setting, not a per-app field, same reasoning
+            # xrds/nodejsapplication.yaml's own header gives for not exposing owner as a spec field. Without a registry
+            # record (not found yet, or a transient read failure) the child keeps the URLs it already has; a child that
+            # does not exist yet is not rendered until the owner is known (nothing exists to delete).
             # apiVersion is STICKY to whatever group this app's child already has (Tier 2 domain rename, memory
             # project_tier2_domain_rename_plan.md): an existing child keeps the apiVersion it was created with,
             # a brand-new one (nothing observed yet) is created under catalog.hangar.io.
@@ -740,7 +749,13 @@ spec:
             <<- if eq $tektonCicdGroupOverride "hangar" >>
               <<- $tektonCicdApiVersion = "catalog.hangar.io/v1alpha1" >>
             <<- end >>
-            <<- $platformOwner := "jfillman" >>
+            <<- $childGitopsRepoUrl := dig "resource" "spec" "gitopsRepoUrl" "" $obsTektonCicd >>
+            <<- $childAppRepoUrl := dig "resource" "spec" "appRepoUrl" "" $obsTektonCicd >>
+            <<- if $scmOwner >>
+              <<- $childGitopsRepoUrl = printf "https://github.com/%s/gitops-%s" $scmOwner $xrName >>
+              <<- $childAppRepoUrl = printf "https://github.com/%s/%s" $scmOwner $xrName >>
+            <<- end >>
+            <<- if $childAppRepoUrl >>
             apiVersion: <<$tektonCicdApiVersion>>
             kind: TektonCICD
             metadata:
@@ -750,9 +765,9 @@ spec:
             spec:
               appName: <<$xrName>>
               <<- if $hasGitopsRepo >>
-              gitopsRepoUrl: <<printf "https://github.com/%s/gitops-%s" $platformOwner $xrName>>
+              gitopsRepoUrl: <<$childGitopsRepoUrl>>
               <<- end >>
-              appRepoUrl: <<printf "https://github.com/%s/%s" $platformOwner $xrName>>
+              appRepoUrl: <<$childAppRepoUrl>>
               devCluster: <<$devCluster>>
               <<- if $spec.extraGitopsRepos >>
               extraGitopsRepos:
@@ -760,6 +775,7 @@ spec:
                 - <<.>>
               <<- end >>
               <<- end >>
+            <<- end >>
             ---
             ---
             # SHARED PARTIAL (compositions/_shared/render-github-resources/zz-scaffold-ledger.yaml). Writes the

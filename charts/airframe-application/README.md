@@ -454,7 +454,7 @@ is `projectcontour` (Contour, confirmed live - not the `ingress-nginx` guess).
 any values field. Renders the `SecretStore` XRD's `"shared"` mode unconditionally
 (idempotent, redundant-safe across every env release for one `(app, cluster)` pair -
 same convention `applicationenvironment`'s own `cluster-app-yaml.yaml` already uses),
-plus, on any cluster other than kind-dev, this env's own per-environment-mode XR too.
+plus, on any cluster other than the dev cluster (`clusterType: upper`), this env's own per-environment-mode XR too.
 Renders into a dedicated namespace, `app-<appName>-secrets`, not this release's own
 namespace - the `"shared"` XR must be the exact same object across every env release
 for one `(app, cluster)` pair, which only works if every release targets the same

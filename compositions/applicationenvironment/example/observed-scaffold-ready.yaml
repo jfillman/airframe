@@ -7,11 +7,11 @@
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
-  name: widget-service-kind-prod-staging-values-yaml
+  name: widget-service-example-prod-staging-values-yaml
   namespace: demo-apps
   annotations:
     crossplane.io/composition-resource-name: values-yaml
-    crossplane.io/external-name: 'gitops-widget-service:kind-prod/staging/values.yaml:'
+    crossplane.io/external-name: 'gitops-widget-service:example-prod/staging/values.yaml:'
 spec:
   managementPolicies:
   - Create
@@ -19,7 +19,7 @@ spec:
   - LateInitialize
   forProvider:
     repository: gitops-widget-service
-    file: kind-prod/staging/values.yaml
+    file: example-prod/staging/values.yaml
 status:
   conditions:
   - type: Ready

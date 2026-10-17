@@ -1,0 +1,5 @@
+# Must FAIL to render: clusters without the fleet's scm.owner (the compositions would have no repo owner to use).
+clusters:
+  - name: example-dev
+    zone: lower
+    roles: [control-plane, workloads]

@@ -69,8 +69,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard widget-service: add tenants/widget-service/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-kind-dev\nspec:\n\
-        \  appRef:\n    name: widget-service\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: widget-service-example-dev\n\
+        spec:\n  appRef:\n    name: widget-service\n  cluster: example-dev\n"
       file: tenants/widget-service/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -341,9 +341,9 @@ resources:
   name: tektoncicd
   spec:
     appName: widget-service
-    appRepoUrl: https://github.com/jfillman/widget-service
-    devCluster: kind-dev
-    gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service
+    appRepoUrl: https://github.com/example-org/widget-service
+    devCluster: example-dev
+    gitopsRepoUrl: https://github.com/example-org/gitops-widget-service
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (widget-service-tektoncicd) to report its own CicdOnboarded condition

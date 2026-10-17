@@ -16,10 +16,11 @@
 # 00-devcluster-gate.yaml) now owns that decision; gating here too would just
 # move the duplication this extraction removes to a different file.
 #
-# gitopsRepoUrl/appRepoUrl computed the same way gitops-repo.yaml/src-repo.yaml's
-# own literals do ($platformOwner "jfillman" - a ProviderConfig-wide credential
-# setting, not a per-app field, same reasoning xrds/nodejsapplication.yaml's own
-# header gives for not exposing owner as a spec field).
+# gitopsRepoUrl/appRepoUrl are built from $scmOwner, the registry record's scmOwner (00-devcluster-gate.yaml;
+# the fleet's scm.owner in clusters.yaml) - a fleet-wide setting, not a per-app field, same reasoning
+# xrds/nodejsapplication.yaml's own header gives for not exposing owner as a spec field. Without a registry
+# record (not found yet, or a transient read failure) the child keeps the URLs it already has; a child that
+# does not exist yet is not rendered until the owner is known (nothing exists to delete).
 # apiVersion is STICKY to whatever group this app's child already has (Tier 2 domain rename, memory
 # project_tier2_domain_rename_plan.md): an existing child keeps the apiVersion it was created with,
 # a brand-new one (nothing observed yet) is created under catalog.hangar.io.
@@ -41,7 +42,13 @@
 <<- if eq $tektonCicdGroupOverride "hangar" >>
   <<- $tektonCicdApiVersion = "catalog.hangar.io/v1alpha1" >>
 <<- end >>
-<<- $platformOwner := "jfillman" >>
+<<- $childGitopsRepoUrl := dig "resource" "spec" "gitopsRepoUrl" "" $obsTektonCicd >>
+<<- $childAppRepoUrl := dig "resource" "spec" "appRepoUrl" "" $obsTektonCicd >>
+<<- if $scmOwner >>
+  <<- $childGitopsRepoUrl = printf "https://github.com/%s/gitops-%s" $scmOwner $xrName >>
+  <<- $childAppRepoUrl = printf "https://github.com/%s/%s" $scmOwner $xrName >>
+<<- end >>
+<<- if $childAppRepoUrl >>
 apiVersion: <<$tektonCicdApiVersion>>
 kind: TektonCICD
 metadata:
@@ -51,9 +58,9 @@ metadata:
 spec:
   appName: <<$xrName>>
   <<- if $hasGitopsRepo >>
-  gitopsRepoUrl: <<printf "https://github.com/%s/gitops-%s" $platformOwner $xrName>>
+  gitopsRepoUrl: <<$childGitopsRepoUrl>>
   <<- end >>
-  appRepoUrl: <<printf "https://github.com/%s/%s" $platformOwner $xrName>>
+  appRepoUrl: <<$childAppRepoUrl>>
   devCluster: <<$devCluster>>
   <<- if $spec.extraGitopsRepos >>
   extraGitopsRepos:
@@ -61,4 +68,5 @@ spec:
     - <<.>>
   <<- end >>
   <<- end >>
+<<- end >>
 ---

@@ -5,7 +5,7 @@ metadata:
   namespace: demo-apps
 spec:
   environmentRef:
-    name: checkout-kind-dev-prod
+    name: checkout-example-dev-prod
   service: checkout-api
   objective: 99.9
   indicator:

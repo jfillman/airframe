@@ -15,17 +15,15 @@ from jsonschema import Draft202012Validator
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from airframe_schema import compiled_schema
 
-FLEET = [
-    "gitops-baggage-api/kind-prod/staging/values.yaml",
-    "gitops-boarding-api/kind-prod/staging/values.yaml",
-    "gitops-flight-api/kind-prod/staging/values.yaml",
-    "gitops-infra-skyport-broker/kind-prod/staging/values.yaml",
-    "gitops-infra-skyport-broker/platform/envs/dev.yaml",
-    "flight-api/platform/envs/dev.yaml",
-    "baggage-api/platform/envs/dev.yaml",
-    "boarding-api/platform/envs/dev.yaml",
-]
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+# The fleet's live values files, found rather than listed: every Flight environment
+# (gitops-<app>/<cluster>/<env>/values.yaml) and Ground environment (<app>/platform/envs/<env>.yaml) in the
+# sibling checkouts. No cluster or app name is assumed; whatever the checkout holds is tested.
+FLEET = sorted(
+    {str(p.relative_to(REPO_ROOT)) for p in REPO_ROOT.glob("gitops-*/*/*/values.yaml")
+     if not p.relative_to(REPO_ROOT).parts[0].startswith("gitops-cluster-")}
+    | {str(p.relative_to(REPO_ROOT)) for p in REPO_ROOT.glob("*/platform/envs/*.yaml")}
+)
 
 
 def is_valid(schema, data):
@@ -91,6 +89,8 @@ def main():
                 print(f"MISSED  {rel}: {label} was NOT rejected")
             else:
                 print(f"caught  {rel}: {label}")
+    if not FLEET:
+        print("SKIP: no fleet values files checked out next to airframe")
     print(f"\n{total - failed}/{total} mutations rejected")
     return 1 if failed else 0
 

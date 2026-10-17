@@ -327,17 +327,6 @@ resources:
     providerConfigRef:
       kind: ClusterProviderConfig
       name: default
-- apiVersion: catalog.hangar.io/v1alpha1
-  kind: TektonCICD
-  metadata:
-    name: widget-service-tektoncicd
-    namespace: demo-apps
-  name: tektoncicd
-  spec:
-    appName: widget-service
-    appRepoUrl: https://github.com/jfillman/widget-service
-    devCluster: kind-dev
-    gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (widget-service-tektoncicd) to report its own CicdOnboarded condition
@@ -350,7 +339,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, and 8 more'
+  - message: 'Unready resources: gitops-repo, gitops-repo-readme, src-repo, and 7 more'
     reason: Creating
     status: 'False'
     type: Ready

@@ -140,8 +140,8 @@ spec:
                 cluster:
                   type: string
                   description: >-
-                    Which upper-env cluster to deploy this env onto - e.g.
-                    "kind-prod". Checked live against the cluster registry
+                    Which upper-env cluster to deploy this env onto: its name in the
+                    cluster registry (e.g. "example-prod", an example). Checked live against the cluster registry
                     (gitops-cluster-dev/00-bootstrap/cluster-registry/) via a
                     Crossplane extra-resources lookup: must resolve to a
                     ConfigMap with type: upper and crossplaneReady: "true", or

@@ -24,6 +24,7 @@ def make_req(  # noqa: PLR0913
     *,
     job_observed=False,
     last_phase=None,
+    registry_owner="example-org",
 ):
     status = {}
     if last_phase:
@@ -38,7 +39,7 @@ def make_req(  # noqa: PLR0913
         "apiVersion": "catalog.hangar.io/v1alpha1",
         "kind": "RolloutWatch",
         "metadata": {"name": "baggage-api", "namespace": "app-baggage-api-staging"},
-        "spec": {"appName": "baggage-api", "cluster": "kind-prod", "env": "staging"},
+        "spec": {"appName": "baggage-api", "cluster": "example-prod", "env": "staging"},
         "status": status,
     }
     rollout = {
@@ -57,6 +58,16 @@ def make_req(  # noqa: PLR0913
             )
         },
     )
+    if registry_owner is not None:
+        registry = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "example-prod", "namespace": "crossplane-system"},
+            "data": {"type": "upper", "scmOwner": registry_owner} if registry_owner else {"type": "upper"},
+        }
+        req.required_resources[fn.REGISTRY_REQUIREMENT_NAME].CopyFrom(
+            fnv1.Resources(items=[fnv1.Resource(resource=resource.dict_to_struct(registry))])
+        )
     if job_observed:
         req.observed.resources[JOB_KEY].CopyFrom(
             fnv1.Resource(
@@ -119,6 +130,23 @@ class TestDiagnosisJobHandling(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(job["spec"]["template"]["spec"]["restartPolicy"], "Never")
         # Ready so a Failed/finished Job does not pin the XR's Ready at False.
         self.assertEqual(rsp.desired.resources[JOB_KEY].ready, fnv1.READY_TRUE)
+
+    async def test_owner_comes_from_the_cluster_registry(self) -> None:
+        rsp = await self.run_fn(make_req("Degraded"))
+        job = resource.struct_to_dict(rsp.desired.resources[JOB_KEY].resource)
+        env = {e["name"]: e.get("value") for e in job["spec"]["template"]["spec"]["containers"][0]["env"]}
+        self.assertEqual(env["GITOPS_OWNER"], "example-org")
+        self.assertEqual(env["SRC_OWNER"], "example-org")
+        self.assertEqual(env["GITOPS_MANIFEST_PATH"], "example-prod/staging/values.yaml")
+
+    async def test_no_owner_in_the_registry_dispatches_nothing(self) -> None:
+        for owner in ("", None):  # record without scmOwner, and no record at all
+            rsp = await self.run_fn(make_req("Degraded", registry_owner=owner))
+            self.assertNotIn(JOB_KEY, rsp.desired.resources)
+            status = resource.struct_to_dict(rsp.desired.composite.resource)["status"]
+            self.assertNotIn("lastDiagnosisRevision", status)
+            warnings = [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING]
+            self.assertTrue(any("no scmOwner" in w for w in warnings), warnings)
 
     async def test_degraded_same_revision_redeclares_full_observed_job(self) -> None:
         req = make_req(

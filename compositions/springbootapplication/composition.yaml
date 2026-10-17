@@ -754,6 +754,10 @@ spec:
               # precedent this follows) to the JRE plus the app's own runtime deps, not a JDK/build
               # toolchain nobody needs at runtime. `apk upgrade` on the runtime stage picks up
               # already-published Alpine package patches, same as nodejsapplication's own Containerfile.
+              # The build stage runs on the build node's own platform ($BUILDPLATFORM): a jar is
+              # architecture-independent, so only the JRE stage is per-platform and Maven/Gradle never
+              # run under QEMU for the other architecture (about 11 min vs 5 for flight-api's amd64
+              # build before this). Needs BuildKit (glidepath ADR-0026); kaniko ignored it.
             spec:
               # No "Update" and no "Delete": this object must never write to or remove a
               # developer-owned file (see the header comment).
@@ -766,7 +770,7 @@ spec:
                 file: <<$pinnedFile>>
                 overwriteOnCreate: false
                 content: |
-                  FROM eclipse-temurin:<<$javaVersion>>-jdk-alpine AS build
+                  FROM --platform=$BUILDPLATFORM eclipse-temurin:<<$javaVersion>>-jdk-alpine AS build
                   WORKDIR /app
                   <<- if eq $buildTool "gradle">>
                   RUN apk add --no-cache gradle

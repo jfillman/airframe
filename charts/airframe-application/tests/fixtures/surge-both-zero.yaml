@@ -1,0 +1,6 @@
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  maxSurge: 0
+  maxUnavailable: 0

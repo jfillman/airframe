@@ -121,7 +121,8 @@
         "create": true,
         "name": "",
         "annotations": {},
-        "imagePullSecrets": []
+        "imagePullSecrets": [],
+        "projectedTokens": []
       },
       "properties": {
         "create": {
@@ -161,6 +162,46 @@
               }
             },
             "description": "One existing image-pull Secret."
+          }
+        },
+        "projectedTokens": {
+          "type": "array",
+          "default": [],
+          "description": "Short-lived tokens of this ServiceAccount for another audience (for example another cluster that trusts this cluster's ServiceAccount issuer, apron docs/cluster-identity.md), each projected into every workload's pods as a file the kubelet rotates. Nothing is stored: no Secret, no Infisical key. Each entry becomes a projected volume named after it, mounted read-only on the main container (and every jobs:/cronJobs: container) at mountPath, with the token at <mountPath>/token.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "audience",
+              "mountPath"
+            ],
+            "description": "One projected ServiceAccount token.",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+                "maxLength": 63,
+                "description": "Volume name (a DNS-1123 label). Must not equal another volume of this workload (a configMaps:/volumes: entry, or app-secrets)."
+              },
+              "audience": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The token's audience: what the receiving API server expects (its --api-audiences / AuthenticationConfiguration audiences)."
+              },
+              "expirationSeconds": {
+                "type": "integer",
+                "minimum": 600,
+                "default": 600,
+                "description": "Token lifetime. Kubernetes' minimum is 600; the kubelet refreshes the file at 80% of it."
+              },
+              "mountPath": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^/",
+                "description": "Directory the token is mounted under; the file is <mountPath>/token."
+              }
+            }
           }
         }
       },
@@ -286,6 +327,28 @@
               "minimum": 1
             }
           }
+        },
+        "maxSurge": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+%$",
+          "minimum": 0,
+          "description": "How many pods above replicas the canary may add while it shifts (Argo Rollouts spec.strategy.canary.maxSurge): an integer or a percentage. null (the default): Argo Rollouts' default, 25%, which rounds up to 1 extra pod even at replicas: 1. Set 0 (with maxUnavailable 1) for a single-replica app that must never run two copies at once, or on a node with no room for a second pod; the old pod stops before the new one starts, a short outage. Canary only; blueGreen always runs a preview ReplicaSet.",
+          "default": null
+        },
+        "maxUnavailable": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]+%$",
+          "minimum": 0,
+          "description": "How many pods below replicas the canary may drop to while it shifts (spec.strategy.canary.maxUnavailable): an integer or a percentage. null (the default): Argo Rollouts' default. maxSurge and maxUnavailable cannot both be 0. Canary only.",
+          "default": null
         },
         "command": {
           "type": "array",

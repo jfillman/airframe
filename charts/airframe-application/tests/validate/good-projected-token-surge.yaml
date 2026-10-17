@@ -1,0 +1,10 @@
+# serviceAccount.projectedTokens and rollout.maxSurge/maxUnavailable are human-owned and validate.
+appName: guard-test
+serviceAccount:
+  name: guard-reader
+  projectedTokens:
+    - {name: peer-token, audience: peer-cluster, mountPath: /var/run/secrets/hangar/peer}
+rollout:
+  replicas: 1
+  maxSurge: 0
+  maxUnavailable: 1

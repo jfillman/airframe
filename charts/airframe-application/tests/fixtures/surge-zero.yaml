@@ -1,0 +1,8 @@
+# rollout.maxSurge/maxUnavailable: a single-replica app that must never run two pods at once.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  replicas: 1
+  maxSurge: 0
+  maxUnavailable: 1

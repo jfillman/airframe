@@ -136,7 +136,7 @@
           "extraIngressRules": [],
           "ingressControllerNamespaceSelector": {
             "matchLabels": {
-              "kubernetes.io/metadata.name": "kiac-gateway"
+              "kubernetes.io/metadata.name": "hangar-gateway"
             }
           }
         },

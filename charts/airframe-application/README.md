@@ -305,8 +305,8 @@ wanted.
   `resolveAs` elsewhere in this chart) - an `HTTPRoute` with no hostname or no
   parent Gateway isn't a real, useful object, so there's no sane default to
   silently fall back to.
-- **No default `parentRefs` value** - this platform's real Gateway (`kiac`,
-  namespace `kiac-gateway`, confirmed live) isn't hardcoded here, the same
+- **No default `parentRefs` value** - this platform's Gateway (`hangar`,
+  namespace `hangar-gateway`, the one Apron installs) isn't hardcoded here, the same
   reasoning `networkPolicy.ingressControllerNamespaceSelector` already
   documents for its own cluster-specific guess: a different cluster could run
   a differently-named or differently-placed Gateway.

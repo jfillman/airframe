@@ -1407,7 +1407,7 @@
         "allowIngressFromIngressController": true,
         "ingressControllerNamespaceSelector": {
           "matchLabels": {
-            "kubernetes.io/metadata.name": "kiac-gateway"
+            "kubernetes.io/metadata.name": "hangar-gateway"
           }
         },
         "allowIngressFrom": [],
@@ -1430,10 +1430,10 @@
           "type": "object",
           "default": {
             "matchLabels": {
-              "kubernetes.io/metadata.name": "kiac-gateway"
+              "kubernetes.io/metadata.name": "hangar-gateway"
             }
           },
-          "description": "Namespace selector identifying the ingress controller/gateway."
+          "description": "Namespace selector identifying the ingress controller/gateway. Default: hangar-gateway, the Gateway namespace Apron installs (Traefik, Gateway `hangar`) on every runtime; override it only on a cluster whose Gateway lives elsewhere."
         },
         "allowIngressFrom": {
           "type": "array",

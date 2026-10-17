@@ -201,7 +201,7 @@ httpRoute: {annotations: {}, enabled: false, hostnames: [], parentRefs: [], path
 serviceMonitor: {additionalLabels: {}, enabled: true, interval: 30s, path: /metrics, port: ''}
 
 # Traffic policy for the main workload's namespace.
-networkPolicy: {allowEgressTo: [], allowIngressFrom: [], allowIngressFromIngressController: true, enabled: true, extraEgressRules: [], extraIngressRules: [], ingressControllerNamespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kiac-gateway}}}
+networkPolicy: {allowEgressTo: [], allowIngressFrom: [], allowIngressFromIngressController: true, enabled: true, extraEgressRules: [], extraIngressRules: [], ingressControllerNamespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hangar-gateway}}}
 
 # Attached-tier component instances (Redis, PostgreSQL, RabbitMQ, ...). Each entry's spec is validated
 # against that component's own XRD schema by the compiled schema (airframe_schema.compiled_schema()),

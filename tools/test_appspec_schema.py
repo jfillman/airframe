@@ -53,7 +53,7 @@ def mutations():
         m("chart typo in config", lambda d: d["config"].__setitem__("autoscalling", {"enabled": True})),
         m("chart type error", lambda d: d["config"].__setitem__("autoscaling", {"enabled": "yes"})),
         m("chart conditional (route without hostnames)",
-          lambda d: d["config"].__setitem__("httpRoute", {"enabled": True, "parentRefs": [{"name": "kiac"}]})),
+          lambda d: d["config"].__setitem__("httpRoute", {"enabled": True, "parentRefs": [{"name": "hangar"}]})),
         m("bad component spec", lambda d: d["config"].__setitem__("components", [{"type": "redis", "name": "c", "spec": {"sise": "x"}}])),
         # platform- and release-owned chart keys are not an AppSpec's to set
         m("platform-owned key (cluster)", lambda d: d["config"].__setitem__("cluster", "example-prod")),

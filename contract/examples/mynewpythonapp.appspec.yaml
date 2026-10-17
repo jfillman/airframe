@@ -6,9 +6,9 @@
 # - "4 canary steps" lists five Argo Rollouts steps (three setWeight, two pause); all five are kept.
 # - port goes in stackOptions (the scaffolded server); the planner derives rollout.ports from it.
 # - the route is one hostname, so it is one environment's: prod. Put in config it would land on all
-#   five environments and collide, so the planner asks instead of guessing. The Gateway (kiac in
-#   kiac-gateway) is the fleet's. An HTTPRoute has no scheme: https needs a TLS listener on that
-#   Gateway, which is platform config, not an AppSpec field (kind-prod's has only HTTP :80 today).
+#   five environments and collide, so the planner asks instead of guessing. The Gateway (hangar in
+#   hangar-gateway, the one Apron installs) is the fleet's. An HTTPRoute has no scheme: https needs a TLS listener on that
+#   Gateway, which is platform config, not an AppSpec field.
 # - replicas 3 with the HPA on: the HPA's default floor is 2, which the planner reports, not fixes.
 apiVersion: airframe/v1
 kind: AppSpec
@@ -43,4 +43,4 @@ overrides:
       enabled: true
       hostnames: [mynewpythonapp.hangar.io]
       parentRefs:
-        - { name: kiac, namespace: kiac-gateway }
+        - { name: hangar, namespace: hangar-gateway }

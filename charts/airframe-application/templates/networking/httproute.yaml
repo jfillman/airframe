@@ -11,7 +11,7 @@ Gateway API requires same-namespace backendRefs without a ReferenceGrant - this
 renders in the release's own namespace (airframe-application.namespace) right alongside
 the Service it targets, so that's satisfied by construction. parentRefs crossing
 into the Gateway's own namespace (the common case - the platform Gateway lives in
-a shared namespace like kiac-gateway, not this app's) is fine on the *parentRef*
+a shared namespace like hangar-gateway, not this app's) is fine on the *parentRef*
 side with no ReferenceGrant needed, as long as the Gateway's own listener
 allowedRoutes permits it - confirmed live, every existing HTTPRoute in this fleet
 already crosses namespaces this same way (grafana-httproute.yaml et al.).

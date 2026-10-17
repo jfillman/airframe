@@ -141,9 +141,9 @@ Try it before pushing. The unit tests need no database:
 ```
 
 Leave `build.platforms` alone, as in part 1: with the thin `Containerfile` the image builds for both
-architectures, and the amd64 leg is cheap. (`FROM --platform=$BUILDPLATFORM` in the scaffold's
-Containerfile would be the usual answer, but this platform's builder, kaniko, ignores it: the
-"build" stage still ran emulated, and `BUILDPLATFORM` was empty. Testing it is how that was found.)
+architectures, and the amd64 leg is cheap. (Since 2026-10-17 the platform builds with BuildKit, which
+honors `FROM --platform=$BUILDPLATFORM`, and new SpringBoot scaffolds compile in such a stage. The
+`build.sh` shape here is still the fastest: Maven runs once, in the agent, with its dependency cache.)
 
 What the service does:
 

@@ -205,7 +205,7 @@ resources:
   spec:
     forProvider:
       commitMessage: 'SpringBootApplication scaffold: Containerfile'
-      content: 'FROM eclipse-temurin:17-jdk-alpine AS build
+      content: 'FROM --platform=$BUILDPLATFORM eclipse-temurin:17-jdk-alpine AS build
 
         WORKDIR /app
 

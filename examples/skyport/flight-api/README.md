@@ -74,5 +74,6 @@ The image is built for `linux/arm64` and `linux/amd64`. Java bytecode is the sam
 copies the jar into a JRE image. Do not compile inside the Containerfile (the scaffold's default):
 the amd64 leg runs under QEMU emulation on the arm64 build node, and Maven on a JVM there took
 about 11 minutes (the whole two-leg image took about 17), versus about 30 seconds for the packaging-only leg.
-`FROM --platform=$BUILDPLATFORM` does not help on this platform's builder (kaniko ignores it).
+(A `FROM --platform=$BUILDPLATFORM` build stage also avoids emulation now that the platform builds with BuildKit;
+`build.sh` remains the faster shape because Maven reuses its dependency cache.)
 Set `build.script: ./build.sh` in `cicd.yaml` to use this shape. Leave `build.platforms` alone.

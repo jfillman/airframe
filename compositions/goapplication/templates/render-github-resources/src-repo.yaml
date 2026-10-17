@@ -207,7 +207,11 @@ metadata:
   # the binary plus Alpine's own base packages. CGO_ENABLED=0 - the resulting binary
   # has no libc dependency, so it runs unmodified on the runtime stage's musl libc.
   # `apk upgrade` on the runtime stage picks up already-published Alpine package
-  # patches, same as nodejsapplication's own Containerfile.
+  # patches, same as nodejsapplication's own Containerfile. The build stage runs on
+  # the build node's own platform ($BUILDPLATFORM) and cross-compiles for the target
+  # (GOOS/GOARCH from TARGETOS/TARGETARCH): Glidepath builds arm64 and amd64 on an
+  # arm64 node, and the Go compiler crashes under QEMU emulation (glidepath
+  # known-gaps #37). Needs BuildKit (glidepath ADR-0026); kaniko ignored it.
 spec:
   # No "Update" and no "Delete": this object must never write to or remove a
   # developer-owned file (see the header comment).
@@ -220,11 +224,13 @@ spec:
     file: <<$pinnedFile>>
     overwriteOnCreate: false
     content: |
-      FROM golang:<<$goVersion>>-alpine AS build
+      FROM --platform=$BUILDPLATFORM golang:<<$goVersion>>-alpine AS build
+      ARG TARGETOS
+      ARG TARGETARCH
       WORKDIR /app
       COPY go.mod ./
       COPY main.go ./
-      RUN CGO_ENABLED=0 go build -o app .
+      RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -o app .
 
       FROM alpine:latest
       WORKDIR /app

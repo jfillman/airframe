@@ -337,10 +337,13 @@ spec:
     file: <<$pinnedFile>>
     overwriteOnCreate: false
     content: |
-      FROM golang:1.24 AS build
+      # Compile on the build node's platform, cross-compile for the target (no emulation).
+      FROM --platform=$BUILDPLATFORM golang:1.24 AS build
+      ARG TARGETOS
+      ARG TARGETARCH
       WORKDIR /src
       COPY go.mod main.go ./
-      RUN go mod tidy && CGO_ENABLED=0 go build -tags lambda.norpc -o /out/main .
+      RUN go mod tidy && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -tags lambda.norpc -o /out/main .
 
       FROM public.ecr.aws/lambda/provided:al2023
       COPY --from=build /out/main ./main

@@ -91,8 +91,8 @@ done
   - prod: `crossplaneReady: true` once Crossplane composes there. `ApplicationEnvironment` refuses a
     cluster without it (`ClusterReady: False`).
 - **A fresh Infisical**: after its first-run setup, put the new org id in `clusters.yaml`'s `infisical:`
-  block (with `url: http://dev.<lab-domain>:31800/api` and the in-cluster URL). Then plant, by hand, in
-  the control plane's project `platform-cicd-<dev-cluster>` (Glidepath
+  block (with `url: http://<dev-cluster>.local:31800/api` and the in-cluster URL). Then plant, by hand, in
+  the control plane's project `glidepath-<dev-cluster>` (Glidepath
   [secrets-management.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/secrets-management.md)):
   `github-application-id`, `github-private-key`, `github-installation-id`, `github-webhook-secret`,
   `provider-github-creds` (a PAT with `repo` + `delete_repo`: Crossplane creates and deletes the app

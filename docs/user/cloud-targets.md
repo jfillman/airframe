@@ -22,7 +22,7 @@ being tested.
 - The AWS and Azure providers on the dev cluster (`gitops-cluster-dev/10-crds-operators/crossplane/providers.yaml`).
 - Credentials for them: the `hangar-crossplane` identity in each cloud. On AWS it's an IAM role that the
   providers assume with the cluster's own ServiceAccount tokens (web identity federation), so nothing is
-  planted. On Azure it's still a secret, `provider-azure-creds` in the `platform-cicd-<dev-cluster>` Infisical
+  planted. On Azure it's still a secret, `provider-azure-creds` in the `glidepath-<dev-cluster>` Infisical
   project (what the `platform-secret-store` reads).
   [docs/admin/cloud-credentials.md](../admin/cloud-credentials.md) has the policies, the trust, the secret
   format and the checks, and explains why that identity is not the one Glidepath deploys with. Without

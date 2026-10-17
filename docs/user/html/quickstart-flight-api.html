@@ -405,7 +405,8 @@ build:
     enabled: true         # runs ./test.sh
 
 deploy:
-  lowerEnvironments: [dev]
+  environments:
+    - { name: dev, tier: ground }
 
 pipelines:
   ci:
@@ -508,7 +509,7 @@ npm test                                     # 11 passing</pre>
 </div>
 <div class="steps"><div class="step">
 <h3>Declare it and create the environment</h3>
-<p class="prose">Add <code>upperEnvironments: [{ name: staging, cluster: prod }]</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts with no image, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
+<p class="prose">Add <code>{ name: staging, tier: flight, cluster: prod }</code> to <code>deploy.environments</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts with no image, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
 
 </div>
 <div class="step">

@@ -471,8 +471,8 @@ PORT=8080 node index.js        <span class="c"># open http://localhost:8080</spa
       <div class="card">
         <div class="card-head"><span class="card-dot accent"></span><h3>Flight → Tower's App Configuration tab</h3></div>
         <p>The tab edits <code>gitops-&lt;app&gt;/&lt;cluster&gt;/&lt;env&gt;/values.yaml</code>
-          through pull requests (section 07). It only lists environments your
-          <code>cicd.yaml</code> declares under <code>deploy.upperEnvironments</code>.</p>
+          through pull requests (section 07). It only lists the <code>tier: flight</code> environments your
+          <code>cicd.yaml</code> declares under <code>deploy.environments</code>.</p>
       </div>
     </div>
   </section>
@@ -513,7 +513,8 @@ build:
     enabled: true         # runs ./test.sh, which the code you copied in provides
 
 deploy:
-  lowerEnvironments: [dev]
+  environments:
+    - { name: dev, tier: ground }
 
 pipelines:
   ci:
@@ -573,13 +574,13 @@ rollout:
       <div class="step">
         <h3>Declare it in cicd.yaml</h3>
         <p class="prose">The <code>release</code> stage supplies the image to a flight env, and
-          Tower's App Configuration tab builds its environment list from
-          <code>upperEnvironments</code>:</p>
+          Tower's App Configuration tab builds its environment list from the
+          <code>tier: flight</code> entries here:</p>
         <span class="filepath">boarding-api/cicd.yaml — additions <span class="tag flight">flight</span></span>
         <pre>deploy:
-  lowerEnvironments: [dev]
-  upperEnvironments:
-    - { name: staging, cluster: prod }
+  environments:             # promotion order (ADR-0019)
+    - { name: dev, tier: ground }
+    - { name: staging, tier: flight, cluster: prod }
 
 governance:
   allowedCommitSigners:
@@ -913,7 +914,7 @@ kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   <span c
       </div>
       <div class="card">
         <div class="card-head"><span class="card-dot ink"></span><h3>Flight rules</h3></div>
-        <p>App Configuration only lists envs from <code>deploy.upperEnvironments</code>;
+        <p>App Configuration only lists <code>tier: flight</code> envs from <code>deploy.environments</code>;
           <code>ApplicationEnvironment</code> rejects dev clusters; merge release PRs as signed
           commits. Redis is a component: its Service is <code>&lt;name&gt;-master</code> and its
           password is read with <code>valueFrom</code>. A canary splits by pod count, so use four

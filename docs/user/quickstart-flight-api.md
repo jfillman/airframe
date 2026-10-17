@@ -214,7 +214,8 @@ build:
     enabled: true         # runs ./test.sh
 
 deploy:
-  lowerEnvironments: [dev]
+  environments:
+    - { name: dev, tier: ground }
 
 pipelines:
   ci:
@@ -350,9 +351,9 @@ component was verified there (above), not assumed.
 
 ```yaml
 deploy:
-  lowerEnvironments: [dev]
-  upperEnvironments:
-    - { name: staging, cluster: prod }
+  environments:             # promotion order (ADR-0019)
+    - { name: dev, tier: ground }
+    - { name: staging, tier: flight, cluster: prod }
 
 governance:
   allowedCommitSigners:

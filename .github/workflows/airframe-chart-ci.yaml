@@ -47,6 +47,8 @@ jobs:
       # AppSpec's config block is generated from the chart's human-owned values; stale = fail
       - run: python3 tools/gen_appspec_schema.py --check
       - run: python3 tools/test_appspec_schema.py
+      # Every scaffolded cicd.yaml uses Glidepath's current deploy.environments shape (ADR-0019).
+      - run: python3 tools/test_scaffold_cicd_shape.py
       # A3: every xrds/*.meta.yaml sidecar agrees with its composition renders (11 seeded drifts must be caught),
       # and airframe-verify's step runners work against a fake cluster and a fake Dex
       - run: python3 tools/test_sidecars.py

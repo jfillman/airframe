@@ -123,8 +123,9 @@ resources:
       content: "apiVersion: platform/v1\nkind: PipelineConfig\n\nbuild:\n  agent: python-3.13\n  unitTest:\n    enabled: false\
         \ # no test script exists yet - add one, then flip this on\n\npipelines:\n  ci:\n    trigger:\n      source: git\n\
         \      event: push\n      branch: main\n    steps:\n      - stage: build\n      - stage: deploy\n        env: dev\n\
-        deploy:\n  lowerEnvironments:\n    - dev\n  upperEnvironments: []\n  strategy: rollout\n  promotionOrder:\n    - dev\n\
-        \nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in Backstage and Tower\n"
+        deploy:\n  strategy: rollout\n  environments:          # promotion order; ground = this cluster, flight = upper clusters\
+        \ (ADR-0019)\n    - name: dev\n      tier: ground\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy\
+        \ results show in Backstage and Tower\n"
       file: cicd.yaml
       overwriteOnCreate: true
       repository: widget-service

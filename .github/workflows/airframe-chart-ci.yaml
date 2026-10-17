@@ -49,6 +49,8 @@ jobs:
       - run: python3 tools/test_appspec_schema.py
       # Every scaffolded cicd.yaml uses Glidepath's current deploy.environments shape (ADR-0019).
       - run: python3 tools/test_scaffold_cicd_shape.py
+      # Every rendered EC2 description uses only the characters EC2 accepts.
+      - run: python3 tools/test_ec2_descriptions.py
       # A3: every xrds/*.meta.yaml sidecar agrees with its composition renders (11 seeded drifts must be caught),
       # and airframe-verify's step runners work against a fake cluster and a fake Dex
       - run: python3 tools/test_sidecars.py

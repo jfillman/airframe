@@ -191,7 +191,9 @@ spec:
     toPort: 0
     cidrBlocks:
       - 0.0.0.0/0
-    description: <<printf "%s outbound (image pull, logs, the app's own calls)" $family | toJson>>
+    # EC2 descriptions allow only a-z A-Z 0-9 space and ._-:/()#,@[]+=&;{}!$* - no apostrophe (2026-10-17: "the
+    # app's own calls" made AuthorizeSecurityGroupEgress fail with InvalidParameterValue). tools/test_ec2_descriptions.py.
+    description: <<printf "%s outbound - image pull, logs and the calls the app makes" $family | toJson>>
     securityGroupIdRef:
       name: <<$xrName>>-sg
 <<- end >>

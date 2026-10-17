@@ -15,7 +15,7 @@
 <<- $networkMode := $network.mode | default "create" >>
 <<- $obs := .observed.resources | default dict >>
 <<- $ready := dict >>
-<<- range $name := list "task-definition" "ecs-service" "ecs-cluster" >>
+<<- range $name := list "task-definition" "ecs-service" "ecs-cluster" "ecr-repository" "deploy-role" >>
   <<- $isReady := false >>
   <<- range (dig "resource" "status" "conditions" list (index $obs $name | default dict)) >>
     <<- if and (eq .type "Ready") (eq .status "True") >><<- $isReady = true >><<- end >>
@@ -35,14 +35,18 @@
 <<- end >>
 <<- $reason := "AwsEcsTargetProvisioning" >>
 <<- $status := "False" >>
-<<- $message := "Waiting for the network, execution role, cluster and task definition to be observed (just created, or the AWS provider has no credentials yet)." >>
-<<- if index $ready "ecs-service" >>
+<<- $message := "Waiting for the network, execution role, cluster, task definition, ECR repository and deploy role to be observed (just created, or the AWS provider has no credentials yet)." >>
+<<- $deployRoleObs := index $obs "deploy-role" | default dict >>
+<<- if and (not $deployRoleObs) (not (and $awsAccountId $awsBoundaryArn $saIssuer)) >>
+  <<- $reason = "AwsEcsTargetNeedsWebIdentity" >>
+  <<- $message = "This cluster has no web identity for AWS: its clusters.yaml entry needs aws.accountId, aws.permissionsBoundaryPolicy and serviceAccountIssuer (Airframe docs/admin/cloud-credentials.md). Glidepath deploys to an ECS service only through its deploy role; there is no access-key mode." >>
+<<- else if and (index $ready "ecs-service") (index $ready "deploy-role") (index $ready "ecr-repository") >>
   <<- $reason = "AwsEcsTargetReady" >>
   <<- $status = "True" >>
   <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $appName $region $family >>
 <<- else if and (index $ready "task-definition") (index $ready "ecs-cluster") >>
   <<- $reason = "AwsEcsTargetServicePending" >>
-  <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service to report ready." $appName $family >>
+  <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service, its ECR repository and its deploy role to report ready." $appName $family >>
 <<- end >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ClaimConditions

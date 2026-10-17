@@ -7,7 +7,9 @@
 # (gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml).
 #
 # The execution role carries the fleet's permissions boundary ($awsBoundaryArn, from 00-cloud-identity.yaml, which
-# sorts first) whenever the cluster registry provides one.
+# sorts first) whenever the cluster registry provides one, and keeps the one it has if the registry can't be read
+# for a reconcile: omitting the field would ask the provider to remove the boundary, which the Crossplane identity's
+# policy refuses (business rule CRED-09).
 #
 # The execution role is what Fargate uses to pull the image and ship logs: AWS's own
 # AmazonECSTaskExecutionRolePolicy plus logs:CreateLogGroup, because the task definition asks the
@@ -34,6 +36,10 @@
 <<- $subnetCidr := replace "/16" "/24" $vpcCidr >>
 <<- $az := $network.availabilityZone | default (printf "%sa" $region) >>
 <<- $tags := dict "hangar.io/target" $xrName "hangar.io/component" "aws-ecs-target" "hangar.io/app" $appName "hangar.io/env" $env >>
+<<- $execBoundary := $awsBoundaryArn >>
+<<- if not $execBoundary >>
+<<- $execBoundary = dig "resource" "spec" "forProvider" "permissionsBoundary" "" (index (.observed.resources | default dict) "iam-role" | default dict) >>
+<<- end >>
 apiVersion: iam.aws.m.upbound.io/v1beta1
 kind: Role
 metadata:
@@ -53,8 +59,8 @@ spec:
       - name: create-log-group
         policy: |
           {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["logs:CreateLogGroup"],"Resource":"*"}]}
-    <<- if $awsBoundaryArn >>
-    permissionsBoundary: <<$awsBoundaryArn | quote>>
+    <<- if $execBoundary >>
+    permissionsBoundary: <<$execBoundary | quote>>
     <<- end >>
     tags:
       <<- range $k, $v := $tags >>

@@ -14,13 +14,16 @@ conditions:
     reasons:
       - reason: AwsEcsTargetReady
         status: "True"
-        meaning: The service exists on the cluster with its first task-definition revision - Glidepath can deploy to it now.
+        meaning: The service exists on the cluster with its first task-definition revision, and its ECR repository and deploy role exist - Glidepath can deploy to it now, with no stored key.
       - reason: AwsEcsTargetProvisioning
         status: "False"
-        meaning: The network, role, cluster or task definition has not been observed yet (just created, or the provider's credentials are not in place).
+        meaning: The network, execution role, cluster, task definition, ECR repository or deploy role has not been observed yet (just created, or the provider's credentials are not in place).
       - reason: AwsEcsTargetServicePending
         status: "False"
-        meaning: Everything up to the task definition exists; the service has not reported ready yet.
+        meaning: Everything up to the task definition exists; the service, its ECR repository or its deploy role has not reported ready yet.
+      - reason: AwsEcsTargetNeedsWebIdentity
+        status: "False"
+        meaning: The cluster has no web identity for AWS (its clusters.yaml entry lacks aws.accountId, aws.permissionsBoundaryPolicy or serviceAccountIssuer), so no deploy role is created and Glidepath cannot deploy. There is no access-key mode; add the three fields.
 verify:
   - id: xr-ready
     check: The AwsEcsTarget XR's TargetReady condition has reason AwsEcsTargetReady.

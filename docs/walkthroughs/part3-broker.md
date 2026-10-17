@@ -5,7 +5,7 @@ Converted from [`../user/quickstart-broker.md`](../user/quickstart-broker.md).
 ## skyport-broker is a synced, ready InfraService with a real RabbitMQ cluster behind it
 
 ```bash
-kubectl --context kiac-dev get infraservice skyport-broker -n app-skyport-broker-cicd
+kubectl --context kiac-dev get infraservice skyport-broker -n infra-skyport-broker-cicd
 kubectl --context kiac-dev get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
 ```
 

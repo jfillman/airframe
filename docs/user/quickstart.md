@@ -317,7 +317,7 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 | Field | Value | Notes |
 |---|---|---|
 | Name | `boarding-api-prod-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
-| Namespace | `app-boarding-api-cicd` | The app's tenant namespace, `app-<app>-cicd`. The `xr-requests` AppProject only permits this namespace. |
+| Namespace | `app-boarding-api-cicd` | The app's tenant namespace, `app-<app>-cicd` (`infra-<app>-cicd` for an InfraService). The `xr-requests` AppProject permits only these two prefixes, and the XR must be in the same namespace as its app. |
 | Owner | `group:default/jfillman` | Same as every existing env. |
 | `appName` | `boarding-api` | Required. Labels the env and drives a deletion-protection `Usage` on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist. |
 | `cluster` | `prod` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |

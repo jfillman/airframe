@@ -55,16 +55,38 @@ no source code.
 | Field | Value |
 |---|---|
 | Name | `skyport-broker` |
+| Namespace | `infra-skyport-broker-cicd` |
 | `devCluster` | `dev` |
 | `description` | Skyport shared message broker (RabbitMQ) |
 | `visibility` | `private` |
 
 Use `dev` for `devCluster` exactly, as in [part 1](quickstart.md#02--create-the-app).
 
+An infra tenant's XRs live in `infra-<name>-cicd`, not `app-<name>-cicd`: the `xr-requests`
+ApplicationSet takes the prefix from `platformIdentity.type` in `tenants/<name>/identity.yaml`, and
+falls back to `app` while that file doesn't exist. So **add the identity file to the same PR** before
+you merge it, as `tenants/skyport-broker/identity.yaml` next to `xr-requests/`:
+
+```yaml
+platformIdentity:
+  appName: skyport-broker
+  type: infra
+  gitopsRepoUrl: https://github.com/jfillman/gitops-infra-skyport-broker
+  appRepoUrl: https://github.com/jfillman/gitops-infra-skyport-broker
+  githubOwner: jfillman
+  catalogNamespace: platform-catalog
+  registerPipelinesAsCode: false
+```
+
+The InfraService rewrites this file with the same content once it's ready, so it doesn't need to be
+exact. Without it, the first sync goes to `app-skyport-broker-cicd` and fails, because the XR names
+`infra-skyport-broker-cicd`, a namespace that doesn't exist yet. Add the file and the sync goes
+through. The empty `app-skyport-broker-cicd` namespace it created stays behind; delete it.
+
 Tower opens a PR against the tenants repo. **Merge it.** Within a few minutes:
 
 ```bash
-kubectl get infraservice skyport-broker -n app-skyport-broker-cicd
+kubectl get infraservice skyport-broker -n infra-skyport-broker-cicd
 NAME             SYNCED   READY   COMPOSITION                         AGE
 skyport-broker   True     True    infraservices.catalog.hangar.io        2m
 ```
@@ -310,7 +332,8 @@ The flight environment for the broker works as in [part 1, section 07](quickstar
 and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-prod):
 
 1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-prod-staging`, `Namespace`
-   `app-skyport-broker-cicd`, `appName` `skyport-broker`, `cluster` `prod`, `env` `staging`, and
+   `infra-skyport-broker-cicd` (the same namespace as the InfraService: the environment looks its app
+   up there), `appName` `skyport-broker`, `cluster` `prod`, `env` `staging`, and
    **`appType` `infra`**. Merge the PR. (Needs airframe v0.3.90. `appType` tells the environment that
    its deploy repo is `gitops-infra-skyport-broker`, not `gitops-skyport-broker`. Without it the values
    file is written to a repo that doesn't exist, and the environment reports

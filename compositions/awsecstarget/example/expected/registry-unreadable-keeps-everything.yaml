@@ -247,7 +247,7 @@ resources:
     forProvider:
       cidrBlocks:
       - 0.0.0.0/0
-      description: smoke-ecs-dev outbound (image pull, logs, the app's own calls)
+      description: smoke-ecs-dev outbound - image pull, logs and the calls the app makes
       fromPort: 0
       protocol: '-1'
       region: us-east-1

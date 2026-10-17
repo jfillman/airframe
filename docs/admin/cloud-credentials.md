@@ -143,6 +143,20 @@ policy `HangarCrossplaneCloudTargets` attached to that role. On kiac-dev the rol
 Nothing in either composition updates a function, a task definition or a service in place
 (their `managementPolicies` omit `Update`), so the policy omits every update call on purpose.
 
+**One more thing for ECS, once per account: the ECS service-linked role.** ECS runs services through
+`AWSServiceRoleForECS`, which AWS creates the first time ECS is used, but only if the caller may call
+`iam:CreateServiceLinkedRole`. The Crossplane identity may not (it creates no IAM outside its own name patterns), so
+in a fresh account the first `AwsEcsTarget` service fails with `InvalidParameterException: Unable to assume the
+service linked role` (found 2026-10-17, account 700017004810). An administrator creates it once:
+
+```bash
+aws iam create-service-linked-role --aws-service-name ecs.amazonaws.com
+```
+
+It is an AWS-managed role with an AWS-managed policy, not a credential, and it fails harmlessly with "has been
+taken" if it exists already. The service then creates on its next reconcile (10 minutes at most; sooner if you
+annotate the `Service` managed resource).
+
 ### The policy
 
 The region is a hard boundary: ECR and Lambda through the resource ARN, ECS and EC2 through

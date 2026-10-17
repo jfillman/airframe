@@ -1,0 +1,113 @@
+# The Tower clicks themselves are one-time actions; these steps check what they leave behind.
+title: "Airframe quickstart part 7: checkin-api (Tower path)"
+app: checkin-api
+sourceDoc: ../user/quickstart-checkin-api.md
+steps:
+  - id: "02-app-xr"
+    title: "checkin-api passes the PythonApplication verify contract"
+    command: |
+      tools/airframe-verify pythonapplication app-checkin-api-cicd/checkin-api --context "${DEV_CONTEXT}"
+    expected: "xr-synced, dev-cluster-ready, cicd-onboarded, source-repo and gitops-repo all pass"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" pythonapplication app-checkin-api-cicd/checkin-api --context "${DEV_CONTEXT}"
+
+  - id: "02-created-through-tower"
+    title: "The app's request was made through Tower (it carries the scaffolder's source-info annotation)"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get pythonapplication checkin-api -n app-checkin-api-cicd \
+        -o jsonpath='{.metadata.annotations.terasky\.backstage\.io/source-info}'
+    expected: "a JSON source-info annotation naming the tenants repo (Tower's provisioning view finds the request PR through it)"
+    verify: |
+      set -euo pipefail
+      si="$(kubectl --context "${DEV_CONTEXT}" get pythonapplication checkin-api -n app-checkin-api-cicd \
+        -o jsonpath='{.metadata.annotations.terasky\.backstage\.io/source-info}')"
+      echo "$si"
+      SI="$si" python3 -c 'import json,os; d=json.loads(os.environ["SI"]); assert d.get("gitRepo"), d'
+
+  - id: "03-scan-safe-image-and-schema"
+    title: "The repo has the alpine Containerfile without pip, and a cicd.yaml on deploy.environments"
+    command: |
+      gh api repos/${GITHUB_OWNER}/checkin-api/contents/Containerfile --jq .content | base64 -d
+      gh api repos/${GITHUB_OWNER}/checkin-api/contents/cicd.yaml --jq .content | base64 -d
+    expected: "FROM python:3.12-alpine with pip uninstall -y setuptools pip; deploy.environments with dev (ground) and staging (flight)"
+    verify: |
+      set -euo pipefail
+      cf="$(gh api "repos/${GITHUB_OWNER}/checkin-api/contents/Containerfile" --jq .content | base64 -d)"
+      grep -q "^FROM python:3\.[0-9]*-alpine" <<<"$cf"
+      grep -q "pip uninstall -y setuptools pip" <<<"$cf"
+      gh api "repos/${GITHUB_OWNER}/checkin-api/contents/cicd.yaml" --jq .content | base64 -d > /tmp/wt-checkin-cicd.yaml
+      python3 - /tmp/wt-checkin-cicd.yaml <<'PY'
+      import os, sys, yaml
+      d = (yaml.safe_load(open(sys.argv[1])) or {}).get("deploy") or {}
+      assert not [k for k in ("lowerEnvironments", "upperEnvironments", "promotionOrder") if k in d], d
+      envs = {e["name"]: e for e in d.get("environments") or []}
+      assert envs["dev"]["tier"] == "ground" and envs["staging"]["tier"] == "flight", envs
+      assert envs["staging"].get("cluster") == os.environ["PROD_CLUSTER"], envs["staging"]
+      PY
+
+  - id: "03-dev-healthy"
+    title: "Running healthy in dev: the Rollout is Healthy with every replica available, and no pod is restarting"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get rollout checkin-api -n app-checkin-api-dev
+      kubectl --context "${DEV_CONTEXT}" get pods -n app-checkin-api-dev -l app.kubernetes.io/name=checkin-api
+    expected: "phase Healthy, availableReplicas == replicas; no container in CrashLoopBackOff (the crash loop Tower reported as Progressing)"
+    verify: |
+      set -euo pipefail
+      phase="$(kubectl --context "${DEV_CONTEXT}" get rollout checkin-api -n app-checkin-api-dev -o jsonpath='{.status.phase}')"
+      echo "phase=$phase"
+      [ "$phase" = "Healthy" ]
+      waiting="$(kubectl --context "${DEV_CONTEXT}" get pods -n app-checkin-api-dev -l app.kubernetes.io/name=checkin-api \
+        -o jsonpath='{range .items[*].status.containerStatuses[*]}{.state.waiting.reason}{"\n"}{end}')"
+      ! grep -q "CrashLoopBackOff" <<<"$waiting"
+
+  - id: "04-flight-env"
+    title: "The staging ApplicationEnvironment passes its verify contract"
+    command: |
+      tools/airframe-verify applicationenvironment app-checkin-api-cicd/checkin-api-${PROD_CLUSTER}-staging --context "${DEV_CONTEXT}"
+    expected: "cluster-ready, app-resolved and env-identity-file pass"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" applicationenvironment "app-checkin-api-cicd/checkin-api-${PROD_CLUSTER}-staging" --context "${DEV_CONTEXT}"
+
+  - id: "06-staging-configured"
+    title: "App Configuration was saved: staging values set replicas, /healthz probes and canary steps"
+    command: |
+      gh api repos/${GITHUB_OWNER}/gitops-checkin-api/contents/${PROD_CLUSTER}/staging/values.yaml --jq .content | base64 -d
+    expected: "rollout.replicas set, liveness and readiness on /healthz, rollout.steps with setWeight entries"
+    verify: |
+      set -euo pipefail
+      gh api "repos/${GITHUB_OWNER}/gitops-checkin-api/contents/${PROD_CLUSTER}/staging/values.yaml" --jq .content | base64 -d > /tmp/wt-checkin-values.yaml
+      python3 - /tmp/wt-checkin-values.yaml <<'PY'
+      import sys, yaml
+      r = (yaml.safe_load(open(sys.argv[1])) or {}).get("rollout") or {}
+      assert r.get("replicas"), r
+      for p in ("livenessProbe", "readinessProbe"):
+          assert r[p]["httpGet"]["path"] == "/healthz", (p, r.get(p))
+      assert any("setWeight" in s for s in r.get("steps") or []), r.get("steps")
+      print("ok replicas", r["replicas"])
+      PY
+
+  - id: "08-live-on-staging"
+    title: "Live on staging: the Rollout runs the released image with every replica available, and answers"
+    command: |
+      kubectl --context "${PROD_CONTEXT}" get rollout checkin-api -n app-checkin-api-staging
+      curl -s http://localhost:18087/api/checkin/AC123
+    expected: "availableReplicas == replicas; the image tag equals release.yaml's; /api/checkin/AC123 returns counters 12-18"
+    verify: |
+      set -euo pipefail
+      r="$(kubectl --context "${PROD_CONTEXT}" get rollout checkin-api -n app-checkin-api-staging -o json)"
+      tag="$(gh api "repos/${GITHUB_OWNER}/gitops-checkin-api/contents/${PROD_CLUSTER}/staging/release.yaml" --jq .content | base64 -d \
+        | python3 -c 'import sys,yaml; print(yaml.safe_load(sys.stdin)["release"]["image"]["tag"])')"
+      R="$r" TAG="$tag" python3 -c '
+      import json, os
+      r = json.loads(os.environ["R"])
+      assert r["status"].get("availableReplicas") == r["spec"].get("replicas"), r["status"]
+      image = r["spec"]["template"]["spec"]["containers"][0]["image"]
+      assert image.endswith(":" + os.environ["TAG"]), (image, os.environ["TAG"])
+      '
+      kubectl --context "${PROD_CONTEXT}" port-forward -n app-checkin-api-staging svc/checkin-api 18087:8080 >/tmp/wt-checkin-stg-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      curl -s http://localhost:18087/api/checkin/AC123 | grep -q '"counters": "12-18"'

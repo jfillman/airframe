@@ -6,18 +6,61 @@ is Synced/Ready, a pod is Running, an endpoint answers as documented) still hold
 does not re-run one-time creation actions (create the app, merge a PR); it checks their lasting
 effect, which is what makes it safe to run repeatedly against a live app that already exists.
 
-    tools/walkthrough-runner FILE [--format text|json]
-    tools/walkthrough-runner FILE --render OUT.md
+    tools/walkthrough-runner FILE [FILE ...] [--format text|json] [cluster options]
+    tools/walkthrough-runner --all [--dir docs/walkthroughs] [cluster options]
+    tools/walkthrough-runner FILE --render OUT.md [cluster options]
 
-Exit 0 = every step passed ("replays green"), 1 = at least one step failed.
+Cluster names are never assumed: they are whatever the clusters were called when they were built.
+A walkthrough refers to them with placeholders, substituted in `command`/`verify` and also
+exported to bash as environment variables (so plain `$DEV_CONTEXT` works too):
+
+    ${DEV_CLUSTER}   the dev cluster's registry name (ApplicationEnvironment/XR names, devCluster)
+    ${PROD_CLUSTER}  the prod (upper) cluster's registry name
+    ${DEV_CONTEXT}   kubectl context for the dev cluster   (default: DEV_CLUSTER, the one-name rule)
+    ${PROD_CONTEXT}  kubectl context for the prod cluster  (default: PROD_CLUSTER)
+    ${GITHUB_OWNER}  GitHub owner of the app repos          (default: jfillman)
+
+Every verify also gets AIRFRAME_ROOT (this checkout), for "$AIRFRAME_ROOT/tools/airframe-verify ...".
+
+Where each comes from, highest precedence first:
+    1. flags          --dev-cluster --prod-cluster --dev-context --prod-context --github-owner
+    2. env vars       HANGAR_DEV_CLUSTER HANGAR_PROD_CLUSTER HANGAR_DEV_CONTEXT HANGAR_PROD_CONTEXT GITHUB_OWNER
+    3. --clusters PATH (or HANGAR_CLUSTERS_FILE): the fleet's clusters.yaml. Dev is the one record with the
+       control-plane role; prod is the one zone: upper record with the workloads role. More than one
+       candidate is an error unless the flag/env var names it.
+A run that needs a cluster name nobody gave stops with exit 2 and says which. --render never fails on a
+missing name: it prints the placeholder as <dev-cluster>, <prod-context>, ... instead.
+
+A walkthrough with no placeholders (the pre-placeholder format) runs exactly as before.
+
+Exit 0 = every step passed ("replays green"), 1 = at least one step failed, 2 = usage/config error.
 """
 import argparse
 import json
+import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 import yaml
+
+ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_DIR = ROOT / "docs" / "walkthroughs"
+
+# placeholder -> (flag dest, env var, default-from placeholder or literal, render-as)
+VARS = {
+    "DEV_CLUSTER": ("dev_cluster", "HANGAR_DEV_CLUSTER", None, "<dev-cluster>"),
+    "PROD_CLUSTER": ("prod_cluster", "HANGAR_PROD_CLUSTER", None, "<prod-cluster>"),
+    "DEV_CONTEXT": ("dev_context", "HANGAR_DEV_CONTEXT", "@DEV_CLUSTER", "<dev-context>"),
+    "PROD_CONTEXT": ("prod_context", "HANGAR_PROD_CONTEXT", "@PROD_CLUSTER", "<prod-context>"),
+    "GITHUB_OWNER": ("github_owner", "GITHUB_OWNER", "jfillman", "<github-owner>"),
+}
+PLACEHOLDER = re.compile(r"\$\{(" + "|".join(VARS) + r")\}|\$(" + "|".join(VARS) + r")\b")
+
+
+class ConfigError(Exception):
+    pass
 
 
 def load(path):
@@ -27,51 +70,113 @@ def load(path):
     return doc
 
 
-def run_step(step):
+def used_vars(doc):
+    """The placeholders a walkthrough's commands and verifies actually use."""
+    found = set()
+    for step in doc["steps"]:
+        for field in ("command", "verify"):
+            for m in PLACEHOLDER.finditer(str(step.get(field) or "")):
+                found.add(m.group(1) or m.group(2))
+    return found
+
+
+def from_clusters_file(path):
+    """(dev, prod, errors) picked from a fleet clusters.yaml; a name is None when it can't be picked."""
+    data = yaml.safe_load(Path(path).read_text()) or {}
+    records = [c for c in data.get("clusters") or [] if isinstance(c, dict) and c.get("name")]
+    dev = [c["name"] for c in records if "control-plane" in (c.get("roles") or [])]
+    prod = [c["name"] for c in records
+            if c.get("zone") == "upper" and "workloads" in (c.get("roles") or [])]
+    errors = {}
+    if len(dev) != 1:
+        errors["DEV_CLUSTER"] = (f"{path}: {len(dev)} clusters have the control-plane role "
+                                 f"({', '.join(dev) or 'none'}); name the dev cluster with --dev-cluster")
+    if len(prod) != 1:
+        errors["PROD_CLUSTER"] = (f"{path}: {len(prod)} zone: upper clusters have the workloads role "
+                                  f"({', '.join(prod) or 'none'}); name the prod cluster with --prod-cluster")
+    return (dev[0] if len(dev) == 1 else None), (prod[0] if len(prod) == 1 else None), errors
+
+
+def resolve(args, environ=None):
+    """{placeholder: value or None} plus {placeholder: why it is unset}."""
+    environ = os.environ if environ is None else environ
+    values, why = {}, {}
+    file_vals, file_errors = {}, {}
+    clusters = args.clusters or environ.get("HANGAR_CLUSTERS_FILE")
+    if clusters:
+        if not Path(clusters).is_file():
+            raise ConfigError(f"--clusters {clusters}: no such file")
+        d, p, file_errors = from_clusters_file(clusters)
+        file_vals = {"DEV_CLUSTER": d, "PROD_CLUSTER": p}
+    for name in ("DEV_CLUSTER", "PROD_CLUSTER", "GITHUB_OWNER", "DEV_CONTEXT", "PROD_CONTEXT"):
+        dest, env, default, _ = VARS[name]
+        v = getattr(args, dest, None) or environ.get(env) or file_vals.get(name)
+        if not v and default:
+            v = values.get(default[1:]) if default.startswith("@") else default
+        values[name] = v or None
+        if not v:
+            flag = "--" + dest.replace("_", "-")
+            if default and default.startswith("@") and default[1:] in why:
+                # A context defaults to its cluster's name, so the real gap is the cluster name.
+                why[name] = why[default[1:]] + f" (or pass {flag})"
+                continue
+            why[name] = file_errors.get(name) or (
+                f"{name} is not set: pass {flag}, set {env}, or give the fleet's clusters.yaml with --clusters")
+    return values, why
+
+
+def substitute(text, values, render=False):
+    def rep(m):
+        name = m.group(1) or m.group(2)
+        v = values.get(name)
+        if v:
+            return v
+        return VARS[name][3] if render else m.group(0)
+    return PLACEHOLDER.sub(rep, text)
+
+
+def run_step(step, values):
     verify = step.get("verify")
     if not isinstance(verify, str) or not verify.strip():
         return False, "", "no 'verify' command"
-    r = subprocess.run(["bash", "-c", verify], capture_output=True, text=True, timeout=120)
+    env = dict(os.environ)
+    env.update({k: v for k, v in values.items() if v})
+    env.setdefault("AIRFRAME_ROOT", str(ROOT))  # so a verify can call "$AIRFRAME_ROOT/tools/airframe-verify" from any cwd
+    r = subprocess.run(["bash", "-c", substitute(verify, values)], capture_output=True, text=True,
+                       timeout=120, env=env)
     return r.returncode == 0, r.stdout.strip(), r.stderr.strip()
 
 
-def render_markdown(doc):
+def render_markdown(doc, values):
     lines = [f"# {doc.get('title', 'Walkthrough')}", ""]
     if doc.get("sourceDoc"):
         lines += [f"Converted from [`{doc['sourceDoc']}`]({doc['sourceDoc']}).", ""]
+    unset = sorted(n for n in used_vars(doc) if not values.get(n))
+    if unset:
+        lines += ["Placeholders: " + ", ".join(f"`{VARS[n][3]}`" for n in unset)
+                  + " are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).", ""]
     for step in doc["steps"]:
         lines.append(f"## {step.get('title', step.get('id', '?'))}")
         lines.append("")
         if step.get("command"):
-            lines += ["```bash", step["command"].strip(), "```", ""]
+            lines += ["```bash", substitute(step["command"].strip(), values, render=True), "```", ""]
         if step.get("expected"):
             lines += [f"**Expected:** {step['expected']}", ""]
     return "\n".join(lines) + "\n"
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("file")
-    ap.add_argument("--format", choices=["text", "json"], default="text")
-    ap.add_argument("--render")
-    a = ap.parse_args()
-
-    doc = load(a.file)
-
-    if a.render:
-        Path(a.render).write_text(render_markdown(doc))
-        print(f"rendered {len(doc['steps'])} step(s) to {a.render}")
-        return 0
-
+def run_file(path, doc, values, why, fmt):
+    missing = sorted(n for n in used_vars(doc) if not values.get(n))
+    if missing:
+        reasons = list(dict.fromkeys(why[n] for n in missing))
+        raise ConfigError(f"{path}: " + "; ".join(reasons))
     results = []
     for step in doc["steps"]:
-        ok, out, err = run_step(step)
+        ok, out, err = run_step(step, values)
         results.append({"id": step.get("id"), "title": step.get("title"), "ok": ok,
                         "stdout": out, "stderr": err})
-
-    if a.format == "json":
-        print(json.dumps({"file": a.file, "title": doc.get("title"), "steps": results}, indent=2))
-    else:
+    if fmt == "text":
+        print(f"== {path}: {doc.get('title', '')}")
         for r in results:
             status = "PASS" if r["ok"] else "FAIL"
             print(f"{status} {r['id']}: {r['title']}")
@@ -82,8 +187,54 @@ def main():
                     print(f"  stderr: {r['stderr'][:300]}")
         passed = sum(1 for r in results if r["ok"])
         print(f"\n{passed}/{len(results)} steps passed" + (" - replays green" if passed == len(results) else ""))
+    return {"file": str(path), "title": doc.get("title"), "steps": results}
 
-    return 0 if all(r["ok"] for r in results) else 1
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("files", nargs="*")
+    ap.add_argument("--all", action="store_true", help="every part*.yaml in --dir, in name order")
+    ap.add_argument("--dir", default=str(DEFAULT_DIR))
+    ap.add_argument("--format", choices=["text", "json"], default="text")
+    ap.add_argument("--render", help="write markdown instead of running (one FILE only)")
+    ap.add_argument("--clusters", help="the fleet's clusters.yaml, to pick the dev/prod cluster names from")
+    for name, (dest, env, default, _) in VARS.items():
+        ap.add_argument("--" + dest.replace("_", "-"), dest=dest, help=f"{name} (env {env})")
+    a = ap.parse_args(argv)
+
+    files = list(a.files)
+    if a.all:
+        files += [str(p) for p in sorted(Path(a.dir).glob("part*.yaml"))]
+    if not files:
+        ap.error("give a walkthrough FILE, or --all")
+    if a.render and len(files) != 1:
+        ap.error("--render takes exactly one FILE")
+
+    try:
+        values, why = resolve(a)
+        docs = [(f, load(f)) for f in files]
+        if a.render:
+            f, doc = docs[0]
+            Path(a.render).write_text(render_markdown(doc, values))
+            print(f"rendered {len(doc['steps'])} step(s) to {a.render}")
+            return 0
+        reports = []
+        for f, doc in docs:
+            reports.append(run_file(f, doc, values, why, a.format))
+            if a.format == "text" and len(docs) > 1:
+                print()
+    except (ConfigError, ValueError) as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+    ok = all(s["ok"] for r in reports for s in r["steps"])
+    if a.format == "json":
+        out = reports[0] if len(reports) == 1 else {"files": reports, "ok": ok}
+        print(json.dumps(out, indent=2))
+    elif len(reports) > 1:
+        bad = [r["file"] for r in reports if not all(s["ok"] for s in r["steps"])]
+        print(f"{len(reports) - len(bad)}/{len(reports)} walkthroughs replay green" + (f"; failing: {', '.join(bad)}" if bad else ""))
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":

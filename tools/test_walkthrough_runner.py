@@ -3,10 +3,16 @@
 verify exits 0 is reported PASS, one that exits non-zero is FAIL and the overall exit code is 1,
 and --render produces the command/expected text without running anything. Live-cluster proof that
 a real walkthrough replays green lives in docs/walkthroughs/*.yaml themselves, run by hand against
-kiac-dev/kind-prod - this test never touches a real cluster.
+the dev and prod clusters - this test never touches a real cluster.
+
+Also covers the cluster placeholders: ${DEV_CONTEXT}-style substitution in verify (and as exported env
+vars), --render output, flags over env vars, --clusters picking names from a fleet clusters.yaml, a
+clear exit 2 when a name is needed but unset, and --all over a directory.
 
     python3 tools/test_walkthrough_runner.py
 """
+import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -41,9 +47,62 @@ steps:
     verify: "true"
 """
 
+PLACEHOLDERS = """\
+title: "Placeholder fixture"
+steps:
+  - id: subst
+    title: braces are substituted
+    command: "kubectl --context ${DEV_CONTEXT} get ns app-x-${PROD_CLUSTER}"
+    expected: "x"
+    verify: 'test "${DEV_CONTEXT}" = "ctx-dev" && test "${PROD_CLUSTER}" = "c-prod"'
+  - id: envvar
+    title: plain $VAR works through the exported environment
+    command: "echo $GITHUB_OWNER"
+    expected: "x"
+    verify: 'test "$PROD_CONTEXT" = "c-prod" && test "$GITHUB_OWNER" = "acme" && test "$(printenv DEV_CLUSTER)" = "c-dev" && test -x "$AIRFRAME_ROOT/tools/airframe-verify"'
+"""
 
-def run(*args):
-    return subprocess.run([sys.executable, RUNNER, *args], capture_output=True, text=True, cwd=ROOT)
+CLUSTERS = """\
+clusters:
+  - name: lab-dev
+    zone: lower
+    roles: [control-plane, workloads]
+  - name: lab-prod
+    zone: upper
+    roles: [workloads, platform-services]
+"""
+
+AMBIGUOUS = """\
+clusters:
+  - name: lab-dev
+    zone: lower
+    roles: [control-plane]
+  - name: up-a
+    zone: upper
+    roles: [workloads]
+  - name: up-b
+    zone: upper
+    roles: [workloads]
+"""
+
+CLUSTER_CHECK = """\
+title: "clusters.yaml fixture"
+steps:
+  - id: names
+    title: names come from clusters.yaml, contexts follow them
+    command: "true"
+    verify: 'test "$DEV_CLUSTER" = lab-dev && test "$DEV_CONTEXT" = lab-dev && test "$PROD_CONTEXT" = lab-prod'
+"""
+
+
+CLEAN_ENV = {k: v for k, v in os.environ.items()
+             if not k.startswith("HANGAR_") and k != "GITHUB_OWNER"}
+
+
+def run(*args, env=None):
+    e = dict(CLEAN_ENV)
+    e.update(env or {})
+    return subprocess.run([sys.executable, RUNNER, *args], capture_output=True, text=True, cwd=ROOT, env=e)
 
 
 def main():
@@ -78,6 +137,76 @@ def main():
             print("FAIL: rendered markdown missing command/expected text"); failed = 1
         if "a step that fails" not in text:
             print("FAIL: rendering should document every step, including ones that would fail"); failed = 1
+
+        # --- cluster placeholders ---
+        ph = Path(td) / "ph.yaml"
+        ph.write_text(PLACEHOLDERS)
+        flags = ["--dev-cluster", "c-dev", "--prod-cluster", "c-prod", "--dev-context", "ctx-dev",
+                 "--github-owner", "acme"]
+        r = run(str(ph), *flags)
+        if r.returncode != 0 or "2/2 steps passed" not in r.stdout:
+            print(f"FAIL: placeholders not substituted/exported: {r.stdout} {r.stderr}"); failed = 1
+
+        r = run(str(ph), env={"HANGAR_DEV_CLUSTER": "c-dev", "HANGAR_PROD_CLUSTER": "c-prod",
+                              "HANGAR_DEV_CONTEXT": "ctx-dev", "GITHUB_OWNER": "acme"})
+        if r.returncode != 0:
+            print(f"FAIL: env vars should supply the names: {r.stdout} {r.stderr}"); failed = 1
+
+        r = run(str(ph), "--dev-context", "ctx-dev", "--github-owner", "acme",
+                env={"HANGAR_DEV_CLUSTER": "c-dev", "HANGAR_PROD_CLUSTER": "wrong"}, )
+        r2 = run(str(ph), "--prod-cluster", "c-prod", "--dev-context", "ctx-dev", "--github-owner", "acme",
+                 env={"HANGAR_DEV_CLUSTER": "c-dev", "HANGAR_PROD_CLUSTER": "wrong"})
+        if r.returncode != 1 or r2.returncode != 0:
+            print(f"FAIL: a flag should win over its env var ({r.returncode}, {r2.returncode})"); failed = 1
+
+        r = run(str(ph))
+        if r.returncode != 2 or "DEV_CLUSTER is not set" not in r.stderr or "--dev-cluster" not in r.stderr:
+            print(f"FAIL: unset cluster names must exit 2 with a clear message: {r.returncode} {r.stderr}"); failed = 1
+
+        r = run(str(mixed))
+        if r.returncode != 1:
+            print("FAIL: a walkthrough with no placeholders must still run without any cluster names"); failed = 1
+
+        out = Path(td) / "ph.md"
+        r = run(str(ph), "--render", str(out))
+        txt = out.read_text() if out.exists() else ""
+        if r.returncode != 0 or "--context <dev-context>" not in txt or "app-x-<prod-cluster>" not in txt:
+            print(f"FAIL: --render without names should print readable placeholders: {txt}"); failed = 1
+        r = run(str(ph), "--render", str(out), *flags)
+        txt = out.read_text()
+        if "--context ctx-dev get ns app-x-c-prod" not in txt or "<dev-" in txt:
+            print(f"FAIL: --render with names should substitute them: {txt}"); failed = 1
+
+        cl = Path(td) / "clusters.yaml"
+        cl.write_text(CLUSTERS)
+        cc = Path(td) / "cc.yaml"
+        cc.write_text(CLUSTER_CHECK)
+        r = run(str(cc), "--clusters", str(cl))
+        if r.returncode != 0:
+            print(f"FAIL: --clusters should pick lab-dev/lab-prod: {r.stdout} {r.stderr}"); failed = 1
+
+        amb = Path(td) / "amb.yaml"
+        amb.write_text(AMBIGUOUS)
+        r = run(str(cc), "--clusters", str(amb))
+        if r.returncode != 2 or "up-a, up-b" not in r.stderr:
+            print(f"FAIL: an ambiguous clusters.yaml must exit 2 naming the candidates: {r.stderr}"); failed = 1
+        r = run(str(cc), "--clusters", str(amb), "--prod-cluster", "lab-prod")
+        if r.returncode != 0:
+            print(f"FAIL: a flag should resolve an ambiguous clusters.yaml: {r.stdout} {r.stderr}"); failed = 1
+
+        # --all over a directory: every part*.yaml, one summary line
+        d = Path(td) / "wt"
+        d.mkdir()
+        (d / "part1-a.yaml").write_text(ALL_PASS)
+        (d / "part2-b.yaml").write_text(ALL_PASS)
+        (d / "notes.yaml").write_text(FIXTURE)
+        r = run("--all", "--dir", str(d))
+        if r.returncode != 0 or "2/2 walkthroughs replay green" not in r.stdout:
+            print(f"FAIL: --all should run every part*.yaml: {r.stdout} {r.stderr}"); failed = 1
+        (d / "part3-c.yaml").write_text(FIXTURE)
+        r = run("--all", "--dir", str(d), "--format", "json")
+        if r.returncode != 1 or json.loads(r.stdout)["ok"] is not False:
+            print("FAIL: --all with a failing part should exit 1 and report ok: false"); failed = 1
 
     if failed:
         print("FAILED")

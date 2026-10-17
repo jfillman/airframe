@@ -8,6 +8,11 @@ nav:
       - Quickstart: user/quickstart.md
       - 'Quickstart part 2: a database': user/quickstart-flight-api.md
       - 'Quickstart part 3: a message broker': user/quickstart-broker.md
+      - 'Quickstart part 4: MongoDB and a consumer': user/quickstart-baggage-api.md
+      - 'Quickstart part 5: an OIDC provider (Dex)': user/quickstart-skyport-auth.md
+      - 'Quickstart part 6: gate-api from the terminal': user/quickstart-gate-api.md
+      - 'Quickstart part 7: checkin-api through Tower': user/quickstart-checkin-api.md
+      - Skyport runbook: user/skyport-runbook.md
       - Skyport demo system: user/skyport-demo.md
       - Decommissioning an app: user/decommission-app.md
       - Cloud targets (Lambda, ECS, Container Apps): user/cloud-targets.md

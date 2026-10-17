@@ -16,6 +16,9 @@ immediately.
 > [`../walkthroughs/part3-broker.yaml`](../walkthroughs/part3-broker.yaml) (run it with
 > `tools/walkthrough-runner`).
 
+Cluster names: `<dev-cluster>` and `<prod-cluster>` are the names chosen when the clusters were built
+(see the top of [part 1](quickstart.md)).
+
 Do parts 1 and 2 first. This guide assumes `boarding-api` and `flight-api` are running in their dev
 environments and doesn't repeat how to create an app or merge a pipeline PR.
 
@@ -56,11 +59,11 @@ no source code.
 |---|---|
 | Name | `skyport-broker` |
 | Namespace | `infra-skyport-broker-cicd` |
-| `devCluster` | `dev` |
+| `devCluster` | `<dev-cluster>` |
 | `description` | Skyport shared message broker (RabbitMQ) |
 | `visibility` | `private` |
 
-Use `dev` for `devCluster` exactly, as in [part 1](quickstart.md#02--create-the-app).
+`devCluster` is the dev cluster's registry name, as in [part 1](quickstart.md#02--create-the-app).
 
 An infra tenant's XRs live in `infra-<name>-cicd`, not `app-<name>-cicd`: the `xr-requests`
 ApplicationSet takes the prefix from `platformIdentity.type` in `tenants/<name>/identity.yaml`, and
@@ -102,9 +105,9 @@ It created one repo, `gitops-infra-skyport-broker`, containing only a `README.md
 
 ## 03 — Declare the broker
 
-An environment of any app is a file, `platform/envs/<env>.yaml`, in the repo the app is built from.
+An environment of any app is a file, `glidepath/envs/<env>.yaml`, in the repo the app is built from.
 For an `InfraService` that repo is `gitops-infra-skyport-broker` itself. Create
-`platform/envs/dev.yaml` and push it to `main`:
+`glidepath/envs/dev.yaml` and push it to `main`:
 
 ```yaml
 appType: infra
@@ -121,8 +124,10 @@ components:
       storageSize: 1Gi
       vhosts: [flights]
       # Only these namespaces may attach (get a user) and reach the AMQP port.
-      allowedNamespaces: [app-flight-api-dev, app-boarding-api-dev]
+      allowedNamespaces: [app-flight-api-dev, app-boarding-api-dev, app-baggage-api-dev]
 ```
+
+(`app-baggage-api-dev` is for [part 4](quickstart-baggage-api.md); listing it now saves a second change.)
 
 | Field | Meaning |
 |---|---|
@@ -186,7 +191,7 @@ now trips it on its own Tomcat, Spring and Jackson. A build of part 2's `flight-
 same way today. The `<properties>` in the pom explain each override; drop them as Boot catches up.
 
 **The environment.** Add an `rabbitmq` component in `attach` mode, and hand its connection details
-to the app, in `platform/envs/dev.yaml`:
+to the app, in `glidepath/envs/dev.yaml`:
 
 ```yaml
 components:
@@ -220,7 +225,7 @@ Nothing is copied through Infisical: the app reads the Secret and the ConfigMap 
 `valueFrom`, exactly as it reads the database's credentials in part 2.
 
 Commit both, push, and let the pipeline run. `git pull` before your next push: the deploy stage commits
-the image into `platform/envs/dev.yaml`.
+the image into `glidepath/envs/dev.release.yaml`.
 
 ## 05 — Wire boarding-api (the consumer)
 
@@ -246,7 +251,7 @@ What it does:
 - `/api/whoami` gains `events` (`off`, `connecting` or `connected`) and `eventsReceived`, so you can
   see it working.
 
-**The environment.** In `boarding-api`'s `platform/envs/dev.yaml`:
+**The environment.** In `boarding-api`'s `glidepath/envs/dev.yaml`:
 
 ```yaml
 components:
@@ -314,33 +319,33 @@ Tested over real AMQP against the running broker, with the credentials each app 
 | `flight-api` reads `boarding-api`'s queue | **refused** |
 
 A compromised `boarding-api` credential therefore can't forge a flight event, and a bug in
-`baggage-api` (Phase 2, next) can't read another app's queue.
+`baggage-api` ([part 4](quickstart-baggage-api.md)) can't read another app's queue.
 
 **Who may attach is decided by the broker's owner**, in `allowedNamespaces` (section 03). Anyone who
 can edit an app's environment file can *request* any permission on the vhost for that app, so the list
 of namespaces, not the permission text, is what protects the broker. That's acceptable for this demo;
 a shared production broker would also want an admission policy on what an app may ask for.
 
-## 08 — Flight: the same on `prod`
+## 08 — Flight: the same on the prod cluster
 
-> **Not walked.** Everything in this section is written from how the pieces work and from the
-> component being verified on the prod cluster (below); it was not run end to end. The prod cluster
-> was also short of memory when this was written, and the broker adds about 1Gi. Check the cluster's
-> memory headroom first.
+> **Partly walked.** The broker's staging environment was created this way in the previous lab, and
+> `baggage-api` staging attached to it (its gitops repo held exactly the values below); this guide's
+> own steps were not replayed end to end on a fresh cluster. The broker adds about 1Gi of memory:
+> check the prod cluster's headroom first.
 
 The flight environment for the broker works as in [part 1, section 07](quickstart.md#07--flight-a-governed-environment-on-an-upper-cluster)
-and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-prod):
+and [part 2, section 07](quickstart-flight-api.md#07--flight-the-same-service-on-the-prod-cluster):
 
-1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-prod-staging`, `Namespace`
+1. Tower → Create → **ApplicationEnvironment**: `Name` `skyport-broker-<prod-cluster>-staging`, `Namespace`
    `infra-skyport-broker-cicd` (the same namespace as the InfraService: the environment looks its app
-   up there), `appName` `skyport-broker`, `cluster` `prod`, `env` `staging`, and
+   up there), `appName` `skyport-broker`, `cluster` `<prod-cluster>`, `env` `staging`, and
    **`appType` `infra`**. Merge the PR. (Needs airframe v0.3.90. `appType` tells the environment that
    its deploy repo is `gitops-infra-skyport-broker`, not `gitops-skyport-broker`. Without it the values
    file is written to a repo that doesn't exist, and the environment reports
    `Unready resources: app-usage`. Both were found when someone created this environment.)
-2. In the PR that adds `gitops-infra-skyport-broker/prod/staging/values.yaml`, use the same
+2. In the PR that adds `gitops-infra-skyport-broker/<prod-cluster>/staging/values.yaml`, use the same
    `components:` block as section 03 with `allowedNamespaces: [app-flight-api-staging,
-   app-boarding-api-staging]`.
+   app-boarding-api-staging, app-baggage-api-staging]`, and `rollout: { enabled: false }`.
 3. In each app's staging values, add its `attach` component and the `env` entries from sections 04 and
    05, pointing `brokerRef` at `app-skyport-broker-staging`.
 
@@ -352,7 +357,7 @@ on the list was blocked.
 ## What was verified
 
 - **Verified live by walking it (2026-09-25), on the dev cluster.** Creating the `InfraService` (which
-  found the `idp-onboarding` gap in section 02), declaring the broker in `platform/envs/dev.yaml`,
+  found the `idp-onboarding` gap in section 02), declaring the broker in its dev env file,
   both `attach` components going Ready and creating their Secrets, `boarding-api` connecting with its
   real credentials and waiting for the exchange (section 05), and the pipeline builds. Walking it also
   found the image-scan failure in section 04.
@@ -361,7 +366,7 @@ on the list was blocked.
   `flight-api`: 21 unit tests. `boarding-api`: 18.
 - **Verified in the component on the prod cluster** (Calico, which enforces NetworkPolicy): broker and
   attach modes Ready; allowed namespace connects, other namespace blocked.
-- **Not walked:** section 08 end to end, and the prod staging environments for either app.
+- **Not walked on a fresh cluster:** section 08 end to end. (The broker, flight-api and baggage-api staging environments existed in the previous lab; see section 08.)
 - **Verified end to end, live:** with both apps on their final images (`flight-api` 1.1.0 on Spring
   Boot 3.5.16, `boarding-api` 1.1.0), a lookup of `AC123` was a cache hit on gate A1; after
   `PUT …/gate` to B2 the same lookup returned B2 at once with `"cached": false`, and `eventsReceived`

@@ -2,10 +2,12 @@
 
 Converted from [`../user/quickstart-flight-api.md`](../user/quickstart-flight-api.md).
 
+Placeholders: `<dev-context>`, `<prod-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+
 ## The app exists as a synced, ready SpringBootApplication XR
 
 ```bash
-kubectl --context kiac-dev get springbootapplication flight-api -n app-flight-api-cicd
+kubectl --context "<dev-context>" get springbootapplication flight-api -n app-flight-api-cicd
 ```
 
 **Expected:** DevClusterReady/CicdOnboarded/Synced/Ready all True
@@ -13,7 +15,7 @@ kubectl --context kiac-dev get springbootapplication flight-api -n app-flight-ap
 ## The PostgreSQL component is attached and flight-api reads through it
 
 ```bash
-kubectl --context kiac-dev get secret flight-db-app -n app-flight-api-dev
+kubectl --context "<dev-context>" get secret flight-db-app -n app-flight-api-dev
 curl -s http://localhost:18090/api/whoami
 ```
 
@@ -22,16 +24,16 @@ curl -s http://localhost:18090/api/whoami
 ## Ground: flight-api is Running on the dev cluster and its liveness probe passes
 
 ```bash
-kubectl --context kiac-dev get pods -n app-flight-api-dev
+kubectl --context "<dev-context>" get pods -n app-flight-api-dev
 curl -s -o /dev/null -w '%{http_code}' http://localhost:18090/actuator/health/liveness
 ```
 
 **Expected:** at least one flight-api pod Running; the liveness endpoint returns 200
 
-## Flight: flight-api's staging environment has real Running pods on kind-prod
+## Flight: flight-api's staging environment has real Running pods on the prod cluster
 
 ```bash
-kubectl --context kind-prod get pods -n app-flight-api-staging
+kubectl --context "<prod-context>" get pods -n app-flight-api-staging
 ```
 
 **Expected:** at least one flight-api pod Running on the prod cluster

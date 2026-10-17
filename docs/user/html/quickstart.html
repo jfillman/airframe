@@ -165,6 +165,7 @@
   section > h3 { margin-top: 1.6rem; }
   section > p.prose { max-width: 68ch; }
 </style>
+<div class="wrap" style="border:1px solid #c96442;border-radius:8px;padding:10px 14px;margin:12px auto;background:#fff"><b>Out of date in places (2026-10-16).</b> This illustrated copy predates <code>deploy.environments</code> (it still shows the removed <code>lowerEnvironments</code>/<code>upperEnvironments</code> keys) and uses example cluster names. The <a href="../quickstart.md">markdown guide</a> is current; follow it where the two differ. Cluster names are <code>&lt;dev-cluster&gt;</code>/<code>&lt;prod-cluster&gt;</code>, chosen when the clusters were built.</div>
 <div class="wrap">
 
   <div class="masthead">
@@ -210,12 +211,12 @@
           <dt>What it is</dt>
           <dd>A disposable environment on the dev cluster.</dd>
           <dt>Declared in</dt>
-          <dd><code>platform/envs/&lt;name&gt;.yaml</code> in <b>your source repo</b></dd>
+          <dd><code>glidepath/envs/&lt;name&gt;.yaml</code> in <b>your source repo</b></dd>
           <dt>Gets its image from</dt>
           <dd>Your pipeline's <code>deploy</code> stage, <b>committed straight to
             <code>main</code></b> — no PR</dd>
           <dt>Configured with</dt>
-          <dd>Editing <code>platform/envs/&lt;name&gt;.yaml</code> by hand</dd>
+          <dd>Editing <code>glidepath/envs/&lt;name&gt;.yaml</code> by hand</dd>
           <dt>Cluster</dt>
           <dd>Dev cluster only</dd>
         </dl>
@@ -282,7 +283,7 @@
         <rect x="280" y="380" width="160" height="56" rx="6" class="f-paper"/>
         <rect x="280" y="380" width="160" height="56" rx="6" class="f-paper2" stroke="var(--rule-solid)" stroke-width="1"/>
         <text x="360" y="404" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Add a ground env</text>
-        <text x="360" y="420" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">platform/envs/dev.yaml</text>
+        <text x="360" y="420" class="f-muted" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">glidepath/envs/dev.yaml</text>
         <rect x="280" y="472" width="160" height="56" rx="6" class="f-paper"/>
         <rect x="280" y="472" width="160" height="56" rx="6" class="f-accenttint" stroke="var(--accent)" stroke-width="1"/>
         <text x="360" y="496" class="f-ink" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Add a flight env</text>
@@ -319,7 +320,7 @@
             <thead><tr><th>Field</th><th>Value</th></tr></thead>
             <tbody>
               <tr><td class="name">Name</td><td><code>boarding-api</code></td></tr>
-              <tr><td class="name">devCluster</td><td><code>dev</code></td></tr>
+              <tr><td class="name">devCluster</td><td><code>&lt;dev-cluster&gt;</code></td></tr>
               <tr><td class="name">description</td><td>Skyport gate board: Redis-cached flight lookups and a canary visualizer</td></tr>
               <tr><td class="name">nodeVersion</td><td><code>20</code></td></tr>
               <tr><td class="name">packageManager</td><td><code>npm</code></td></tr>
@@ -465,7 +466,7 @@ PORT=8080 node index.js        <span class="c"># open http://localhost:8080</spa
     <div class="cards c2">
       <div class="card">
         <div class="card-head"><span class="card-dot muted"></span><h3>Ground → edit the file yourself</h3></div>
-        <p>You edit <code>platform/envs/dev.yaml</code> in your own repo (section 06). The
+        <p>You edit <code>glidepath/envs/dev.yaml</code> in your own repo (section 06). The
           App Configuration tab can't see ground environments.</p>
       </div>
       <div class="card">
@@ -488,12 +489,12 @@ PORT=8080 node index.js        <span class="c"># open http://localhost:8080</spa
     <div class="steps">
       <div class="step">
         <h3>Declare the environment</h3>
-        <span class="filepath">boarding-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+        <span class="filepath">boarding-api/glidepath/envs/dev.yaml <span class="tag ground">ground</span></span>
         <pre># envName, not env — env is a reserved key in the chart's container env-var list.
 # No rollout: needed: the chart renders no workload until the deploy stage sets an image.
 envName: dev</pre>
         <p class="prose">A dev-cluster-only <code>ApplicationSet</code>
-          (<code>boarding-api-lower-envs</code>) watches <code>platform/envs/*.yaml</code> in
+          (<code>boarding-api-lower-envs</code>) watches <code>glidepath/envs/*.yaml</code> in
           your repo. Within a sync interval you get an empty namespace,
           <code>app-boarding-api-dev</code>, with the baseline ServiceAccount and
           NetworkPolicy and no workload.</p>
@@ -539,10 +540,10 @@ pipelines:
         <h3>Run it, then look at it</h3>
         <p class="prose">Push to <code>main</code>. The <code>deploy</code> stage
           <b>commits <code>rollout.image.repository</code> and <code>rollout.image.tag</code>
-          directly into <code>platform/envs/dev.yaml</code> on <code>main</code></b> — no
+          directly into <code>glidepath/envs/dev.yaml</code> on <code>main</code></b> — no
           branch, no PR. <code>git pull</code> before your next push, or you'll be rebasing
           over the bot's commit.</p>
-        <span class="filepath">platform/envs/dev.yaml after the first deploy</span>
+        <span class="filepath">glidepath/envs/dev.yaml after the first deploy</span>
         <pre>envName: dev
 rollout:
   image:
@@ -555,7 +556,7 @@ rollout:
           the second answer is a <b>cache hit</b>, a few milliseconds instead of ~400. Press
           <b>Scan a boarding pass</b> several times: the counter jumps around, because the two
           pods each count on their own (<code>counter: memory</code>). Keep that in mind for
-          section 08. To change ground settings, edit <code>platform/envs/dev.yaml</code>
+          section 08. To change ground settings, edit <code>glidepath/envs/dev.yaml</code>
           directly.</p>
       </div>
     </div>
@@ -609,7 +610,7 @@ pipelines:
           <table>
             <thead><tr><th>Field</th><th>Value</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><td class="name">Name</td><td><code>boarding-api-prod-staging</code></td><td>The XR's own name. Convention is <code>&lt;app&gt;-&lt;cluster&gt;-&lt;env&gt;</code>, as with every existing env.</td></tr>
+              <tr><td class="name">Name</td><td><code>boarding-api-&lt;prod-cluster&gt;-staging</code></td><td>The XR's own name. Convention is <code>&lt;app&gt;-&lt;cluster&gt;-&lt;env&gt;</code>, as with every existing env.</td></tr>
               <tr><td class="name">Namespace</td><td><code>app-boarding-api-cicd</code></td><td>The app's tenant namespace. The <code>xr-requests</code> AppProject only permits this one.</td></tr>
               <tr><td class="name">Owner</td><td><code>group:default/jfillman</code></td><td>Same as every existing env.</td></tr>
               <tr><td class="name">appName</td><td><code>boarding-api</code></td><td>Required. Labels the env and drives a deletion-protection <code>Usage</code> on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist.</td></tr>
@@ -621,14 +622,14 @@ pipelines:
         </div>
         <p class="prose">The Crossplane Settings page can stay at its defaults. Submitting
           opens a PR into <code>gitops-cluster-dev-tenants</code>
-          (<code>tenants/boarding-api/xr-requests/boarding-api-prod-staging.yaml</code>).
+          (<code>tenants/boarding-api/xr-requests/boarding-api-&lt;prod-cluster&gt;-staging.yaml</code>).
           Merge it. Crossplane commits a bootstrap <code>values.yaml</code> to
           <code>gitops-boarding-api/prod/staging/</code> and an onboarding entry to
           <code>prod</code>'s own tenants repo, so <b>the prod cluster's own ArgoCD</b> picks
           the env up — no cross-cluster credential is involved.</p>
         <pre>$ kubectl get applicationenvironment -n app-boarding-api-cicd
 NAME                             SYNCED   READY   COMPOSITION                              AGE
-boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m</pre>
+boarding-api-&lt;prod-cluster&gt;-staging   True     True    applicationenvironments.catalog.hangar.io   2m</pre>
         <p class="prose"><code>kubectl describe</code> shows <code>ClusterReady: True</code> and
           <code>AppResolved: True</code>. The bootstrap file holds only the
           environment's identity: a namespace, and nothing that runs until a release sets an image. Whether a workload is running is read on the target
@@ -705,12 +706,12 @@ boarding-api-prod-staging   True     True    applicationenvironments.catalog.han
       airframe v0.3.83 (which includes the Redis naming fix), and every image involved is
       multi-arch.</p>
 
-    <h3>Ground: add it to platform/envs/dev.yaml</h3>
+    <h3>Ground: add it to glidepath/envs/dev.yaml</h3>
     <p class="prose">Name the component anything; we use <code>cache</code>. The Composition sets
       the chart's <code>fullnameOverride</code> to that name, so the Service is
       <code>cache-master</code> and the password Secret is <code>cache</code>. (Before v0.3.79
       the name had to be <code>redis</code>; every cluster is past that now.)</p>
-    <span class="filepath">platform/envs/dev.yaml — additions <span class="tag ground">ground</span></span>
+    <span class="filepath">glidepath/envs/dev.yaml — additions <span class="tag ground">ground</span></span>
     <pre>components:
   - type: redis
     name: cache
@@ -892,7 +893,7 @@ kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   <span c
       </div>
       <div class="card">
         <div class="card-head"><span class="card-dot accent"></span><h3>Nothing is deployed after onboarding</h3></div>
-        <p>Ground needs <code>platform/envs/dev.yaml</code> plus a <code>deploy</code> stage.
+        <p>Ground needs <code>glidepath/envs/dev.yaml</code> plus a <code>deploy</code> stage.
           Flight needs an <code>ApplicationEnvironment</code>, App Configuration and a
           <code>release</code> stage.</p>
       </div>
@@ -903,12 +904,12 @@ kubectl argo rollouts promote boarding-api -n app-boarding-api-staging   <span c
       </div>
       <div class="card">
         <div class="card-head"><span class="card-dot link"></span><h3>Ground deploys commit to main</h3></div>
-        <p>The pipeline writes the image into <code>platform/envs/dev.yaml</code> itself —
+        <p>The pipeline writes the image into <code>glidepath/envs/dev.yaml</code> itself —
           <code>git pull</code> before you push.</p>
       </div>
       <div class="card">
         <div class="card-head"><span class="card-dot ink"></span><h3>envName, never env; rollout.enabled</h3></div>
-        <p>In <code>platform/envs/*.yaml</code>, <code>env:</code> collides with the chart's
+        <p>In <code>glidepath/envs/*.yaml</code>, <code>env:</code> collides with the chart's
           reserved key. No <code>rollout:</code> key means a service once a release sets an image;
           <code>rollout.enabled: false</code> says an environment runs none.</p>
       </div>

@@ -1,0 +1,176 @@
+title: "Airframe quickstart part 4: baggage-api (MongoDB + broker consumer)"
+app: baggage-api
+sourceDoc: ../user/quickstart-baggage-api.md
+steps:
+  - id: "02-mongodb-xrd-installed"
+    title: "The MongoDB XRD is installed on both clusters"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get xrd mongodbs.catalog.hangar.io
+      kubectl --context "${PROD_CONTEXT}" get xrd mongodbs.catalog.hangar.io
+    expected: "both XRDs exist and report Established=True"
+    verify: |
+      set -euo pipefail
+      for ctx in "$DEV_CONTEXT" "$PROD_CONTEXT"; do
+        est="$(kubectl --context "$ctx" get xrd mongodbs.catalog.hangar.io \
+          -o jsonpath='{.status.conditions[?(@.type=="Established")].status}')"
+        echo "$ctx: Established=$est"
+        [ "$est" = "True" ]
+      done
+
+  - id: "03-create-app"
+    title: "The app exists as a synced, ready PythonApplication XR"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get pythonapplication baggage-api -n app-baggage-api-cicd
+    expected: "DevClusterReady/CicdOnboarded/Synced/Ready all True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context "${DEV_CONTEXT}" get pythonapplication baggage-api -n app-baggage-api-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      echo "$c"
+      grep -q "DevClusterReady=True" <<<"$c"
+      grep -q "CicdOnboarded=True" <<<"$c"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+
+  - id: "04-real-code-one-containerfile"
+    title: "The real code replaced the scaffold, with exactly one container file"
+    command: |
+      gh api repos/${GITHUB_OWNER}/baggage-api/contents --jq '.[].name'
+    expected: "baggage.py, events.py and Containerfile are present, and there is no Dockerfile beside it"
+    verify: |
+      set -euo pipefail
+      files="$(gh api "repos/${GITHUB_OWNER}/baggage-api/contents" --jq '.[].name')"
+      grep -qx "baggage.py" <<<"$files"
+      grep -qx "events.py" <<<"$files"
+      grep -qx "Containerfile" <<<"$files"
+      ! grep -qx "Dockerfile" <<<"$files"
+
+  - id: "04-containerfile-scan-safe"
+    title: "The Containerfile is the alpine one that removes pip and setuptools (image-scan gate)"
+    command: |
+      gh api repos/${GITHUB_OWNER}/baggage-api/contents/Containerfile --jq .content | base64 -d
+    expected: "FROM python:3.13-alpine and a `pip uninstall -y setuptools pip` line"
+    verify: |
+      set -euo pipefail
+      cf="$(gh api "repos/${GITHUB_OWNER}/baggage-api/contents/Containerfile" --jq .content | base64 -d)"
+      grep -q "^FROM python:3\.[0-9]*-alpine" <<<"$cf"
+      grep -q "pip uninstall -y setuptools pip" <<<"$cf"
+
+  - id: "05-cicd-current-schema"
+    title: "cicd.yaml uses deploy.environments, not the removed lowerEnvironments/upperEnvironments"
+    command: |
+      gh api repos/${GITHUB_OWNER}/baggage-api/contents/cicd.yaml --jq .content | base64 -d
+    expected: "a deploy.environments list with dev (tier: ground); no lowerEnvironments/upperEnvironments/promotionOrder"
+    verify: |
+      set -euo pipefail
+      gh api "repos/${GITHUB_OWNER}/baggage-api/contents/cicd.yaml" --jq .content | base64 -d > /tmp/wt-baggage-cicd.yaml
+      python3 - /tmp/wt-baggage-cicd.yaml <<'PY'
+      import sys, yaml
+      d = (yaml.safe_load(open(sys.argv[1])) or {}).get("deploy") or {}
+      old = [k for k in ("lowerEnvironments", "upperEnvironments", "promotionOrder") if k in d]
+      assert not old, f"removed keys still set: {old}"
+      envs = {e["name"]: e.get("tier") for e in d.get("environments") or []}
+      assert envs.get("dev") == "ground", envs
+      print(envs)
+      PY
+
+  - id: "05-mongodb-component"
+    title: "Ground: the bag-db MongoDB component passes its verify contract"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get mongodbs.catalog.hangar.io bag-db -n app-baggage-api-dev
+      tools/airframe-verify mongodb app-baggage-api-dev/bag-db --context "${DEV_CONTEXT}"
+    expected: "COMPONENT MongoDBReady; airframe-verify passes xr-synced, xr-ready, secret-exists (username, password, connectionString.standard) and reachable (TCP 27017)"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" mongodb app-baggage-api-dev/bag-db --context "${DEV_CONTEXT}"
+
+  - id: "05-broker-attach"
+    title: "Ground: the bag-mq RabbitMQ attach passes its verify contract"
+    command: |
+      tools/airframe-verify rabbitmq app-baggage-api-dev/bag-mq --context "${DEV_CONTEXT}"
+    expected: "ComponentReady RabbitMQAttachReady; bag-mq-user-credentials and bag-mq-connection carry their keys"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" rabbitmq app-baggage-api-dev/bag-mq --context "${DEV_CONTEXT}"
+
+  - id: "05-ground-running"
+    title: "Ground: one baggage-api pod is Running and /healthz answers"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get pods -n app-baggage-api-dev -l app.kubernetes.io/name=baggage-api
+      kubectl --context "${DEV_CONTEXT}" port-forward -n app-baggage-api-dev svc/baggage-api 18083:8080 &
+      curl -s http://localhost:18083/healthz
+    expected: "exactly one Running pod (one consumer replica, on purpose); /healthz returns 200"
+    verify: |
+      set -euo pipefail
+      running="$(kubectl --context "${DEV_CONTEXT}" get pods -n app-baggage-api-dev -l app.kubernetes.io/name=baggage-api \
+        --field-selector=status.phase=Running --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+      echo "running=$running"
+      [ "$running" -ge 1 ]
+      kubectl --context "${DEV_CONTEXT}" port-forward -n app-baggage-api-dev svc/baggage-api 18083:8080 >/tmp/wt-baggage-dev-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      code="$(curl -s -o /dev/null -w '%{http_code}' http://localhost:18083/healthz)"
+      [ "$code" = "200" ]
+
+  - id: "06-consuming-and-persisting"
+    title: "baggage-api is connected to the broker, has received events, and holds bag state"
+    command: |
+      curl -s http://localhost:18083/api/events/status
+      curl -s http://localhost:18083/api/bags
+    expected: >-
+      {"mode": "connected", "received": N} with N > 0, and /api/bags lists at least one flight. Read-only:
+      this does not move a gate itself; the flight-api simulator produces the events.
+    verify: |
+      set -euo pipefail
+      kubectl --context "${DEV_CONTEXT}" port-forward -n app-baggage-api-dev svc/baggage-api 18084:8080 >/tmp/wt-baggage-ev-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      status="$(curl -s http://localhost:18084/api/events/status)"
+      bags="$(curl -s http://localhost:18084/api/bags)"
+      echo "$status"
+      STATUS="$status" BAGS="$bags" python3 -c '
+      import json, os
+      s = json.loads(os.environ["STATUS"]); b = json.loads(os.environ["BAGS"])
+      assert s.get("mode") == "connected", s
+      assert int(s.get("received", 0)) > 0, s
+      assert isinstance(b, list) and len(b) > 0, b
+      print(f"{len(b)} flights tracked")
+      '
+
+  - id: "07-flight-env"
+    title: "Flight: the staging ApplicationEnvironment is Synced/Ready with ClusterReady and AppResolved"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get applicationenvironment baggage-api-${PROD_CLUSTER}-staging -n app-baggage-api-cicd
+    expected: "Synced/Ready True; ClusterReady and AppResolved True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context "${DEV_CONTEXT}" get applicationenvironment "baggage-api-${PROD_CLUSTER}-staging" -n app-baggage-api-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      echo "$c"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+      grep -q "ClusterReady=True" <<<"$c"
+      grep -q "AppResolved=True" <<<"$c"
+
+  - id: "07-flight-mongodb"
+    title: "Flight: bag-db on the prod cluster passes its verify contract"
+    command: |
+      tools/airframe-verify mongodb app-baggage-api-staging/bag-db --context "${PROD_CONTEXT}"
+    expected: "MongoDBReady, Secret keys present, TCP 27017 answers"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" mongodb app-baggage-api-staging/bag-db --context "${PROD_CONTEXT}"
+
+  - id: "07-flight-running"
+    title: "Flight: the staging Rollout has all its replicas available"
+    command: |
+      kubectl --context "${PROD_CONTEXT}" get rollout baggage-api -n app-baggage-api-staging
+    expected: "availableReplicas == replicas"
+    verify: |
+      set -euo pipefail
+      desired="$(kubectl --context "${PROD_CONTEXT}" get rollout baggage-api -n app-baggage-api-staging -o jsonpath='{.spec.replicas}')"
+      available="$(kubectl --context "${PROD_CONTEXT}" get rollout baggage-api -n app-baggage-api-staging -o jsonpath='{.status.availableReplicas}')"
+      echo "desired=$desired available=$available"
+      [ -n "$desired" ] && [ "$available" = "$desired" ]

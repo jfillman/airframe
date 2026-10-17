@@ -1,0 +1,108 @@
+title: "Airframe quickstart part 6: gate-api (terminal path)"
+app: gate-api
+sourceDoc: ../user/quickstart-gate-api.md
+steps:
+  - id: "03-app-xr"
+    title: "gate-api passes the NodeJSApplication verify contract (dev cluster ready, CI/CD onboarded, both repos exist)"
+    command: |
+      tools/airframe-verify nodejsapplication app-gate-api-cicd/gate-api --context "${DEV_CONTEXT}"
+    expected: "xr-synced, dev-cluster-ready, cicd-onboarded, source-repo and gitops-repo all pass"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" nodejsapplication app-gate-api-cicd/gate-api --context "${DEV_CONTEXT}"
+
+  - id: "03-onboarding-merged"
+    title: "The onboarding PR was merged (.tekton/ exists in the source repo)"
+    command: |
+      gh api repos/${GITHUB_OWNER}/gate-api/contents/.tekton --jq '.[].name'
+    expected: "flow-ci.yaml and onboarding-resync.yaml are present"
+    verify: |
+      set -euo pipefail
+      files="$(gh api "repos/${GITHUB_OWNER}/gate-api/contents/.tekton" --jq '.[].name')"
+      grep -q "flow-ci.yaml" <<<"$files"
+      grep -q "onboarding-resync.yaml" <<<"$files"
+
+  - id: "04-cicd-environments"
+    title: "cicd.yaml declares dev (ground) and staging (flight, on the prod cluster), with a signer"
+    command: |
+      gh api repos/${GITHUB_OWNER}/gate-api/contents/cicd.yaml --jq .content | base64 -d
+    expected: "deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; allowedCommitSigners not empty; no removed keys"
+    verify: |
+      set -euo pipefail
+      gh api "repos/${GITHUB_OWNER}/gate-api/contents/cicd.yaml" --jq .content | base64 -d > /tmp/wt-gate-cicd.yaml
+      python3 - /tmp/wt-gate-cicd.yaml <<'PY'
+      import os, sys, yaml
+      doc = yaml.safe_load(open(sys.argv[1])) or {}
+      d = doc.get("deploy") or {}
+      assert not [k for k in ("lowerEnvironments", "upperEnvironments", "promotionOrder") if k in d], d
+      envs = {e["name"]: e for e in d.get("environments") or []}
+      assert envs["dev"]["tier"] == "ground", envs
+      assert envs["staging"]["tier"] == "flight", envs
+      assert envs["staging"].get("cluster") == os.environ["PROD_CLUSTER"], envs["staging"]
+      assert (doc.get("governance") or {}).get("allowedCommitSigners"), "no allowedCommitSigners: every release fails provenance"
+      print("ok", sorted(envs))
+      PY
+
+  - id: "04-flight-env"
+    title: "The staging ApplicationEnvironment passes its verify contract"
+    command: |
+      tools/airframe-verify applicationenvironment app-gate-api-cicd/gate-api-${PROD_CLUSTER}-staging --context "${DEV_CONTEXT}"
+    expected: "cluster-ready, app-resolved and env-identity-file pass"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" applicationenvironment "app-gate-api-cicd/gate-api-${PROD_CLUSTER}-staging" --context "${DEV_CONTEXT}"
+
+  - id: "05-dev-running"
+    title: "Dev: gate-api is Running and answers /api/whoami"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get rollout gate-api -n app-gate-api-dev
+      curl -s http://localhost:18086/api/whoami
+    expected: "the Rollout has all replicas available; whoami returns a version and a pod name"
+    verify: |
+      set -euo pipefail
+      desired="$(kubectl --context "${DEV_CONTEXT}" get rollout gate-api -n app-gate-api-dev -o jsonpath='{.spec.replicas}')"
+      available="$(kubectl --context "${DEV_CONTEXT}" get rollout gate-api -n app-gate-api-dev -o jsonpath='{.status.availableReplicas}')"
+      [ -n "$desired" ] && [ "$available" = "$desired" ]
+      kubectl --context "${DEV_CONTEXT}" port-forward -n app-gate-api-dev svc/gate-api 18086:8080 >/tmp/wt-gate-dev-pf.log 2>&1 &
+      pf=$!
+      trap "kill $pf 2>/dev/null" EXIT
+      sleep 2
+      body="$(curl -s http://localhost:18086/api/whoami)"
+      echo "$body"
+      BODY="$body" python3 -c 'import json,os; b=json.loads(os.environ["BODY"]); assert b.get("version") and b.get("pod"), b'
+
+  - id: "07-release-file"
+    title: "Staging was released: release.yaml in the gitops repo names a gate-api image"
+    command: |
+      gh api repos/${GITHUB_OWNER}/gitops-gate-api/contents/${PROD_CLUSTER}/staging/release.yaml --jq .content | base64 -d
+    expected: "release.image.repository is ghcr.io/<owner>/gate-api with a tag"
+    verify: |
+      set -euo pipefail
+      gh api "repos/${GITHUB_OWNER}/gitops-gate-api/contents/${PROD_CLUSTER}/staging/release.yaml" --jq .content | base64 -d > /tmp/wt-gate-release.yaml
+      python3 - /tmp/wt-gate-release.yaml <<'PY'
+      import sys, yaml
+      img = (yaml.safe_load(open(sys.argv[1])) or {})["release"]["image"]
+      assert img["repository"].endswith("/gate-api") and img["tag"], img
+      print(img)
+      PY
+
+  - id: "08-staging-canary"
+    title: "Staging: the Rollout is a canary with steps, fully available, on the released image"
+    command: |
+      kubectl --context "${PROD_CONTEXT}" get rollout gate-api -n app-gate-api-staging -o jsonpath='{.spec.strategy}'
+    expected: "strategy canary with setWeight steps; availableReplicas == replicas; the running image tag equals release.yaml's"
+    verify: |
+      set -euo pipefail
+      r="$(kubectl --context "${PROD_CONTEXT}" get rollout gate-api -n app-gate-api-staging -o json)"
+      tag="$(gh api "repos/${GITHUB_OWNER}/gitops-gate-api/contents/${PROD_CLUSTER}/staging/release.yaml" --jq .content | base64 -d \
+        | python3 -c 'import sys,yaml; print(yaml.safe_load(sys.stdin)["release"]["image"]["tag"])')"
+      R="$r" TAG="$tag" python3 -c '
+      import json, os
+      r = json.loads(os.environ["R"])
+      canary = r["spec"]["strategy"].get("canary") or {}
+      assert any("setWeight" in s for s in canary.get("steps", [])), r["spec"]["strategy"]
+      assert r["status"].get("availableReplicas") == r["spec"].get("replicas"), r["status"]
+      image = r["spec"]["template"]["spec"]["containers"][0]["image"]
+      assert image.endswith(":" + os.environ["TAG"]), (image, os.environ["TAG"])
+      print("ok", image)
+      '

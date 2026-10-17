@@ -1,0 +1,99 @@
+# Section 06 of the source doc (enforcing tokens in flight-api/baggage-api) is not built yet, so it has
+# no step here: there is no lasting effect to check. Section 07 (flight) is not available on the prod
+# cluster yet either. Add steps for both when they exist.
+title: "Airframe quickstart part 5: skyport-auth (shared Dex OIDC provider)"
+app: skyport-auth
+sourceDoc: ../user/quickstart-skyport-auth.md
+steps:
+  - id: "02-function-dex-healthy"
+    title: "function-dex is installed and healthy on the dev cluster, and the Dex XRD is established"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get function function-dex
+      kubectl --context "${DEV_CONTEXT}" get xrd dexes.catalog.hangar.io
+    expected: "the Function is INSTALLED=True HEALTHY=True; the XRD is Established=True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context "${DEV_CONTEXT}" get function function-dex \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      echo "$c"
+      grep -q "Installed=True" <<<"$c"
+      grep -q "Healthy=True" <<<"$c"
+      est="$(kubectl --context "${DEV_CONTEXT}" get xrd dexes.catalog.hangar.io \
+        -o jsonpath='{.status.conditions[?(@.type=="Established")].status}')"
+      [ "$est" = "True" ]
+
+  - id: "03-infraservice"
+    title: "skyport-auth is a synced, ready InfraService"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get infraservice skyport-auth -n app-skyport-auth-cicd
+    expected: "Synced/Ready True; DevClusterReady and CicdOnboarded True"
+    verify: |
+      set -euo pipefail
+      c="$(kubectl --context "${DEV_CONTEXT}" get infraservice skyport-auth -n app-skyport-auth-cicd \
+        -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+      echo "$c"
+      grep -q "Synced=True" <<<"$c"
+      grep -q "Ready=True" <<<"$c"
+      grep -q "DevClusterReady=True" <<<"$c"
+
+  - id: "03-dex-server"
+    title: "The Dex server passes its verify contract (DexServerReady, OIDC discovery answers)"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get dexes.catalog.hangar.io skyport-auth -n app-skyport-auth-dev
+      tools/airframe-verify dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+    expected: "COMPONENT DexServerReady; server-discovery gets 200 from /dex/.well-known/openid-configuration on 5556"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+
+  - id: "03-server-allows-apps"
+    title: "The server's NetworkPolicy opens 5556 to flight-api's and baggage-api's dev namespaces"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o yaml
+    expected: "an ingress rule on 5556 from app-flight-api-dev and app-baggage-api-dev; 5557 only from crossplane-system"
+    verify: |
+      set -euo pipefail
+      np="$(kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o json)"
+      NP="$np" python3 -c '
+      import json, os
+      np = json.loads(os.environ["NP"])
+      by_port = {}
+      for rule in np["spec"].get("ingress", []):
+          nss = [f["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] for f in rule.get("from", [])]
+          for p in rule.get("ports", []):
+              by_port.setdefault(p["port"], set()).update(nss)
+      print(by_port)
+      assert {"app-flight-api-dev", "app-baggage-api-dev"} <= by_port.get(5556, set()), by_port
+      assert by_port.get(5557) == {"crossplane-system"}, by_port
+      '
+
+  - id: "04-flight-api-client"
+    title: "flight-api's attach client is registered and mints a token the JWKS verifies"
+    command: |
+      tools/airframe-verify dex app-flight-api-dev/flight-oauth --context "${DEV_CONTEXT}"
+    expected: "DexAttachReady; flight-oauth-oauth-credentials has client-id/client-secret; token-issuance passes (signature checked against the JWKS, token never printed)"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-flight-api-dev/flight-oauth --context "${DEV_CONTEXT}"
+
+  - id: "04-baggage-api-client"
+    title: "baggage-api's attach client is registered and mints a token the JWKS verifies"
+    command: |
+      tools/airframe-verify dex app-baggage-api-dev/bag-oauth --context "${DEV_CONTEXT}"
+    expected: "DexAttachReady; bag-oauth-oauth-credentials has client-id/client-secret; token-issuance passes"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-baggage-api-dev/bag-oauth --context "${DEV_CONTEXT}"
+
+  - id: "04-issuer-wired-into-flight-api"
+    title: "flight-api's pod spec carries OAUTH_ISSUER and OAUTH_JWKS_URL from the attach Secret"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get rollout flight-api -n app-flight-api-dev -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'
+    expected: "OAUTH_ISSUER and OAUTH_JWKS_URL are listed (present, not yet used by the code: enforcement is not built)"
+    verify: |
+      set -euo pipefail
+      names="$(kubectl --context "${DEV_CONTEXT}" get rollout flight-api -n app-flight-api-dev \
+        -o jsonpath='{.spec.template.spec.containers[0].env[*].name}')"
+      echo "$names"
+      grep -qw "OAUTH_ISSUER" <<<"$names"
+      grep -qw "OAUTH_JWKS_URL" <<<"$names"

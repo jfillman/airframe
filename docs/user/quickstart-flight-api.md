@@ -15,6 +15,9 @@ is something to watch.
 > [`../walkthroughs/part2-flight-api.yaml`](../walkthroughs/part2-flight-api.yaml) (run it with
 > `tools/walkthrough-runner`).
 
+Cluster names: `<dev-cluster>` and `<prod-cluster>` are the names chosen when the clusters were built
+(for example `hangar-dev` and `hangar-prod`), as explained at the top of [part 1](quickstart.md).
+
 Do part 1 first. This guide assumes `boarding-api` is running in its dev environment and
 doesn't repeat the mechanics of creating an app, merging the pipeline PR, or the ground/flight
 split; it links back to the section that explains each.
@@ -73,7 +76,7 @@ environment deletes its data, and no other app can reach it.
 | Field | Value |
 |---|---|
 | Name | `flight-api` |
-| `devCluster` | `dev` |
+| `devCluster` | `<dev-cluster>` |
 | `description` | Skyport system of record: flights and gates in Postgres |
 | `javaVersion` | `21` |
 | `buildTool` | `maven` |
@@ -81,8 +84,8 @@ environment deletes its data, and no other app can reach it.
 | `port` | `8080` |
 | `visibility` | `private` |
 
-**Use `dev` exactly for `devCluster`**, even if your dev cluster goes by another name — see
-[part 1, section 02](quickstart.md#02--create-the-app) for why.
+**`devCluster` is the dev cluster's registry name** — see
+[part 1, section 02](quickstart.md#02--create-the-app) for why it must match exactly.
 
 **Set `groupId` to `io.skyport.flight`.** The scaffold uses it as the app's one Java package, and
 the code you'll copy in sits in `io/skyport/flight/`. A different value scaffolds a different
@@ -100,11 +103,12 @@ The source repo starts with a hello-world `Application.java`, a `pom.xml` (web a
 only), an `application.properties`, and a `Containerfile`.
 
 If a previous `flight-api` was decommissioned, finish [decommissioning](decommission-app.md)
-first (including its Infisical projects), and move any old local checkout out of the way.
+first (including its Infisical projects `flight-api-<dev-cluster>` and `flight-api-<prod-cluster>`), and move any
+old local checkout out of the way: `git clone` below fails if `./flight-api` exists.
 
 ## 03 — Merge the pipeline PR
 
-Same as [part 1, section 03](quickstart.md#03--pipeline-onboarding): Glidepath opens a PR
+Same as [part 1, section 03](quickstart.md#03--merge-the-pipeline-onboarding-pr): Glidepath opens a PR
 adding `.tekton/`. **Merge it**, or pushes do nothing.
 
 ## 04 — Pull in the code
@@ -161,7 +165,7 @@ What the service does:
 The database is not something you create in Tower. It's a **component** — a block in the
 environment's values, exactly like Redis in [part 1, section 08](quickstart.md#08--add-a-redis-cache).
 
-**Step 1 — declare the environment.** Create `platform/envs/dev.yaml`:
+**Step 1 — declare the environment.** Edit `glidepath/envs/dev.yaml` (onboarding scaffolds it with just `envName: dev`):
 
 ```yaml
 envName: dev             # no image yet: nothing runs until the deploy stage sets one
@@ -233,19 +237,19 @@ Setting `build.script` is what switches the pipeline from "build inside the Cont
 build strategies*.
 
 **Step 3 — commit both, merge the `.tekton/` PR** this push opens, then push. As in part 1
-the `deploy` stage commits the image straight into `platform/envs/dev.yaml` on `main`, so
+the `deploy` stage commits the image straight into `glidepath/envs/dev.release.yaml` on `main`, so
 `git pull` before your next push.
 
 The first start takes a little longer than a NodeJS app: the JVM starts, then Flyway waits for
 the database if it isn't up yet (it retries for about two and a half minutes) and runs the two
 migrations.
 
-**Step 4 — add health probes.** Once the deploy stage has written the image, add probes to the
-same file (adding them earlier would make `rollout` non-null with no image):
+**Step 4 — add health probes.** Add probes and resources to the same file. (This used to have to
+wait for the first deploy; since the release-file split the image lives in `dev.release.yaml`, and the
+chart renders no workload until an image exists, so `rollout:` settings are safe at any time.)
 
 ```yaml
 rollout:
-  image: { … }          # keep what the deploy stage wrote
   resources:
     requests: { cpu: 500m, memory: 512Mi }   # a JVM starts CPU-bound; see below
     limits: { memory: 1Gi }                  # memory only: no CPU limit, or startup is throttled
@@ -308,7 +312,7 @@ cp /tmp/airframe/examples/skyport/boarding-api/test/app.test.js test/
 npm test                                     # 11 passing
 ```
 
-Then add one line to its `platform/envs/dev.yaml`:
+Then add one line to its `glidepath/envs/dev.yaml`:
 
 ```yaml
 env:
@@ -337,7 +341,7 @@ board accurate — the fix is for flight-api to publish `flight.gate_changed` an
 evict the entry, which is Phase 2 of [Skyport](skyport-demo.md) and [part 3](quickstart-broker.md). The `flight_events` table is
 already there for that: every gate change is written to it in the same transaction as the change.
 
-## 07 — Flight: the same service on `prod`
+## 07 — Flight: the same service on the prod cluster
 
 The flight environment works exactly as in [part 1, section 07](quickstart.md#07--flight-a-governed-environment-on-an-upper-cluster):
 declare it in `cicd.yaml`, create the `ApplicationEnvironment`, configure it, release an image.
@@ -353,7 +357,7 @@ component was verified there (above), not assumed.
 deploy:
   environments:             # promotion order (ADR-0019)
     - { name: dev, tier: ground }
-    - { name: staging, tier: flight, cluster: prod }
+    - { name: staging, tier: flight, cluster: <prod-cluster> }
 
 governance:
   allowedCommitSigners:
@@ -374,17 +378,18 @@ pipelines:
 
 Merge the `.tekton/` PR it opens.
 
-**Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-prod-staging`,
-`Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `prod`, `env` `staging`.
+**Step 2 — Tower → Create → ApplicationEnvironment**, with `Name` `flight-api-<prod-cluster>-staging`,
+`Namespace` `app-flight-api-cicd`, `appName` `flight-api`, `cluster` `<prod-cluster>`, `env` `staging`,
+`configMapGenerator` off.
 Merge the PR. The flight environment starts with no image, so **the database is created
 first**, in `app-flight-api-staging`, before any application runs:
 
 ```bash
-kubectl --context prod get postgresql -n app-flight-api-staging
+kubectl --context <prod-cluster> get postgresql -n app-flight-api-staging
 ```
 
 **Step 3 — configure it.** The flight values live in
-`gitops-flight-api/prod/staging/values.yaml` and change only through a pull request. Add the
+`gitops-flight-api/<prod-cluster>/staging/values.yaml` and change only through a pull request. Add the
 database, its credentials, the probes and the network rule — **edit the file in that PR directly**
 rather than through Tower's App Configuration *Environment variables* section (see the note
 below):
@@ -435,14 +440,14 @@ The image is not set here: the release pipeline sets it, as in part 1.
 > keep them when you save; they only go away if you press Remove. If your Tower predates that
 > commit, edit this section in the PR directly instead. Either way, read the PR diff before merging.
 
-**Step 4 — release**, as a signed merge, as in part 1. Then in `boarding-api`'s staging values point
+**Step 4 — release**, as a fast-forwarded signed merge (never the GitHub button), as in part 1. Then in `boarding-api`'s staging values point
 it at `http://flight-api.app-flight-api-staging.svc.cluster.local:8080`.
 
 Check it from a machine that can reach the prod cluster:
 
 ```bash
-kubectl --context prod get all,pvc,secret,networkpolicy -n app-flight-api-staging -l hangar.io/app=flight-api
-kubectl --context prod -n app-flight-api-staging port-forward svc/flight-api 8082:8080
+kubectl --context <prod-cluster> get all,pvc,secret,networkpolicy -n app-flight-api-staging -l hangar.io/app=flight-api
+kubectl --context <prod-cluster> -n app-flight-api-staging port-forward svc/flight-api 8082:8080
 curl -s localhost:8082/api/flights/AC123
 ```
 
@@ -450,7 +455,7 @@ Deleting this environment deletes its database and both volumes.
 
 ## Cheat sheet
 
-- **`devCluster: dev`**, and **`groupId: io.skyport.flight`** — the code you copy in assumes
+- **`devCluster: <dev-cluster>`** (the registry name), and **`groupId: io.skyport.flight`** — the code you copy in assumes
   that package.
 - **A database is a component**, in the environment's `components:` — not a Tower Create form.
 - **Read its credentials with `valueFrom.secretKeyRef`** to `<name>-app`; there's nothing to copy
@@ -461,8 +466,8 @@ Deleting this environment deletes its database and both volumes.
 - **Build Java with `build.script`, not in the Containerfile.** The amd64 image leg runs under emulation; a
   Maven build there took ~11 minutes (17 for the whole image), the packaging-only leg ~30 s.
 - **Liveness is `/actuator/health/liveness`, never `/readiness`**, and give the pod a CPU request. Symptom of getting it wrong: the pod restarts repeatedly (exit 137, `Liveness probe failed`) though the database is fine.
-- **Add probes after the first deploy**, not before: `rollout` must stay `null` until the deploy
-  stage has written an image.
+- **Probes can go in any time**: the image lives in `dev.release.yaml`, and the chart renders no
+  workload until it exists.
 - **Cross-namespace traffic needs a rule.** Namespaces deny ingress from other namespaces by
   default; `networkPolicy.allowIngressFrom` opens exactly one.
 - **`test.sh` uses `./mvnw`** — the Java build agent has no Maven.

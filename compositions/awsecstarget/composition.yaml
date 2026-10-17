@@ -98,6 +98,12 @@ spec:
             <<- if hasKey $spec "desiredCount" >><<- $desired = $spec.desiredCount >><<- end >>
             <<- $bootstrapImage := $spec.bootstrapImage | default "public.ecr.aws/nginx/nginx:stable-alpine" >>
             <<- $family := printf "%s-%s" $appName $env >>
+            <<- /* The ECS cluster is this target's own, named like its service (<appName>-<env>), so a second target of the same
+                   app (env: prod) gets a second cluster instead of composing another claim on the first (2026-10-17: the cluster
+                   used to be named <appName>, so two targets of one app shared it and deleting either would delete it under the
+                   other). An existing cluster keeps the name it was created with (business rule CRED-09). */ ->>
+            <<- $clusterObs := index (.observed.resources | default dict) "ecs-cluster" | default dict >>
+            <<- $clusterName := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $family $clusterObs >>
             <<- $network := $spec.network | default dict >>
             <<- $networkMode := $network.mode | default "create" >>
             <<- $vpcCidr := $network.vpcCidr | default "10.42.0.0/16" >>
@@ -370,7 +376,7 @@ spec:
               name: <<$xrName>>-cluster
               annotations:
                 <<setResourceNameAnnotation "ecs-cluster">>
-                crossplane.io/external-name: <<$appName>>
+                crossplane.io/external-name: <<$clusterName>>
             spec:
               providerConfigRef:
                 kind: ClusterProviderConfig
@@ -484,7 +490,6 @@ spec:
             # in AWS (business rule CRED-09).
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $repoName := $family >>
-            <<- $clusterName := $appName >>
             <<- $deployRoleName := printf "glidepath-deploy-ecs-%s" (trunc 43 $family) >>
             <<- $execRoleName := printf "%s-ecs-exec" (trunc 55 $family) >>
             apiVersion: ecr.aws.m.upbound.io/v1beta1
@@ -646,6 +651,7 @@ spec:
             <<- $region := $spec.region | default "us-east-1" >>
             <<- $port := $spec.containerPort | default 8080 >>
             <<- $family := printf "%s-%s" $appName $env >>
+            <<- $clusterName := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $family (index (.observed.resources | default dict) "ecs-cluster" | default dict) >>
             <<- $network := $spec.network | default dict >>
             <<- $networkMode := $network.mode | default "create" >>
             <<- $obs := .observed.resources | default dict >>
@@ -678,10 +684,10 @@ spec:
             <<- else if and (index $ready "ecs-service") (index $ready "deploy-role") (index $ready "ecr-repository") >>
               <<- $reason = "AwsEcsTargetReady" >>
               <<- $status = "True" >>
-              <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $appName $region $family >>
+              <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $clusterName $region $family >>
             <<- else if and (index $ready "task-definition") (index $ready "ecs-cluster") >>
               <<- $reason = "AwsEcsTargetServicePending" >>
-              <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service, its ECR repository and its deploy role to report ready." $appName $family >>
+              <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service, its ECR repository and its deploy role to report ready." $clusterName $family >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ClaimConditions
@@ -695,7 +701,7 @@ spec:
             apiVersion: <<$xr.apiVersion>>
             kind: AwsEcsTarget
             status:
-              cluster: <<$appName>>
+              cluster: <<$clusterName>>
               service: <<$family>>
               taskDefinitionFamily: <<$family>>
               containerName: <<$appName>>
@@ -717,7 +723,7 @@ spec:
                 deploy:
                   target: aws-ecs
                   ecs:
-                    cluster: <<$appName>>
+                    cluster: <<$clusterName>>
                     service: <<$family>>
                     containerName: <<$appName>>
                     region: <<$region>>

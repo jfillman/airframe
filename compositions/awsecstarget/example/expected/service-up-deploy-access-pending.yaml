@@ -14,7 +14,7 @@ resources:
       description: Deploys the smoke-ecs-dev ECS service from app-smoke-ecs-cicd (Airframe AwsEcsTarget smoke-ecs)
       inlinePolicy:
       - name: deploy-this-service
-        policy: '{"Statement":[{"Action":"ecr:GetAuthorizationToken","Effect":"Allow","Resource":"*","Sid":"EcrLogin"},{"Action":["ecr:BatchCheckLayerAvailability","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:DescribeImages","ecr:DescribeRepositories","ecr:InitiateLayerUpload","ecr:UploadLayerPart","ecr:CompleteLayerUpload","ecr:PutImage"],"Effect":"Allow","Resource":"arn:aws:ecr:us-east-1:012345678901:repository/smoke-ecs-dev","Sid":"ThisRepository"},{"Action":["ecs:DescribeTaskDefinition","ecs:RegisterTaskDefinition","ecs:TagResource"],"Condition":{"StringEquals":{"aws:RequestedRegion":"us-east-1"}},"Effect":"Allow","Resource":"*","Sid":"TaskDefinitions"},{"Action":["ecs:DescribeServices","ecs:UpdateService"],"Effect":"Allow","Resource":"arn:aws:ecs:us-east-1:012345678901:service/smoke-ecs/smoke-ecs-dev","Sid":"ThisService"},{"Action":"iam:PassRole","Condition":{"StringEquals":{"iam:PassedToService":"ecs-tasks.amazonaws.com"}},"Effect":"Allow","Resource":"arn:aws:iam::012345678901:role/smoke-ecs-dev-ecs-exec","Sid":"PassThisExecutionRole"}],"Version":"2012-10-17"}'
+        policy: '{"Statement":[{"Action":"ecr:GetAuthorizationToken","Effect":"Allow","Resource":"*","Sid":"EcrLogin"},{"Action":["ecr:BatchCheckLayerAvailability","ecr:BatchGetImage","ecr:GetDownloadUrlForLayer","ecr:DescribeImages","ecr:DescribeRepositories","ecr:InitiateLayerUpload","ecr:UploadLayerPart","ecr:CompleteLayerUpload","ecr:PutImage"],"Effect":"Allow","Resource":"arn:aws:ecr:us-east-1:012345678901:repository/smoke-ecs-dev","Sid":"ThisRepository"},{"Action":["ecs:DescribeTaskDefinition","ecs:RegisterTaskDefinition","ecs:TagResource"],"Condition":{"StringEquals":{"aws:RequestedRegion":"us-east-1"}},"Effect":"Allow","Resource":"*","Sid":"TaskDefinitions"},{"Action":["ecs:DescribeServices","ecs:UpdateService"],"Effect":"Allow","Resource":"arn:aws:ecs:us-east-1:012345678901:service/smoke-ecs-dev/smoke-ecs-dev","Sid":"ThisService"},{"Action":"iam:PassRole","Condition":{"StringEquals":{"iam:PassedToService":"ecs-tasks.amazonaws.com"}},"Effect":"Allow","Resource":"arn:aws:iam::012345678901:role/smoke-ecs-dev-ecs-exec","Sid":"PassThisExecutionRole"}],"Version":"2012-10-17"}'
       permissionsBoundary: arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary
       tags:
         hangar.io/app: smoke-ecs
@@ -51,7 +51,7 @@ resources:
   kind: Cluster
   metadata:
     annotations:
-      crossplane.io/external-name: smoke-ecs
+      crossplane.io/external-name: smoke-ecs-dev
     name: smoke-ecs-cluster
     namespace: app-smoke-ecs-cicd
   name: ecs-cluster
@@ -369,15 +369,15 @@ xr:
     reason: Creating
     status: 'False'
     type: Ready
-  - message: Cluster smoke-ecs and task definition smoke-ecs-dev exist; waiting for the service, its ECR repository and its
-      deploy role to report ready.
+  - message: Cluster smoke-ecs-dev and task definition smoke-ecs-dev exist; waiting for the service, its ECR repository and
+      its deploy role to report ready.
     reason: AwsEcsTargetServicePending
     status: 'False'
     type: TargetReady
   status:
-    cicd: "deploy:\n  target: aws-ecs\n  ecs:\n    cluster: smoke-ecs\n    service: smoke-ecs-dev\n    containerName: smoke-ecs\n\
-      \    region: us-east-1\n"
-    cluster: smoke-ecs
+    cicd: "deploy:\n  target: aws-ecs\n  ecs:\n    cluster: smoke-ecs-dev\n    service: smoke-ecs-dev\n    containerName:\
+      \ smoke-ecs\n    region: us-east-1\n"
+    cluster: smoke-ecs-dev
     containerName: smoke-ecs
     containerPort: 8080
     region: us-east-1

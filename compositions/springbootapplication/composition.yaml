@@ -36,6 +36,23 @@ spec:
         source: Inline
         inline:
           template: |
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-deploy-target.yaml): the app compositions'
+            # templates/render-github-resources/00-deploy-target.yaml (goapplication, nodejsapplication, pythonapplication,
+            # springbootapplication) are symlinks to this file. Variables only; no output.
+            #
+            # Where the app deploys, chosen when it is created (spec.deployTarget, 2026-10-17): kubernetes (the default, an
+            # Argo Rollout on this platform's clusters) or aws-ecs (an ECS Fargate service, on its own cluster <app>-dev). With aws-ecs the app composes an
+            # AwsEcsTarget for dev (ecs-target-child.yaml) and its scaffolded cicd.yaml already deploys dev there, so there is no
+            # Kubernetes dev environment to delete and no cloud environment to add by hand (found setting up smoke-ecs). The XRD
+            # makes the field immutable: a target change is a delete and re-create.
+            <<- $deployTarget := .observed.composite.resource.spec.deployTarget | default "kubernetes" >>
+            <<- $ecsSpec := .observed.composite.resource.spec.ecs | default dict >>
+            <<- $ecsRegion := $ecsSpec.region | default "us-east-1" >>
+            <<- $ecsArch := $ecsSpec.architecture | default "arm64" >>
+            <<- $ecsPlatform := "arm64" >>
+            <<- if eq $ecsArch "x86_64" >><<- $ecsPlatform = "amd64" >><<- end >>
+            <<- $appPort := .observed.composite.resource.spec.port | default 8080 >>
+            ---
             # SHARED PARTIAL (compositions/_shared/render-github-resources/00-devcluster-gate.yaml): every application composition's
             # templates/render-github-resources/00-devcluster-gate.yaml is a symlink to this file, so the six compositions cannot drift apart
             # again (review C3: four 'identical' templates had grown four to five variants). Per-composition
@@ -181,6 +198,9 @@ spec:
 
                   build:
                     agent: <<printf "openjdk-%s" $javaVersion>>
+                    <<- if eq $deployTarget "aws-ecs" >>
+                    platforms: [<<$ecsPlatform>>]   # only the ECS task's architecture (spec.ecs.architecture)
+                    <<- end >>
                     unitTest:
                       enabled: false # no test script exists yet - add one, then flip this on
 
@@ -195,10 +215,20 @@ spec:
                         - stage: deploy
                           env: dev
                   deploy:
+                    <<- if eq $deployTarget "aws-ecs" >>
+                    target: aws-ecs        # chosen at creation (spec.deployTarget); every environment deploys to ECS
+                    <<- end >>
                     strategy: rollout
                     environments:          # promotion order; ground = this cluster, flight = upper clusters (ADR-0019)
                       - name: dev
                         tier: ground
+                    <<- if eq $deployTarget "aws-ecs" >>
+                        ecs:               # the AwsEcsTarget <<$xrName>>-dev this app composes (its status.cicd)
+                          cluster: <<printf "%s-dev" $xrName>>
+                          service: <<printf "%s-dev" $xrName>>
+                          containerName: <<$xrName>>
+                          region: <<$ecsRegion>>
+                    <<- end >>
 
                   notifications:
                     backstage:
@@ -206,6 +236,30 @@ spec:
                 commitMessage: "SpringBootApplication scaffold: cicd.yaml (build + deploy-to-dev starter)"
 
             <<- end >>
+            ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/ecs-target-child.yaml), symlinked like
+            # 00-deploy-target.yaml. With spec.deployTarget aws-ecs, composes the AwsEcsTarget for dev, named <app>-dev: the ECS
+            # cluster and service <app>-dev, its ECR repository and the deploy role glidepath-deploy-ecs-<app>-dev. From
+            # this XR's own name, port and spec.ecs, the same values cicd-yaml.yaml scaffolds into the deploy block, so they can't
+            # disagree. Composed directly like the TektonCICD child: its managed resources are cloud API calls from this cluster.
+            # Once it exists it is always rendered (business rule CRED-09: a condition gates creation only).
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $ecsChildObs := index (.observed.resources | default dict) "aws-ecs-target-dev" | default dict >>
+            <<- if or (eq $deployTarget "aws-ecs") $ecsChildObs >>
+            apiVersion: catalog.hangar.io/v1alpha1
+            kind: AwsEcsTarget
+            metadata:
+              name: <<$xrName>>-dev
+              annotations:
+                <<setResourceNameAnnotation "aws-ecs-target-dev">>
+            spec:
+              appName: <<$xrName>>
+              env: dev
+              region: <<$ecsRegion>>
+              architecture: <<$ecsArch>>
+              containerPort: <<$appPort>>
+            <<- end >>
+            ---
             ---
             # Empty, scaffolded gitops-<app-name> repo - idp/docs/service-catalog-design.md Item 1/2,
             # identical mechanism to nodejsapplication's own gitops-repo.yaml (straight port). Just a

@@ -45,7 +45,7 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - Edit `compositions/pythonapplication/templates/`, never the inline blocks in `composition.yaml`: `python3 tools/build-compositions pythonapplication` splices them.
 - `python3 tools/test_compositions.py --update pythonapplication` regenerates `example/expected/`; review that diff like code, it is the behaviour change.
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
-- Shared with other compositions (symlinks into `compositions/_shared/`): `00-devcluster-gate.yaml`, `00-scaffold-done.yaml`, `secretstore-xr.yaml`, `status.yaml`, `tekton-cicd-child.yaml`, `zz-scaffold-ledger.yaml`.
+- Shared with other compositions (symlinks into `compositions/_shared/`): `00-deploy-target.yaml`, `00-devcluster-gate.yaml`, `00-scaffold-done.yaml`, `ecs-target-child.yaml`, `secretstore-xr.yaml`, `status.yaml`, `tekton-cicd-child.yaml`, `zz-scaffold-ledger.yaml`.
 - Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).
 - Never give a RepositoryFile a Delete policy: a prune once deleted cicd.yaml from five app repos. Keep the crossplane.io/external-name pin so a cluster rebuild adopts existing files instead of overwriting them.
 - Four templates are symlinks into compositions/_shared/ (dev-cluster gate, SecretStore request, TektonCICD child, status); per-kind differences go in 00-inputs.yaml, never in the shared file.

@@ -1,0 +1,23 @@
+# SHARED PARTIAL (compositions/_shared/render-github-resources/ecs-target-child.yaml), symlinked like
+# 00-deploy-target.yaml. With spec.deployTarget aws-ecs, composes the AwsEcsTarget for dev, named <app>-dev: the ECS
+# cluster and service <app>-dev, its ECR repository and the deploy role glidepath-deploy-ecs-<app>-dev. From
+# this XR's own name, port and spec.ecs, the same values cicd-yaml.yaml scaffolds into the deploy block, so they can't
+# disagree. Composed directly like the TektonCICD child: its managed resources are cloud API calls from this cluster.
+# Once it exists it is always rendered (business rule CRED-09: a condition gates creation only).
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $ecsChildObs := index (.observed.resources | default dict) "aws-ecs-target-dev" | default dict >>
+<<- if or (eq $deployTarget "aws-ecs") $ecsChildObs >>
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsEcsTarget
+metadata:
+  name: <<$xrName>>-dev
+  annotations:
+    <<setResourceNameAnnotation "aws-ecs-target-dev">>
+spec:
+  appName: <<$xrName>>
+  env: dev
+  region: <<$ecsRegion>>
+  architecture: <<$ecsArch>>
+  containerPort: <<$appPort>>
+<<- end >>
+---

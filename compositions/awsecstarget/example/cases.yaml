@@ -56,3 +56,13 @@ cases:
     present: [iam-role, ecr-repository, deploy-role, ecs-service]
     conditions:
       TargetReady: AwsEcsTargetReady
+# A target created before clusters were per-environment keeps its cluster named <appName> (CRED-09), and its
+# status.cicd says so.
+- name: legacy-cluster-name-kept
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-cluster-legacy-name.yaml
+  expect:
+    present: [ecs-cluster]

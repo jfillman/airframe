@@ -30,6 +30,12 @@
 <<- if hasKey $spec "desiredCount" >><<- $desired = $spec.desiredCount >><<- end >>
 <<- $bootstrapImage := $spec.bootstrapImage | default "public.ecr.aws/nginx/nginx:stable-alpine" >>
 <<- $family := printf "%s-%s" $appName $env >>
+<<- /* The ECS cluster is this target's own, named like its service (<appName>-<env>), so a second target of the same
+       app (env: prod) gets a second cluster instead of composing another claim on the first (2026-10-17: the cluster
+       used to be named <appName>, so two targets of one app shared it and deleting either would delete it under the
+       other). An existing cluster keeps the name it was created with (business rule CRED-09). */ ->>
+<<- $clusterObs := index (.observed.resources | default dict) "ecs-cluster" | default dict >>
+<<- $clusterName := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $family $clusterObs >>
 <<- $network := $spec.network | default dict >>
 <<- $networkMode := $network.mode | default "create" >>
 <<- $vpcCidr := $network.vpcCidr | default "10.42.0.0/16" >>

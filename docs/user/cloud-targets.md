@@ -79,10 +79,17 @@ metadata:
   name: smoke-ecs
   namespace: app-smoke-ecs-cicd
 spec:
-  appName: smoke-ecs                 # cluster smoke-ecs, service and family smoke-ecs-dev, container smoke-ecs
+  appName: smoke-ecs                 # cluster, service and family smoke-ecs-dev; container smoke-ecs
   env: dev
   containerPort: 8080
 ```
+
+**One target per environment.** For a second environment, request a second `AwsEcsTarget` with the same
+`appName` and another `env`, e.g. `env: prod`: it gets its own cluster and service (`smoke-ecs-prod`), network, ECR
+repository and deploy role (`glidepath-deploy-ecs-smoke-ecs-prod`), so dev and prod share nothing in AWS. Then add the
+environment to `cicd.yaml` with the block from the new target's `status.cicd`, typically as `tier: flight` so it is
+deployed only through a release pin PR. (Until 2026-10-17 the cluster was named `<appName>` and a second target
+would have claimed the first one's cluster; a target created before then keeps its cluster's name.)
 
 ```yaml
 apiVersion: catalog.hangar.io/v1alpha1
@@ -127,8 +134,14 @@ are never reverted to the placeholder; deletion still removes them.
 `architecture`/`runtime` (or `appName`/`resourceGroup`), the same values it scaffolds into
 `cicd.yaml`, and proxies the child's `TargetReady` onto itself. The infrastructure then lives as
 long as the app. For Azure that means the app's `resourceGroup` is created and owned by the child,
-so it must not be a group that exists for anything else. ECS has no app XRD, so an `AwsEcsTarget`
-is always stand-alone.
+so it must not be a group that exists for anything else.
+
+The container apps (`GoApplication`, `NodejsApplication`, `PythonApplication`, `SpringBootApplication`) choose
+where they deploy when they are created: `spec.deployTarget: aws-ecs` (default `kubernetes`), set once and
+immutable. With `aws-ecs` the app composes an `AwsEcsTarget` for dev named `<app>-dev` (`spec.ecs.region`,
+`spec.ecs.architecture`, its own `port`) and scaffolds a `cicd.yaml` whose `dev` environment already deploys there,
+building only that architecture. There is no Kubernetes dev environment to remove first. More environments are more
+`AwsEcsTarget`s, as above.
 
 ## The policy baked into a target
 

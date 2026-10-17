@@ -46,7 +46,7 @@ resources:
   kind: Cluster
   metadata:
     annotations:
-      crossplane.io/external-name: smoke-ecs
+      crossplane.io/external-name: smoke-ecs-dev
     name: smoke-ecs-cluster
     namespace: app-smoke-ecs-cicd
   name: ecs-cluster
@@ -364,15 +364,15 @@ xr:
     reason: Creating
     status: 'False'
     type: Ready
-  - message: ECS service smoke-ecs-dev on cluster smoke-ecs (us-east-1) runs task-definition family smoke-ecs-dev; Glidepath
+  - message: ECS service smoke-ecs-dev on cluster smoke-ecs-dev (us-east-1) runs task-definition family smoke-ecs-dev; Glidepath
       can deploy to it (status.cicd has the deploy block).
     reason: AwsEcsTargetReady
     status: 'True'
     type: TargetReady
   status:
-    cicd: "deploy:\n  target: aws-ecs\n  ecs:\n    cluster: smoke-ecs\n    service: smoke-ecs-dev\n    containerName: smoke-ecs\n\
-      \    region: us-east-1\n"
-    cluster: smoke-ecs
+    cicd: "deploy:\n  target: aws-ecs\n  ecs:\n    cluster: smoke-ecs-dev\n    service: smoke-ecs-dev\n    containerName:\
+      \ smoke-ecs\n    region: us-east-1\n"
+    cluster: smoke-ecs-dev
     containerName: smoke-ecs
     containerPort: 8080
     region: us-east-1

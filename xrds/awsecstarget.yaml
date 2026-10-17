@@ -61,9 +61,12 @@ spec:
                   type: string
                   description: >-
                     The app this target serves. Defaults to this XR's own name. Names everything:
-                    the ECS cluster (<appName>), the service and task-definition family
-                    (<appName>-<env>, Glidepath's own default family name) and the container
-                    (<appName>, the deploy.ecs.containerName the app's cicd.yaml must carry).
+                    the ECS cluster, the service and task-definition family (all <appName>-<env>,
+                    Glidepath's own default family name) and the container (<appName>, the
+                    deploy.ecs.containerName the app's cicd.yaml must carry). One target per
+                    environment: a second target of the same app (env: prod) gets its own cluster,
+                    service, network, ECR repository and deploy role. A target created before
+                    2026-10-17 keeps its cluster named <appName>.
                   pattern: '^[a-z][a-z0-9-]{0,30}$'
                 env:
                   type: string

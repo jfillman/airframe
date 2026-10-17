@@ -20,7 +20,6 @@
 # in AWS (business rule CRED-09).
 <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
 <<- $repoName := $family >>
-<<- $clusterName := $appName >>
 <<- $deployRoleName := printf "glidepath-deploy-ecs-%s" (trunc 43 $family) >>
 <<- $execRoleName := printf "%s-ecs-exec" (trunc 55 $family) >>
 apiVersion: ecr.aws.m.upbound.io/v1beta1

@@ -11,6 +11,7 @@
 <<- $region := $spec.region | default "us-east-1" >>
 <<- $port := $spec.containerPort | default 8080 >>
 <<- $family := printf "%s-%s" $appName $env >>
+<<- $clusterName := dig "resource" "metadata" "annotations" "crossplane.io/external-name" $family (index (.observed.resources | default dict) "ecs-cluster" | default dict) >>
 <<- $network := $spec.network | default dict >>
 <<- $networkMode := $network.mode | default "create" >>
 <<- $obs := .observed.resources | default dict >>
@@ -43,10 +44,10 @@
 <<- else if and (index $ready "ecs-service") (index $ready "deploy-role") (index $ready "ecr-repository") >>
   <<- $reason = "AwsEcsTargetReady" >>
   <<- $status = "True" >>
-  <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $appName $region $family >>
+  <<- $message = printf "ECS service %s on cluster %s (%s) runs task-definition family %s; Glidepath can deploy to it (status.cicd has the deploy block)." $family $clusterName $region $family >>
 <<- else if and (index $ready "task-definition") (index $ready "ecs-cluster") >>
   <<- $reason = "AwsEcsTargetServicePending" >>
-  <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service, its ECR repository and its deploy role to report ready." $appName $family >>
+  <<- $message = printf "Cluster %s and task definition %s exist; waiting for the service, its ECR repository and its deploy role to report ready." $clusterName $family >>
 <<- end >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ClaimConditions
@@ -60,7 +61,7 @@ conditions:
 apiVersion: <<$xr.apiVersion>>
 kind: AwsEcsTarget
 status:
-  cluster: <<$appName>>
+  cluster: <<$clusterName>>
   service: <<$family>>
   taskDefinitionFamily: <<$family>>
   containerName: <<$appName>>
@@ -82,7 +83,7 @@ status:
     deploy:
       target: aws-ecs
       ecs:
-        cluster: <<$appName>>
+        cluster: <<$clusterName>>
         service: <<$family>>
         containerName: <<$appName>>
         region: <<$region>>

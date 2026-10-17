@@ -157,14 +157,15 @@ in Skyport has to run on both:
 
 - **Application images.** The build stage builds `linux/arm64` and `linux/amd64` by
   default (`build.platforms` in `cicd.yaml`); leave it alone. The amd64 leg runs
-  under QEMU on the arm64 build node, so it is slow, and a compiler crashing under
-  emulation is a known failure mode. Where a build stage is architecture-neutral
-  (Java bytecode, pure-JS dependencies) do **not** rely on `FROM --platform=$BUILDPLATFORM`:
-  this platform's builder (kaniko) ignores it and the stage still runs emulated (tested; the
-  build stage reported `x86_64` and `BUILDPLATFORM` was empty). Compile in `build.script`
-  instead, natively in the build agent, and keep the Containerfile a thin packaging step.
-  `flight-api` does this; the scaffold's Java Containerfile, which compiles inside the image
-  build, took about 11 minutes for the emulated leg (about 17 for the whole image).
+  under QEMU on the arm64 build node unless the stage opts out, so it is slow, and a
+  compiler crashing under emulation is a known failure mode. Where a build stage is
+  architecture-neutral (Java bytecode, pure-JS dependencies, Go cross-compiled with
+  `GOARCH=$TARGETARCH`), write it `FROM --platform=$BUILDPLATFORM` so it runs natively; the
+  platform's builder is BuildKit since 2026-10-17 (kaniko ignored this, so older notes say it
+  does not work). Or compile in `build.script`, natively in the build agent, and keep the
+  Containerfile a thin packaging step - `flight-api` does this. Under kaniko the old Java
+  scaffold Containerfile, which compiled in a target-platform stage, took about 11 minutes for
+  the emulated leg (about 17 for the whole image).
   `boarding-api` has no native dependencies. `baggage-api` is pure Python (pika), so it builds
   natively on either architecture. `flight-api` and `baggage-api` must
   avoid ones without both wheels or classifiers.

@@ -178,4 +178,36 @@ ro security-context-merge | grep -q 'runAsNonRoot: true' || { echo "FAIL: podSec
 ro security-context-merge | grep -q 'readOnlyRootFilesystem: true' || { echo "FAIL: containerSecurityContext override not applied"; fail=1; }
 ro security-context-merge | grep -q 'allowPrivilegeEscalation: false' || { echo "FAIL: containerSecurityContext override did not merge onto the default"; fail=1; }
 
+# serviceAccount.projectedTokens: one projected volume per entry (audience, expirationSeconds default 600, path token),
+# mounted read-only on the main container and every Job, alongside the chart's own volumes; none rendered by default.
+helm template t . -f tests/fixtures/projected-token.yaml | python3 -c "
+import sys, yaml
+docs = [d for d in yaml.safe_load_all(sys.stdin.read()) if d]
+ro = [d for d in docs if d['kind'] == 'Rollout'][0]['spec']['template']['spec']
+job = [d for d in docs if d['kind'] == 'Job'][0]['spec']['template']['spec']
+sa = [d for d in docs if d['kind'] == 'ServiceAccount'][0]
+for spec, what in ((ro, 'rollout'), (job, 'job')):
+    vols = {v['name']: v for v in spec['volumes']}
+    src = vols['peer-token']['projected']['sources'][0]['serviceAccountToken']
+    assert src == {'audience': 'peer-cluster', 'expirationSeconds': 600, 'path': 'token'}, (what, src)
+    assert vols['long-token']['projected']['sources'][0]['serviceAccountToken']['expirationSeconds'] == 3600, what
+    assert 'settings' in vols, what + ': chart volumes kept'
+    mounts = {m['name']: m for m in spec['containers'][0]['volumeMounts']}
+    assert mounts['peer-token'] == {'name': 'peer-token', 'mountPath': '/var/run/secrets/hangar/peer', 'readOnly': True}, (what, mounts)
+    assert spec['serviceAccountName'] == 'guard-reader', what
+assert sa['metadata']['name'] == 'guard-reader'
+" || { echo "FAIL: serviceAccount.projectedTokens did not render a projected volume and mount on the Rollout and Job"; fail=1; }
+helm template t . -f tests/fixtures/release-image.yaml | grep -q 'serviceAccountToken' && { echo "FAIL: a projected token rendered with no projectedTokens set"; fail=1; }
+# rollout.maxSurge/maxUnavailable (canary): rendered when set, absent by default, both 0 and blueGreen refused.
+ro surge-zero | grep -A3 '^    canary:' | grep -q 'maxSurge: 0' || { echo "FAIL: rollout.maxSurge 0 not rendered"; fail=1; }
+ro surge-zero | grep -A4 '^    canary:' | grep -q 'maxUnavailable: 1' || { echo "FAIL: rollout.maxUnavailable not rendered"; fail=1; }
+ro release-image | grep -qE 'maxSurge|maxUnavailable' && { echo "FAIL: maxSurge/maxUnavailable rendered by default"; fail=1; }
+helm template t . -f tests/fixtures/surge-both-zero.yaml 2>&1 | grep -q 'cannot both be 0' || { echo "FAIL: maxSurge and maxUnavailable both 0 must fail the render"; fail=1; }
+helm template t . -f tests/fixtures/surge-bluegreen.yaml 2>&1 | grep -q 'canary strategy only' || { echo "FAIL: maxSurge on blueGreen must fail the render"; fail=1; }
+# Schema: the same fields validate (and a bad mountPath / percent string is refused) - airframe-validate, no render.
+$V --no-render tests/validate/good-projected-token-surge.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected projectedTokens / rollout.maxSurge"; fail=1; }
+out=$($V --no-render tests/validate/bad-projected-token.yaml 2>&1)
+for p in /serviceAccount/projectedTokens/0/mountPath /serviceAccount/projectedTokens/0/expirationSeconds /rollout/maxSurge; do
+  echo "$out" | grep -q "$p" || { echo "FAIL: validate did not reject $p"; fail=1; }
+done
 [ $fail -eq 0 ] && echo "ok" || exit 1

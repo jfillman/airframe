@@ -137,6 +137,9 @@ spec:
       {{- toYaml $podSpec | nindent 6 }}
   strategy:
     {{- if eq .Values.rollout.strategy "blueGreen" }}
+    {{- if not (and (kindIs "invalid" .Values.rollout.maxSurge) (kindIs "invalid" .Values.rollout.maxUnavailable)) }}
+    {{- fail "rollout.maxSurge/maxUnavailable apply to the canary strategy only; blueGreen always runs a full preview ReplicaSet" }}
+    {{- end }}
     blueGreen:
       {{- /* activeService/previewService are NOT part of the rollout.blueGreen
       escape hatch below - service.yaml renders exactly these two fixed names
@@ -154,6 +157,17 @@ spec:
       {{- end }}
     {{- else }}
     canary:
+      {{- /* Surge/unavailable while shifting. Unset keeps Argo Rollouts' defaults (25%/25%, which round to one extra
+      pod even at replicas: 1). null means unset - kindIs "invalid", since 0 is a real value; maxSurge 0 + maxUnavailable 1 never runs two copies at once. */}}
+      {{- if and (eq (toString .Values.rollout.maxSurge) "0") (eq (toString .Values.rollout.maxUnavailable) "0") }}
+      {{- fail "rollout.maxSurge and rollout.maxUnavailable cannot both be 0: the Rollout could never replace a pod" }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .Values.rollout.maxSurge) }}
+      maxSurge: {{ .Values.rollout.maxSurge }}
+      {{- end }}
+      {{- if not (kindIs "invalid" .Values.rollout.maxUnavailable) }}
+      maxUnavailable: {{ .Values.rollout.maxUnavailable }}
+      {{- end }}
       {{- if .Values.rollout.canaryAnalysis }}
       analysis:
         {{- toYaml .Values.rollout.canaryAnalysis | nindent 8 }}

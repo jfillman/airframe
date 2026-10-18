@@ -1,0 +1,13 @@
+# serviceAccount.projectedTokens: a kubelet-rotated token for another audience, mounted on every workload.
+appName: guard-test
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+serviceAccount:
+  name: guard-reader
+  projectedTokens:
+    - {name: peer-token, audience: peer-cluster, mountPath: /var/run/secrets/hangar/peer}
+    - {name: long-token, audience: other, expirationSeconds: 3600, mountPath: /var/run/secrets/hangar/other}
+configMaps:
+  - {name: settings, data: {a.txt: hello}}
+jobs:
+  - {name: migrate, command: ["true"]}

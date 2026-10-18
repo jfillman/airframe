@@ -196,7 +196,8 @@
           "annotations": {},
           "create": true,
           "imagePullSecrets": [],
-          "name": ""
+          "name": "",
+          "projectedTokens": []
         },
         "description": "Kubernetes ServiceAccount for every workload this chart renders.",
         "type": "object"

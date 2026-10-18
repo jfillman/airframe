@@ -61,7 +61,7 @@ release:
 releaseTracking: null
 
 # Kubernetes ServiceAccount for every workload this chart renders.
-serviceAccount: {annotations: {}, create: true, imagePullSecrets: [], name: ''}
+serviceAccount: {annotations: {}, create: true, imagePullSecrets: [], name: '', projectedTokens: []}
 
 # Unused since the release-tracking hook Jobs and their relay-token ExternalSecret were removed
 # (glidepath ADR-0021 phase 3b); kept so existing env files that set it still validate.
@@ -104,6 +104,17 @@ rollout:
   # revision already ran here; a Glidepath rollback (ADR-0021 phase 4) is exactly that case. null turns
   # it off (an empty object does not: Helm merges it with this default).
   rollbackWindow: {revisions: 3}
+  # How many pods above replicas the canary may add while it shifts (Argo Rollouts
+  # spec.strategy.canary.maxSurge): an integer or a percentage. null (the default): Argo Rollouts'
+  # default, 25%, which rounds up to 1 extra pod even at replicas: 1. Set 0 (with maxUnavailable 1) for
+  # a single-replica app that must never run two copies at once, or on a node with no room for a second
+  # pod; the old pod stops before the new one starts, a short outage. Canary only; blueGreen always runs
+  # a preview ReplicaSet.
+  maxSurge: null
+  # How many pods below replicas the canary may drop to while it shifts
+  # (spec.strategy.canary.maxUnavailable): an integer or a percentage. null (the default): Argo
+  # Rollouts' default. maxSurge and maxUnavailable cannot both be 0. Canary only.
+  maxUnavailable: null
   # Overrides the container's entrypoint.
   command: []
   # Overrides the container's command args.

@@ -143,6 +143,15 @@ though `service-catalog-design.md` was updated with a pointer to this pass.
   `serviceAccount.imagePullSecrets` - real 401 hit live on checkout-api's dev Rollout
   (a freshly-pushed GHCR package defaults to private) is what originally motivated
   provisioning this at all.
+  **`serviceAccount.projectedTokens`** (2026-10-16): a kubelet-rotated token of this
+  ServiceAccount for another audience, e.g. a cluster that trusts this cluster's issuer
+  (apron `docs/cluster-identity.md`). Each entry `{name, audience, expirationSeconds
+  (default 600), mountPath}` becomes a projected volume mounted read-only on the main
+  container and every Job/CronJob, token at `<mountPath>/token`. Nothing is stored.
+- **`rollout.maxSurge` / `rollout.maxUnavailable`** (canary only, default null = Argo
+  Rollouts' 25%/25%) - `maxSurge: 0` + `maxUnavailable: 1` for a single-replica app that
+  must never run two pods at once (one replaces the other, a short outage). Both 0, or
+  either on blueGreen, fails the render.
 - **`jobs:`/`cronJobs:`** - one-off and scheduled batch tasks, both sharing the
   main workload's `env`/`secrets`/`configMaps`/`volumes` automatically (same
   app, same config, no opt-in) and falling back to `rollout.image` when an

@@ -1,0 +1,7 @@
+# A relative mountPath and a lifetime under Kubernetes' 600 s minimum are refused.
+appName: guard-test
+serviceAccount:
+  projectedTokens:
+    - {name: peer-token, audience: peer-cluster, expirationSeconds: 60, mountPath: relative/path}
+rollout:
+  maxSurge: "25"

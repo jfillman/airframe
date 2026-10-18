@@ -310,8 +310,8 @@ Usage: {{ $envFrom := fromYamlArray (include "airframe-application.workloadEnvFr
 {{/*
 airframe-application.workloadVolumeMounts / airframe-application.workloadVolumes - the
 volumeMount/volume pair for every configMaps: entry whose `as` (default: volume)
-includes volume, every volumes: (PVC) entry, and every secrets: entry whose `as`
-(default: env) includes volume - shared by every workload the same way workloadEnv
+includes volume, every volumes: (PVC) entry, every secrets: entry whose `as`
+(default: env) includes volume, and every serviceAccount.projectedTokens entry - shared by every workload the same way workloadEnv
 is. Two separate templates (mount goes on the container, volume goes on the pod)
 computed from the same three values lists, so a Job/CronJob container and pod spec
 both call in and stay consistent by construction rather than by two templates
@@ -347,6 +347,9 @@ Usage: {{ $volumeMounts := fromYamlArray (include "airframe-application.workload
 {{- $volumeMounts = append $volumeMounts (dict "name" "app-secrets" "mountPath" $mountPath "subPath" .name "readOnly" true) -}}
 {{- end -}}
 {{- end -}}
+{{- range .Values.serviceAccount.projectedTokens -}}
+{{- $volumeMounts = append $volumeMounts (dict "name" .name "mountPath" .mountPath "readOnly" true) -}}
+{{- end -}}
 {{- $volumeMounts | toYaml -}}
 {{- end -}}
 
@@ -368,6 +371,12 @@ Usage: {{ $volumeMounts := fromYamlArray (include "airframe-application.workload
 {{- end -}}
 {{- if $needsSecretVolume -}}
 {{- $volumes = append $volumes (dict "name" "app-secrets" "secret" (dict "secretName" "app-secrets")) -}}
+{{- end -}}
+{{- /* serviceAccount.projectedTokens: a kubelet-rotated token of the pod's own ServiceAccount for another audience
+(e.g. a cluster that trusts this one's issuer). Nothing stored; the file is <mountPath>/token. */ -}}
+{{- range .Values.serviceAccount.projectedTokens -}}
+{{- $tok := dict "audience" .audience "expirationSeconds" (int (include "airframe-application.intOr" (dict "map" . "key" "expirationSeconds" "default" 600))) "path" "token" -}}
+{{- $volumes = append $volumes (dict "name" .name "projected" (dict "sources" (list (dict "serviceAccountToken" $tok)))) -}}
 {{- end -}}
 {{- $volumes | toYaml -}}
 {{- end -}}

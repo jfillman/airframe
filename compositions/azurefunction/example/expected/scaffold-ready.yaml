@@ -71,7 +71,7 @@ resources:
         \ azure-client-secret\n  - name: azure-tenant-id\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy\
         \ results show in Backstage and Tower\n"
       file: cicd.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: thumb-fn
     managementPolicies:
     - Create

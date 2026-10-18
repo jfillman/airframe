@@ -19,8 +19,21 @@
 # only dropped from the render on the reconcile AFTER it entered the ledger - so the ledger write
 # always lands before the managed resource goes away.
 #
-# Cluster rebuild (XR status lost): the ledger is empty, every scaffold file is composed again, and
-# the pinned external-name makes the provider adopt the existing GitHub file (Observe, no write) -
-# then it is Ready, enters the ledger, and retires again. Zero GitHub writes, two reconciles.
+# XR recreate or cluster rebuild (XR status lost): the ledger is empty, so every scaffold file is
+# composed again. Two settings on every create-once document make that write-free:
+#   - crossplane.io/external-name pinned to "<repo>:<file>:", so the provider's first Observe
+#     finds the existing GitHub file and adopts it (Ready, no Create call);
+#   - overwriteOnCreate: false, so if Create is ever reached against an existing file (no
+#     external-name, or a misread observe) terraform-provider-github refuses ("refusing to
+#     overwrite existing file") and the MR stays Ready: False instead of committing the template.
+# The adopted file is Ready, enters the ledger, and retires again two reconciles later. Verified on
+# kiac-dev 2026-10-17 with provider-upjet-github v0.20.0-2.g7530c3d: pinned + false adopted an
+# existing cicd.yaml (Ready, blob SHA unchanged); unpinned + false failed with the refusal, no commit.
+# Before 2026-10-17 the gitops README, infraservice cicd.yaml stub, app cicd.yaml and AppEnv
+# values.yaml still had overwriteOnCreate: true (and the first two no external-name): moving the
+# skyport-auth/broker InfraServices to new namespaces rewrote cicd.yaml and README.md in both
+# gitops-infra-skyport-* repos (78419e9, 67e02a8). Do not reintroduce true on a create-once file.
+# Cost: a repo created with autoInit already has GitHub's README.md, so README scaffolds adopt that
+# stub on a brand-new repo and their template content is never committed.
 <<- $scaffoldDone := dig "status" "scaffold" "done" list .observed.composite.resource >>
 <<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>

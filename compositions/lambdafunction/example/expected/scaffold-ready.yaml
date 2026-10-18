@@ -73,7 +73,7 @@ resources:
         # (Glidepath docs/admin/cloud-deploy-identity.md). There is no AWS key to store.\n\nnotifications:\n  backstage:\n\
         \    enabled: true # build/deploy results show in Backstage and Tower\n"
       file: cicd.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: resize-fn
     managementPolicies:
     - Create

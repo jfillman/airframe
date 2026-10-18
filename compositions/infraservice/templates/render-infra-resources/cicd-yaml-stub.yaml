@@ -35,6 +35,7 @@ metadata:
   name: <<$xrName>>-gitops-infra-cicd-yaml
   annotations:
     <<setResourceNameAnnotation "cicd-yaml-stub">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "cicd-yaml-stub" | default dict) | default (printf "gitops-infra-%s:cicd.yaml:" $xrName)>>"
 spec:
   # No "Delete": this file is real developer/pipeline config after scaffolding (cicd.yaml) or a
   # human-edited README; deleting the XR must never delete it from GitHub. A Tier 2 prune once
@@ -46,7 +47,9 @@ spec:
   forProvider:
     repository: <<printf "gitops-infra-%s" $xrName>>
     file: cicd.yaml
-    overwriteOnCreate: true
+    # false: Create against an existing file refuses instead of overwriting it. An XR
+    # recreate (empty scaffold ledger) adopts the file through the pinned external-name.
+    overwriteOnCreate: false
     content: |
       apiVersion: platform/v1
       kind: PipelineConfig

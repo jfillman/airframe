@@ -59,6 +59,17 @@ each stack's `templates/render-github-resources/src-repo.yaml`. A composition ch
 field of an already-composed managed resource is a fleet-wide write even when its
 `managementPolicies` has no `Update` - plan it as a migration, not a default change.
 
+**Every create-once scaffold adopts, never rewrites (2026-10-17).** The 2026-09-23 fix
+reached only `src-repo.yaml`. The gitops README, the app `cicd.yaml`, the InfraService
+`cicd.yaml` stub and the ApplicationEnvironment `values.yaml` still had
+`overwriteOnCreate: true`, and the README and stub had no external-name, so recreating an
+XR (empty scaffold ledger) committed the template over the live file: moving the
+skyport-auth/broker InfraServices to `infra-*-cicd` rewrote `cicd.yaml` and `README.md` in
+both gitops-infra repos. All of them now pin `crossplane.io/external-name` and set
+`overwriteOnCreate: false`; `tools/test_compositions.py` fails any create-once
+`RepositoryFile` that does not. A new repo's README scaffold now adopts GitHub's
+`autoInit` README instead of replacing it (known-gaps #7).
+
 **`PythonApplication` + `GoApplication` XRDs — third and fourth Bootstrap-tier
 stacks, offline-verified, live rollout pending.** `xrds/pythonapplication.yaml` +
 `compositions/pythonapplication/` and `xrds/goapplication.yaml` +

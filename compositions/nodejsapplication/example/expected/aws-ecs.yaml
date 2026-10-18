@@ -42,6 +42,8 @@ resources:
 - apiVersion: repo.github.m.upbound.io/v1alpha1
   kind: RepositoryFile
   metadata:
+    annotations:
+      crossplane.io/external-name: 'gitops-widget-service:README.md:'
     name: widget-service-gitops-readme
     namespace: demo-apps
   name: gitops-repo-readme
@@ -61,7 +63,7 @@ resources:
 
         '
       file: README.md
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: gitops-widget-service
     managementPolicies:
     - Create
@@ -121,7 +123,7 @@ resources:
         \      region: us-east-1\n\nnotifications:\n  backstage:\n    enabled: true # build/deploy results show in Backstage\
         \ and Tower\n"
       file: cicd.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: widget-service
     managementPolicies:
     - Create

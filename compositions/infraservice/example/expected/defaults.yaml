@@ -3,6 +3,8 @@ resources:
 - apiVersion: repo.github.m.upbound.io/v1alpha1
   kind: RepositoryFile
   metadata:
+    annotations:
+      crossplane.io/external-name: 'gitops-infra-shared-cache:cicd.yaml:'
     name: shared-cache-gitops-infra-cicd-yaml
     namespace: infra-services
   name: cicd-yaml-stub
@@ -11,7 +13,7 @@ resources:
       commitMessage: 'InfraService scaffold: cicd.yaml (no pipeline stages - this service has no source code)'
       content: "apiVersion: platform/v1\nkind: PipelineConfig\nbuild:\n  agent: nodejs-20\n"
       file: cicd.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: gitops-infra-shared-cache
     managementPolicies:
     - Create
@@ -50,6 +52,8 @@ resources:
 - apiVersion: repo.github.m.upbound.io/v1alpha1
   kind: RepositoryFile
   metadata:
+    annotations:
+      crossplane.io/external-name: 'gitops-infra-shared-cache:README.md:'
     name: shared-cache-gitops-infra-readme
     namespace: infra-services
   name: gitops-repo-readme
@@ -84,7 +88,7 @@ resources:
 
         '
       file: README.md
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: gitops-infra-shared-cache
     managementPolicies:
     - Create

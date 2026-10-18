@@ -12,4 +12,4 @@ metadata:
   name: widget-service
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev

@@ -15,7 +15,7 @@
 # instance per cluster" was weighed and rejected for the extra live infra cost). A
 # plain type: dev check would incorrectly route it to local Kubernetes Auth against an
 # Infisical that isn't running there. `infisicalHost` is a separate, independent
-# registry field from `type` for exactly this reason - see kind-dev.yaml's own header.
+# registry field from `type` for exactly this reason.
 #
 # Declared once here (this Composition's single function-go-templating pipeline step
 # concatenates every templates/*.yaml file into one template execution - see

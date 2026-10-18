@@ -1,0 +1,14 @@
+# --observed-resources fixture: the TektonCICD child as it already exists. With no registry record in this render
+# (not found yet, or a transient read gap), the child must keep the repo URLs it has rather than lose or change them.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: TektonCICD
+metadata:
+  name: widget-service-tektoncicd
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: tektoncicd
+spec:
+  appName: widget-service
+  gitopsRepoUrl: https://github.com/example-org/gitops-widget-service
+  appRepoUrl: https://github.com/example-org/widget-service
+  devCluster: example-dev

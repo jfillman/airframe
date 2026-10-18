@@ -4,11 +4,11 @@
 apiVersion: catalog.hangar.io/v1alpha1
 kind: ApplicationEnvironment
 metadata:
-  name: widget-service-kind-prod-staging
+  name: widget-service-example-prod-staging
   namespace: demo-apps
 spec:
   appName: widget-service
-  cluster: kind-prod
+  cluster: example-prod
   env: staging
 status:
   scaffold:

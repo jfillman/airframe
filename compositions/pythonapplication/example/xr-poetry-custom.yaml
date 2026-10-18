@@ -5,7 +5,7 @@ metadata:
   name: widget-service
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   pythonVersion: "3.13"
   packageManager: poetry
   port: 9090

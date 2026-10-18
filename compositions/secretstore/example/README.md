@@ -12,9 +12,9 @@ Requires Docker (`crossplane render` pulls and runs `function-go-templating` /
 `function-auto-ready` in containers by default).
 
 `xr-checkout-api.yaml` exercises `"shared"` mode (the default, `environmentSlug`
-omitted) targeting kind-dev - renders an `InfisicalProject` + a Kubernetes-Auth
+omitted) targeting example-dev (the Infisical host) - renders an `InfisicalProject` + a Kubernetes-Auth
 `ClusterSecretStore`. `xr-checkout-api-staging.yaml` exercises the per-environment
-mode (`environmentSlug: staging`, `cluster: kind-prod`) added in Item 8's
+mode (`environmentSlug: staging`, `cluster: example-prod`) added in Item 8's
 multi-cluster revision - renders an `InfisicalEnvironment` + a narrowed,
 Universal-Auth `ClusterSecretStore` instead, with NO `InfisicalProject` (deliberate -
 per-environment XRs reference an already-existing project, never create one). Run

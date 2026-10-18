@@ -59,14 +59,14 @@ from crossplane.function.proto.v1 import run_function_pb2_grpc as grpcv1
 DEGRADED_PHASES = {"Degraded", "Error"}
 ROLLOUT_REQUIREMENT_NAME = "rollout"
 
-# The platform's fixed GitHub owner — same constant NodeJSApplication's own
-# Composition writes into every onboarded app's identity.yaml (see that
-# Composition's own header for why this isn't a per-app field: `owner` is a
-# ProviderConfig-wide setting, not something an app can vary). Can be
-# overridden via the Composition's function `input` (cfg.gitopsOwner) if this
-# ever needs to differ per cluster, but every real onboarding today uses this
-# one value.
-DEFAULT_GITOPS_OWNER = "jfillman"
+# The GitHub owner the app's repos live under. No default: it is the fleet's
+# scm.owner, read from this cluster's registry record (crossplane-system ConfigMap
+# named after spec.cluster, rendered by Airframe's cluster-registry chart as
+# data.scmOwner). The Composition's function input (cfg.gitopsOwner) still wins
+# when set, for a fleet that wants to pin it there instead. Neither: no diagnosis
+# is dispatched and the XR says why (see RunFunction), rather than opening PRs
+# against a guessed owner.
+REGISTRY_REQUIREMENT_NAME = "cluster-registry-entry"
 
 
 def safe_get(d, *keys, default=None):
@@ -87,7 +87,7 @@ def safe_get(d, *keys, default=None):
     return cur
 
 
-def resolve_gitops_config(app_name, cluster, env, cfg):
+def resolve_gitops_config(app_name, cluster, env, cfg, registry_owner=""):
     """Return the deterministic GitOps manifest-repo coordinates for app_name.
 
     Matches exactly what ApplicationEnvironment's own Composition computes when it
@@ -99,7 +99,7 @@ def resolve_gitops_config(app_name, cluster, env, cfg):
     every gitops-<appName> repo with a main branch and never offers another),
     and the manifest path is always <cluster>/<env>/values.yaml.
     """
-    owner = safe_get(cfg, "gitopsOwner", default=DEFAULT_GITOPS_OWNER)
+    owner = safe_get(cfg, "gitopsOwner", default="") or registry_owner
     return {
         "owner": owner,
         "repo": f"gitops-{app_name}",
@@ -149,6 +149,21 @@ def build_diagnosis_service_account():
 # function stops declaring it, so a lagging observed read right after dispatch must not
 # delete a live Job.
 DISPATCH_GRACE_SECONDS = 120
+
+
+def observed_job_owner(req, job_key):
+    """Return GITOPS_OWNER of an already-composed diagnosis Job.
+
+    Re-declaring the Job without the registry at hand (a transient read gap) then
+    reproduces the identical, immutable spec rather than an empty owner.
+    """
+    observed = req.observed.resources
+    job = observed[job_key].resource if job_key in observed else None
+    for c in safe_get(job, "spec", "template", "spec", "containers", default=[]) or []:
+        for e in safe_get(c, "env", default=[]) or []:
+            if safe_get(e, "name") == "GITOPS_OWNER":
+                return safe_get(e, "value", default="") or ""
+    return ""
 
 
 def recently_dispatched(prev_status, now=None):
@@ -333,6 +348,21 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             else None
         )
 
+        # The fleet's GitHub owner, from this cluster's registry record
+        # (see REGISTRY_REQUIREMENT_NAME).
+        registry_owner = ""
+        if cluster:
+            response.require_resources(
+                rsp,
+                REGISTRY_REQUIREMENT_NAME,
+                api_version="v1",
+                kind="ConfigMap",
+                match_name=cluster,
+                namespace="crossplane-system",
+            )
+            registry_cm = request.get_required_resource(req, REGISTRY_REQUIREMENT_NAME)
+            registry_owner = safe_get(registry_cm, "data", "scmOwner", default="") or ""
+
         prev_status = safe_get(xr, "status", default={}) or {}
         last_handled_revision = safe_get(prev_status, "lastDiagnosisRevision")
 
@@ -363,9 +393,24 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         if phase:
             new_status["rolloutPhase"] = phase
 
-        if phase in DEGRADED_PHASES and revision and revision != last_handled_revision:
+        owner_known = bool(safe_get(cfg, "gitopsOwner", default="") or registry_owner)
+        new_degraded = (
+            phase in DEGRADED_PHASES and revision and revision != last_handled_revision
+        )
+        if new_degraded and not owner_known:
+            # No GitHub owner (no registry record for spec.cluster yet, or it lacks
+            # scmOwner): dispatching would open PRs against a guessed owner. Wait;
+            # lastDiagnosisRevision stays unset, so the next reconcile that has the
+            # owner dispatches.
+            response.warning(
+                rsp,
+                f"Rollout {xr_name} is {phase}, but no diagnosis was dispatched: "
+                f"cluster registry record {cluster!r} has no scmOwner "
+                "(add scm.owner to the hub's clusters.yaml)",
+            )
+        elif new_degraded:
             job_name = f"diagnosis-{app_name}-{revision}"[:63]
-            gitops = resolve_gitops_config(app_name, cluster, env, cfg)
+            gitops = resolve_gitops_config(app_name, cluster, env, cfg, registry_owner)
             src = resolve_src_config(app_name, gitops)
             notifications = safe_get(spec, "notifications", default={}) or {}
             job_manifest = build_diagnosis_job(
@@ -461,7 +506,13 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 and safe_get(prev_status, "lastDiagnosisJob")
                 and (job_is_live or recently_dispatched(prev_status))
             ):
-                gitops = resolve_gitops_config(app_name, cluster, env, cfg)
+                gitops = resolve_gitops_config(
+                    app_name,
+                    cluster,
+                    env,
+                    cfg,
+                    registry_owner or observed_job_owner(req, job_key),
+                )
                 src = resolve_src_config(app_name, gitops)
                 notifications = safe_get(spec, "notifications", default={}) or {}
                 rsp.desired.resources[job_key].resource.update(

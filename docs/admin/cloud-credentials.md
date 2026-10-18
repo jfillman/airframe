@@ -15,7 +15,7 @@ stored keys until their own migration. [How keyless AWS access works](#how-keyle
 | **What it may do** | Create, observe and delete the resources the three compositions describe: repositories, execution roles, functions and URLs, clusters, task definitions, services, a small VPC; resource groups, environments, container apps | Push an image and roll the deploy surface that image belongs to: `UpdateFunctionCode`, a new task-definition revision plus `UpdateService`, `az containerapp update` |
 | **What it must never do** | Deploy code: no `UpdateFunctionCode`, no `UpdateFunctionConfiguration`, no `ecs:UpdateService`. Grant itself more: only the two managed policies the compositions attach, only on `*-exec` roles. Leave its region. | Create or delete anything. Change a function's role, memory or configuration. Touch IAM beyond passing an `*-ecs-exec` role to ECS. Leave its region. |
 | **Why the split** | A composition bug or a wrong management policy can only create, observe or delete; it can never roll a function back to the placeholder | Anyone who can merge to the app's repository can run code in its pipeline namespace; that trust boundary must not reach infrastructure or IAM |
-| **Where the secret lives** | AWS: nowhere; a projected ServiceAccount token is exchanged with STS for an hour-long session. Azure: Infisical project `platform-cicd-kind-dev`, environment `shared`, path `/`, key `provider-azure-creds` | AWS Lambda: nowhere; the deploy step exchanges a projected token for an hour-long session as `glidepath-deploy-<functionName>`. ECS and Azure (and Lambda, as a fallback until phase 4): the app's own Infisical project `<app>-<devCluster>`, environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
+| **Where the secret lives** | AWS: nowhere; a projected ServiceAccount token is exchanged with STS for an hour-long session. Azure: Infisical project `platform-cicd-<dev-cluster>`, environment `shared`, path `/`, key `provider-azure-creds` | AWS Lambda: nowhere; the deploy step exchanges a projected token for an hour-long session as `glidepath-deploy-<functionName>`. ECS and Azure (and Lambda, as a fallback until phase 4): the app's own Infisical project `<app>-<devCluster>`, environment `shared`, keys `aws-access-key-id` + `aws-secret-access-key` or `azure-client-id` + `azure-client-secret` + `azure-tenant-id` |
 | **How it reaches the cluster** | AWS: the kubelet projects a token (audience `sts.amazonaws.com`) into the provider pods → `ClusterProviderConfig default` (`source: WebIdentity`) → `AssumeRoleWithWebIdentity`. Azure: `platform-secret-store` (ClusterSecretStore) → ExternalSecret `provider-azure-creds` → Secret of the same name, key `credentials`, in `crossplane-system` → `ClusterProviderConfig default` | The app's own ClusterSecretStore → the `app-secrets` ExternalSecret that `airframe-application` renders from the app's `cicd.yaml` `secrets:` list → Secret `app-secrets` in `app-<app>-cicd` |
 | **Who can read the Kubernetes Secret** | AWS: there is no Secret. Anyone who can mint a token for a `provider-aws-*` ServiceAccount in `crossplane-system` (cluster admins) can become the role. Azure: cluster admins, Argo CD's application controller, External Secrets, the provider pods. No tenant namespace, not Tower's read identity | Cluster admins, Argo CD, External Secrets, and every pod that runs in that app's cicd namespace: the deploy TaskRuns and, for a Lambda target, the composition's bootstrap Job |
 
@@ -44,7 +44,8 @@ that window; federation removes it.
 ### How a token becomes AWS access
 
 Every pod has a Kubernetes **ServiceAccount**, and Kubernetes can write a short-lived signed **token** for it into
-the pod. kiac-dev signs tokens as `https://hangarplatform.dev/oidc/kiac-dev` and publishes its public keys there
+the pod. The dev cluster signs tokens as `https://hangarplatform.dev/oidc/<dev-cluster>` (its registry
+`serviceAccountIssuer`; `<dev-cluster>` is the cluster's registry name) and publishes its public keys there
 (hangar `web/public/oidc/`), so AWS can check a signature without being able to forge one. An **IAM identity
 provider** tells AWS to trust that issuer, and each **IAM role** says in its **trust policy** exactly which
 ServiceAccount, with which audience, may assume it.
@@ -128,8 +129,8 @@ apply error, since a Job's pod template is immutable; delete it and the next rec
 
 **Created by:** an account administrator, once per AWS account and cluster: an IAM OIDC provider for
 the cluster's ServiceAccount issuer, the role `hangar-crossplane-<cluster>` that trusts it, and the
-policy `HangarCrossplaneCloudTargets` attached to that role. On kiac-dev the role is
-`hangar-crossplane-kiac-dev` and the issuer is `https://hangarplatform.dev/oidc/kiac-dev`.
+policy `HangarCrossplaneCloudTargets` attached to that role. On the dev cluster the role is
+`hangar-crossplane-<dev-cluster>` and the issuer is `https://hangarplatform.dev/oidc/<dev-cluster>`.
 **Used by:** the `provider-aws-*` packages on the dev cluster, through `ClusterProviderConfig default`
 (`aws.m.upbound.io/v1beta1`, in `gitops-cluster-dev/10-crds-operators/crossplane/provider-aws-config.yaml`).
 
@@ -189,7 +190,7 @@ The other way round, Crossplane can't add the boundary to existing roles, becaus
 export AWS_PAGER=""
 REGION=us-east-1
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)   # the account the role and the targets live in
-CLUSTER=kiac-dev
+CLUSTER=<dev-cluster>    # the dev cluster's registry name (its kubectl context is the same)
 
 cat > hangar-cloud-target-boundary.json <<EOF
 {
@@ -407,7 +408,7 @@ deletion never has to scale it to zero), `iam:CreatePolicy`, any `iam:*` on a ro
 
 The ServiceAccount issuer belongs to the cluster: apron `hack/cluster-identity.sh issuer` sets it, and
 the discovery document and keys are published under hangar's `web/public/oidc/<cluster>`
-(`gitops-cluster-dev/00-bootstrap/cluster-identity/README.md` has kiac-dev's). With that in place:
+(`gitops-cluster-dev/00-bootstrap/cluster-identity/README.md` has the dev cluster's). With that in place:
 
 ```bash
 ISSUER=hangarplatform.dev/oidc/${CLUSTER}     # CLUSTER and ACCOUNT from the policy step
@@ -488,10 +489,10 @@ Trust policy (rendered):
 ```json
 {"Version": "2012-10-17", "Statement": [{
   "Effect": "Allow", "Action": "sts:AssumeRoleWithWebIdentity",
-  "Principal": {"Federated": "arn:aws:iam::<account>:oidc-provider/hangarplatform.dev/oidc/kiac-dev"},
+  "Principal": {"Federated": "arn:aws:iam::<account>:oidc-provider/hangarplatform.dev/oidc/<dev-cluster>"},
   "Condition": {"StringEquals": {
-    "hangarplatform.dev/oidc/kiac-dev:aud": "sts.amazonaws.com",
-    "hangarplatform.dev/oidc/kiac-dev:sub": "system:serviceaccount:app-<app>-cicd:glidepath-cloud-deployer"}}}]}
+    "hangarplatform.dev/oidc/<dev-cluster>:aud": "sts.amazonaws.com",
+    "hangarplatform.dev/oidc/<dev-cluster>:sub": "system:serviceaccount:app-<app>-cicd:glidepath-cloud-deployer"}}}]}
 ```
 
 Inline policy `deploy-this-function`: `ecr:GetAuthorizationToken`; the pull and push calls on
@@ -699,7 +700,7 @@ jq -n --arg id "${APP_ID}" --arg secret "$(jq -r .password hangar-crossplane-sp.
       '{clientId:$id, clientSecret:$secret, tenantId:$tenant, subscriptionId:$sub}'
 ```
 
-Plant that output as `provider-azure-creds` in `platform-cicd-kind-dev` (`shared`, `/`). It reaches
+Plant that output as `provider-azure-creds` in `platform-cicd-<dev-cluster>` (`shared`, `/`). It reaches
 `crossplane-system` as Secret `provider-azure-creds`, key `credentials`, through
 `provider-azure-creds-external-secret.yaml`; confirm it the same way as the AWS secret, with the Azure
 names. A wrong value shows up as `ClientSecretCredential authentication failed` on the first Azure
@@ -758,7 +759,7 @@ secrets to build its update; add that one action rather than switching to the bu
 `Container Apps Contributor`, which also grants create and delete. The built-in role is the acceptable
 shortcut only for a throwaway subscription.
 
-Plant the three values in the app's own Infisical project (`smoke-az-fn-kind-dev` for the smoke app,
+Plant the three values in the app's own Infisical project (`<app>-<dev-cluster>`, e.g. `smoke-az-fn-<dev-cluster>` for the smoke app,
 `shared` environment), named exactly as its `cicd.yaml` `secrets:` list names them: `azure-client-id`
 (`appId`), `azure-client-secret` (`password`) and `azure-tenant-id`. The next push to the app picks
 them up; delete `glidepath-deployer-sp.json` afterwards. The exposure is the AWS deployer's, narrowed

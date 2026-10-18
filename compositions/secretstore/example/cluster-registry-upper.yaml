@@ -4,10 +4,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kind-dev
+  name: example-dev
   namespace: crossplane-system
 data:
   type: upper
   crossplaneReady: "true"
-  infisicalUrl: http://dev.kiac.local:31800/api
+  infisicalUrl: http://infisical.example:31800/api
   infisicalOrgId: 820c617c-71a5-45e4-bc19-863a4f88edf8

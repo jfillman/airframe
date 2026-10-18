@@ -5,4 +5,4 @@ metadata:
   namespace: app-flights-dev
 spec:
   environmentRef:
-    name: flights-kind-dev-dev
+    name: flights-example-dev-dev

@@ -22,7 +22,7 @@
 # Zero external dependencies in the scaffold itself (net/http stdlib, no framework) -
 # same minimalism NodeJSApplication's own boilerplate keeps.
 #
-# $modulePath: github.com/<platformOwner>/<xrName>, matching the real repo URL - see
+# $modulePath: github.com/<scmOwner>/<xrName>, matching the real repo URL - see
 # xrds/goapplication.yaml's own header for why this is a computed literal, not a
 # spec field.
 #
@@ -37,8 +37,12 @@
 <<- $goVersion := $spec.goVersion >>
 <<- $port := $spec.port >>
 <<- $visibility := $spec.visibility >>
-<<- $platformOwner := "jfillman" >>
-<<- $modulePath := printf "github.com/%s/%s" $platformOwner $xrName >>
+<<- /* Module path github.com/<scmOwner>/<repo>: the owner is the registry record's scmOwner (00-devcluster-gate.yaml),
+       never a literal. Without it (no registry record yet, or a transient read failure) an existing go.mod keeps the
+       module line it was created with; a go.mod that does not exist yet is not rendered until the owner is known. */ ->>
+<<- $obsGoMod := index (.observed.resources | default dict) "src-repo-go-mod" | default dict >>
+<<- $modulePath := regexReplaceAll "^module " (regexFind "module [^\\n]+" (dig "resource" "spec" "forProvider" "content" "" $obsGoMod)) "" >>
+<<- if $scmOwner >><<- $modulePath = printf "github.com/%s/%s" $scmOwner $xrName >><<- end >>
 # ---------------------------------------------------------------------------
 # Scaffold files never delete or overwrite developer content, and never re-identify.
 # (Added 2026-09-23 after a real incident - read before changing anything here.)
@@ -110,7 +114,7 @@ spec:
         secretScanningPushProtection:
           - status: disabled
 ---
-<<- if not (has "src-repo-go-mod" $scaffoldDone) >>
+<<- if and $modulePath (not (has "src-repo-go-mod" $scaffoldDone)) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:

@@ -8,8 +8,8 @@ xr:
     reason: CicdOnboardingPending
     status: 'False'
     type: CicdOnboarded
-  - message: 'spec.devCluster (kind-dev) doesn''t resolve to a registered ConfigMap with type: dev and cicdReady: "true" in
-      the cluster registry (gitops-cluster-dev/00-bootstrap/cluster-registry/) - no CICD-onboarding resources are rendered
+  - message: 'spec.devCluster (example-dev) doesn''t resolve to a registered ConfigMap with type: dev and cicdReady: "true"
+      in the cluster registry (gitops-cluster-dev/00-bootstrap/cluster-registry/) - no CICD-onboarding resources are rendered
       until it does, rather than partially succeeding against a cluster that may not exist or isn''t ready yet.'
     reason: DevClusterNotReady
     status: 'False'

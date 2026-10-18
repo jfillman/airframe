@@ -117,17 +117,33 @@ for d in (x for x in yaml.safe_load_all(sys.stdin.read()) if x):
         assert 'annotations' not in d['metadata'], d['kind']
 " || { echo "FAIL: an empty annotations block is rendered when none is set"; fail=1; }
 
+# Dev-vs-upper secret layout comes from clusterType (the cluster's registry type), never from the cluster's name.
+es() { helm template t . -f "tests/fixtures/$1.yaml" --show-only templates/config/external-secret.yaml 2>&1; }
+es secrets-dev-cluster | python3 -c "
+import sys, yaml
+s = yaml.safe_load(sys.stdin.read())['spec']; d = {e['secretKey']: e for e in s['data']}
+ok = (s['secretStoreRef']['name'] == 'guard-test-example-dev' and d['API_KEY']['remoteRef']['key'] == 'pr-12/API_KEY'
+      and d['SLACK_URL']['remoteRef']['key'] == 'SLACK_URL' and 'sourceRef' not in d['SLACK_URL'])
+sys.exit(0 if ok else 1)" || { echo "FAIL: clusterType dev did not read the shared store with an env prefix"; fail=1; }
+es secrets-upper-cluster | python3 -c "
+import sys, yaml
+s = yaml.safe_load(sys.stdin.read())['spec']; d = {e['secretKey']: e for e in s['data']}
+ok = (s['secretStoreRef']['name'] == 'guard-test-example-prod-staging' and d['API_KEY']['remoteRef']['key'] == 'API_KEY'
+      and d['SLACK_URL']['sourceRef']['storeRef']['name'] == 'guard-test-example-prod')
+sys.exit(0 if ok else 1)" || { echo "FAIL: clusterType upper did not read the per-env store"; fail=1; }
+helm template t . -f tests/fixtures/secrets-no-cluster-type.yaml 2>&1 | grep -q "clusterType is empty" || { echo "FAIL: secrets: without clusterType rendered instead of failing"; fail=1; }
+
 # ADR-0021: release identity on the Rollout's own metadata, only when releaseTracking.releaseId is set.
 ro() { helm template t . -f "tests/fixtures/$1.yaml" --show-only templates/workload/rollout.yaml 2>&1; }
 meta() { ro "$1" | awk '/^kind: Rollout/{f=1} f&&/^spec:/{exit} f'; }
-meta release-tracking-id | grep -q 'hangar.io/release-id: "chain1:kind-prod/staging"' || { echo "FAIL: release-id annotation missing"; fail=1; }
+meta release-tracking-id | grep -q 'hangar.io/release-id: "chain1:example-prod/staging"' || { echo "FAIL: release-id annotation missing"; fail=1; }
 meta release-tracking-id | grep -q 'hangar.io/app-namespace: "app-guard-test-cicd"' || { echo "FAIL: app-namespace annotation missing"; fail=1; }
 meta release-tracking-id | grep -q 'hangar.io/release-tracked: "true"' || { echo "FAIL: release-tracked label missing"; fail=1; }
 ro release-tracking-id | awk '/^  template:/{f=1} f' | grep -q 'hangar.io/release-id' && { echo "FAIL: release-id leaked into the pod template (would force a new ReplicaSet)"; fail=1; }
 helm template t . -f tests/fixtures/release-tracking-id-with-user-meta.yaml --show-only templates/workload/rollout.yaml | python3 -c "
 import sys, yaml
 m = yaml.safe_load(sys.stdin.read())['metadata']
-ok = (m['annotations'].get('hangar.io/release-id') == 'chain1:kind-prod/staging' and m['annotations'].get('owner') == 'sre'
+ok = (m['annotations'].get('hangar.io/release-id') == 'chain1:example-prod/staging' and m['annotations'].get('owner') == 'sre'
       and m['labels'].get('team') == 'payments' and m['labels'].get('hangar.io/release-tracked') == 'true')
 sys.exit(0 if ok else 1)" || { echo "FAIL: release identity and rollout.labels/annotations did not merge into one labels and one annotations block"; fail=1; }
 for fx in release-tracking-no-id release-image; do

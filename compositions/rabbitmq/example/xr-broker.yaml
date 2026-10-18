@@ -6,7 +6,7 @@ metadata:
   namespace: app-skyport-broker-dev
 spec:
   environmentRef:
-    name: skyport-broker-kind-dev-dev
+    name: skyport-broker-example-dev-dev
   mode: broker
   vhosts: [flights]
   allowedNamespaces: [app-flights-dev, app-baggage-api-dev]

@@ -41,7 +41,7 @@ spec:
             # 00-devcluster-gate.yaml, which springbootapplication's own copy already ported
             # byte-for-byte before this extraction. See that file's own git history for the
             # full "why" - $tenantsRepo comes from registry data, not a hardcoded literal,
-            # because kind-dev's tenants repo is a legacy name that breaks the
+            # because a dev cluster's tenants repo may be a legacy name that breaks the
             # gitops-cluster-<cluster>-tenants convention every upper cluster uses.
             #
             # $xrName here is $spec.appName (the OWNING app's name, passed in by the parent
@@ -70,11 +70,20 @@ spec:
             <<- $clusterType := "" >>
             <<- $cicdReady := "" >>
             <<- $tenantsRepo := "" >>
+            <<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+                   record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+                   without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+                   owner-dependent objects fall back to what they already observe or wait. */ ->>
+            <<- $scmOwner := "" >>
             <<- if gt (len $items) 0 >>
               <<- $cm := (index $items 0).resource >>
               <<- $clusterType = $cm.data.type >>
               <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
               <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+              <<- $scmOwner = index $cm.data "scmOwner" | default "" >>
+              <<- if not $scmOwner >>
+                <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+              <<- end >>
               <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
                 <<- $clusterOk = true >>
               <<- end >>
@@ -100,10 +109,10 @@ spec:
             # gitopsRepoUrl/appRepoUrl now come from spec (computed by the parent XR the
             # same way its own gitops-repo.yaml/src-repo.yaml templates do), not
             # recomputed here - this XRD stays agnostic to repo-naming convention.
-            # $platformOwner stays a fixed literal (feeds only the payload's own
-            # githubOwner field, unrelated to repo-naming) - same reasoning
-            # xrds/tektoncicd.yaml's own header gives for not exposing it as a spec
-            # field: it's a ProviderConfig-wide setting, not a per-app one.
+            # githubOwner is $scmOwner, the dev cluster's registry record's scmOwner (the fleet's
+            # scm.owner, read in 00-devcluster-gate.yaml; this file only renders once that record
+            # passed the gate) - a fleet-wide setting, not a per-app field, same reasoning
+            # xrds/tektoncicd.yaml's own header gives for not exposing it as a spec field.
             #
             # $spec.type/$spec.registerPipelinesAsCode (2026-09-18, InfraService's own build -
             # service-catalog-design.md Item 7) - real XR spec fields now, both schema-defaulted
@@ -132,7 +141,6 @@ spec:
             # because this composition's render step is named render-tektoncicd-resources, not
             # render-github-resources, so the grep sweep that found the others didn't match this
             # directory. Every TektonCICD XR on kiac-dev was Synced: False from this.
-            <<- $platformOwner := "jfillman" >>
             <<- if $clusterOk >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile
@@ -156,7 +164,7 @@ spec:
                     type: <<$spec.type>>
                     gitopsRepoUrl: <<$spec.gitopsRepoUrl | default "">>
                     appRepoUrl: <<$spec.appRepoUrl>>
-                    githubOwner: <<$platformOwner>>
+                    githubOwner: <<$scmOwner>>
                     catalogNamespace: platform-catalog
                     registerPipelinesAsCode: <<$spec.registerPipelinesAsCode>>
                   <<- if $spec.extraGitopsRepos >>

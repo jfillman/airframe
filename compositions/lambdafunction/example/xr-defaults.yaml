@@ -5,7 +5,7 @@ metadata:
   name: resize-fn
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   runtime: nodejs22
   region: us-east-1
   visibility: private

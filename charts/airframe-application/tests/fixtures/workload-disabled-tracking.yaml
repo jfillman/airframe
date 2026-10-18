@@ -5,4 +5,4 @@ rollout:
   enabled: false
 releaseTracking:
   appNamespace: app-guard-test-cicd
-  releaseId: "chain1:kind-prod/staging"
+  releaseId: "chain1:example-prod/staging"

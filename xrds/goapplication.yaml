@@ -93,7 +93,7 @@ spec:
                 devCluster:
                   type: string
                   description: >-
-                    Which dev cluster this app is onboarded onto - e.g. "kind-dev".
+                    Which dev cluster this app is onboarded onto: its name in the cluster registry (e.g. "example-dev", an example).
                     An app is pinned to exactly one. Checked live against the
                     cluster registry (gitops-cluster-dev/00-bootstrap/
                     cluster-registry/) via a Crossplane extra-resources lookup:

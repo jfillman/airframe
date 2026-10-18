@@ -23,7 +23,7 @@ resources:
       registry:
       - passwordSecretName: registry-password
         server: ghcr.io
-        username: jfillman
+        username: example-org
       resourceGroupNameRef:
         name: smoke-az-fn-rg
       revisionMode: Single

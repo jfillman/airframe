@@ -16,8 +16,7 @@
 # type: dev + cicdReady: "true" (not type: upper + crossplaneReady, which
 # ApplicationEnvironment's own gate checks) - a dev cluster is defined by running
 # platform-cicd's control plane, and cicdReady is exactly the field that flips true
-# once that's GitOps-managed and live-verified on a given cluster (see kind-dev.yaml's
-# own history).
+# once that's GitOps-managed and live-verified on a given cluster.
 #
 # $clusterOk/$xrName/$devCluster/$tenantsRepo are declared once here, not redeclared
 # per file below - Go template variables declared at this (unindented) scope persist
@@ -28,7 +27,7 @@
 # applicationenvironment/templates/status/status.yaml does for its own gate.
 #
 # $tenantsRepo now comes from the registry entry's own data.tenantsRepo, not a
-# hardcoded "gitops-cluster-dev-tenants" literal - kind-dev's tenants repo is a legacy
+# hardcoded "gitops-cluster-dev-tenants" literal - the dev cluster's tenants repo is a legacy
 # name that breaks the gitops-cluster-<cluster>-tenants convention every upper cluster
 # uses (renaming the real, live repo was out of scope - too disruptive to already-wired
 # ArgoCD Applications). Recorded as registry data instead so a future second dev
@@ -48,11 +47,20 @@
 <<- $clusterType := "" >>
 <<- $cicdReady := "" >>
 <<- $tenantsRepo := "" >>
+<<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+       record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+       without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+       owner-dependent objects fall back to what they already observe or wait. */ ->>
+<<- $scmOwner := "" >>
 <<- if gt (len $items) 0 >>
   <<- $cm := (index $items 0).resource >>
   <<- $clusterType = $cm.data.type >>
   <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
   <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+  <<- $scmOwner = index $cm.data "scmOwner" | default "" >>
+  <<- if not $scmOwner >>
+    <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+  <<- end >>
   <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
     <<- $clusterOk = true >>
   <<- end >>

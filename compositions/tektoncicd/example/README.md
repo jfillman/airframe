@@ -5,7 +5,7 @@ needed. Because the Composition uses `source: Inline` (see `../build-composition
 `../composition.yaml` is directly renderable as-is — no wrapper script needed.
 
 ```shell
-# Gate fails: no cluster-registry ConfigMap for kind-dev in this render's world, so
+# Gate fails: no cluster-registry ConfigMap for example-dev in this render's world, so
 # render-tektoncicd-resources renders nothing and status reports DevClusterReady:
 # False / CicdOnboarded: False, while this XR's own Ready stays vacuously True
 # (nothing composed to wait on).

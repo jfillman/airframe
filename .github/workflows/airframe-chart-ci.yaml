@@ -28,7 +28,7 @@ jobs:
         # the chart warns on the empty default name; only real failures matter
       - run: charts/airframe-application/tests/run.sh
       - run: helm lint charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml
-      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -q 'name: kiac-dev'"
+      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -q 'name: example-dev-alias'"
       # C9: the infisical block reaches every record, in-cluster URL only on the infisicalHost cluster
       - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'infisicalUrl: \"http://infisical.example:31800/api\"' | grep -qx 1"
       # AP-A1: autopilotReady renders on the control-plane cluster (and its alias), and an upper cluster carrying it fails
@@ -36,8 +36,11 @@ jobs:
       - run: "! helm template r charts/cluster-registry -f charts/cluster-registry/tests/autopilot-on-upper.bad.yaml"
       # aws: the account id survives as a 12-digit string (leading zero kept) and becomes the boundary ARN on every record
       - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'awsPermissionsBoundaryArn: \"arn:aws:iam::012345678901:policy/HangarCloudTargetBoundary\"' | grep -qx 3"
-      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'serviceAccountIssuer: \"https://issuer.example/oidc/kind-dev\"' | grep -qx 2"
+      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'serviceAccountIssuer: \"https://issuer.example/oidc/example-dev\"' | grep -qx 2"
       - run: "! helm template r charts/cluster-registry -f charts/cluster-registry/tests/aws-account-unquoted.bad.yaml"
+      # scm: the fleet's GitHub owner reaches every record as scmOwner, and a fleet file without it fails
+      - run: "helm template r charts/cluster-registry -f charts/cluster-registry/tests/clusters.example.yaml | grep -c 'scmOwner: \"example-org\"' | grep -qx 3"
+      - run: "! helm template r charts/cluster-registry -f charts/cluster-registry/tests/scm-owner-missing.bad.yaml"
       - run: python3 tools/build-compositions --check
       - run: python3 tools/gen_airframe_schema.py --check --coverage
       - run: python3 tools/gen_component_outputs.py --check

@@ -15,7 +15,7 @@ spec:
   ecs:
     region: us-east-1
     architecture: arm64
-  devCluster: kind-dev
+  devCluster: example-dev
   pythonVersion: "3.12"
   packageManager: pip
   port: 8080

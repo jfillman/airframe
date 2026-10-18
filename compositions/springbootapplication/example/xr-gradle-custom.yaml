@@ -4,7 +4,7 @@ metadata:
   name: checkout-payments
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   description: Payments service for the demo storefront
   javaVersion: "17"
   buildTool: gradle

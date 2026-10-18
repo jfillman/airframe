@@ -9,8 +9,9 @@
 #
 # gitopsOwner/diagnosisJobImage are the only two org-wide settings this Composition's
 # `input` carries - everything else (which app, which cluster/env, GitOps repo name,
-# manifest path) the function derives from the XR's own spec + the fixed platform
-# owner default baked into fn.py. See rolloutwatches.catalog.hangar.io's own header for
+# manifest path) the function derives from the XR's own spec; the GitHub owner comes from
+# the cluster registry record named after spec.cluster (data.scmOwner, the fleet's scm.owner).
+# Set gitopsOwner here only to override that. See rolloutwatches.catalog.hangar.io's own header for
 # why this XRD needs no ApplicationEnvironment/NodeJSApplication live lookup at all.
 #
 # function-auto-ready is NOT included here, deliberately - unlike SLO/PrometheusServiceLevel,
@@ -35,6 +36,5 @@ spec:
       input:
         apiVersion: rolloutwatcher.fn.crossplane.io/v1beta1
         kind: Config
-        gitopsOwner: jfillman
         gitopsBaseBranch: main
         diagnosisJobImage: ghcr.io/jfillman/diagnosis-holmes-dispatch:v0.3.4

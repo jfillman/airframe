@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: kind-dev
+  name: example-dev
   namespace: crossplane-system
 data:
   type: dev

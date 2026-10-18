@@ -1,0 +1,13 @@
+# --required-resources fixture: a dev cluster record WITHOUT scmOwner (a clusters.yaml with no scm: block, rendered
+# by an older cluster-registry chart). The render must stop with a fatal result rather than guess an owner.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: "true"
+data:
+  type: dev
+  cicdReady: "true"
+  tenantsRepo: gitops-cluster-dev-tenants

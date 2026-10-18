@@ -3,7 +3,9 @@
 aws:
   accountId: 700017004810
   permissionsBoundaryPolicy: HangarCloudTargetBoundary
+scm:
+  owner: example-org
 clusters:
-  - name: kind-dev
+  - name: example-dev
     zone: lower
     roles: [control-plane, workloads]

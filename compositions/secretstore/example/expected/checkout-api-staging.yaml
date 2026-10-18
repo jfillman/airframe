@@ -3,14 +3,14 @@ resources:
 - apiVersion: project.infisical.m.hangar.io/v1alpha1
   kind: ProjectEnvironment
   metadata:
-    name: checkout-api-kind-prod-staging
+    name: checkout-api-example-prod-staging
     namespace: app-checkout-api-secrets
   name: infisical-environment
   spec:
     forProvider:
       name: staging
       projectIdRef:
-        name: checkout-api-kind-prod
+        name: checkout-api-example-prod
       slug: staging
     managementPolicies:
     - Create
@@ -23,7 +23,7 @@ resources:
 - apiVersion: kubernetes.m.crossplane.io/v1alpha1
   kind: Object
   metadata:
-    name: checkout-api-kind-prod-staging
+    name: checkout-api-example-prod-staging
     namespace: app-checkout-api-secrets
   name: per-env-cluster-secret-store
   spec:
@@ -32,7 +32,7 @@ resources:
         apiVersion: external-secrets.io/v1
         kind: ClusterSecretStore
         metadata:
-          name: checkout-api-kind-prod-staging
+          name: checkout-api-example-prod-staging
         spec:
           conditions:
           - namespaceRegexes:
@@ -43,16 +43,16 @@ resources:
                 universalAuthCredentials:
                   clientId:
                     key: clientId
-                    name: checkout-api-kind-prod-infisical-creds
+                    name: checkout-api-example-prod-infisical-creds
                     namespace: app-checkout-api-secrets
                   clientSecret:
                     key: clientSecret
-                    name: checkout-api-kind-prod-infisical-creds
+                    name: checkout-api-example-prod-infisical-creds
                     namespace: app-checkout-api-secrets
-              hostAPI: http://dev.kiac.local:31800/api
+              hostAPI: http://infisical.example:31800/api
               secretsScope:
                 environmentSlug: staging
-                projectSlug: checkout-api-kind-prod
+                projectSlug: checkout-api-example-prod
                 secretsPath: /
     managementPolicies:
     - '*'

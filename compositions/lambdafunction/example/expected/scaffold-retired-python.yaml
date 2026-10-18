@@ -9,8 +9,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard resize-py: add tenants/resize-py/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: resize-py-kind-dev\nspec:\n\
-        \  appRef:\n    name: resize-py\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: resize-py-example-dev\nspec:\n\
+        \  appRef:\n    name: resize-py\n  cluster: example-dev\n"
       file: tenants/resize-py/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -59,8 +59,8 @@ resources:
   name: tektoncicd
   spec:
     appName: resize-py
-    appRepoUrl: https://github.com/jfillman/resize-py
-    devCluster: kind-dev
+    appRepoUrl: https://github.com/example-org/resize-py
+    devCluster: example-dev
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (resize-py-tektoncicd) to report its own CicdOnboarded condition - resolves

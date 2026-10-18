@@ -36,7 +36,11 @@
 <<- if eq $tektonCicdGroupOverride "hangar" >>
   <<- $tektonCicdApiVersion = "catalog.hangar.io/v1alpha1" >>
 <<- end >>
-<<- $platformOwner := "jfillman" >>
+<<- /* Repo URLs from the registry's scmOwner (00-devcluster-gate.yaml), never a literal owner. No registry
+       record yet: keep what the child already has, or render no child until the owner is known. */ ->>
+<<- $childRepoUrl := dig "resource" "spec" "appRepoUrl" "" $obsTektonCicd >>
+<<- if $scmOwner >><<- $childRepoUrl = printf "https://github.com/%s/gitops-infra-%s" $scmOwner $xrName >><<- end >>
+<<- if $childRepoUrl >>
 apiVersion: <<$tektonCicdApiVersion>>
 kind: TektonCICD
 metadata:
@@ -47,7 +51,8 @@ spec:
   appName: <<$xrName>>
   type: infra
   registerPipelinesAsCode: false
-  gitopsRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
-  appRepoUrl: <<printf "https://github.com/%s/gitops-infra-%s" $platformOwner $xrName>>
+  gitopsRepoUrl: <<$childRepoUrl>>
+  appRepoUrl: <<$childRepoUrl>>
   devCluster: <<$devCluster>>
+<<- end >>
 ---

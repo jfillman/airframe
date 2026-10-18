@@ -11,7 +11,12 @@
 <<- $runtime := $spec.runtime >>
 <<- $region := $spec.region >>
 <<- $visibility := $spec.visibility >>
-<<- $platformOwner := "jfillman" >>
+<<- /* Module path github.com/<scmOwner>/<repo>: the owner is the registry record's scmOwner (00-devcluster-gate.yaml),
+       never a literal. Without it (no registry record yet, or a transient read failure) an existing go.mod keeps the
+       module line it was created with; a go.mod that does not exist yet is not rendered until the owner is known. */ ->>
+<<- $obsGoMod := index (.observed.resources | default dict) "src-repo-go-mod" | default dict >>
+<<- $modulePath := regexReplaceAll "^module " (regexFind "module [^\\n]+" (dig "resource" "spec" "forProvider" "content" "" $obsGoMod)) "" >>
+<<- if $scmOwner >><<- $modulePath = printf "github.com/%s/%s" $scmOwner $xrName >><<- end >>
 <<- $rieFlag := "" >>
 <<- $rieArgs := "" >>
 <<- if eq $runtime "go" >><<- $rieFlag = "--entrypoint /usr/local/bin/aws-lambda-rie " >><<- $rieArgs = " ./main" >><<- end >>
@@ -248,7 +253,7 @@ spec:
 ---
 <<- end >>
 <<- if eq $runtime "go" >>
-<<- if not (has "src-repo-go-mod" $scaffoldDone) >>
+<<- if and $modulePath (not (has "src-repo-go-mod" $scaffoldDone)) >>
 apiVersion: repo.github.m.upbound.io/v1alpha1
 kind: RepositoryFile
 metadata:
@@ -266,7 +271,7 @@ spec:
     file: go.mod
     overwriteOnCreate: false
     content: |
-      module github.com/<<$platformOwner>>/<<$xrName>>
+      module <<$modulePath>>
 
       go 1.24
 

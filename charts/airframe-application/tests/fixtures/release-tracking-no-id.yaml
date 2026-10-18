@@ -3,6 +3,6 @@ envName: staging
 release:
   image: {repository: registry.example/guard-test, tag: v2}
 releaseTracking:
-  cluster: kind-prod
+  cluster: example-prod
   appNamespace: app-guard-test-cicd
   chainId: chain1

@@ -162,7 +162,7 @@ spec:
             # the first actual use of this mechanism in this catalog, confirmed against
             # function-go-templating v0.12.3's own docs rather than assumed: a `kind:
             # ExtraResources` meta-resource below asks Crossplane's core to fetch a named
-            # ConfigMap from the LOCAL cluster (kind-dev, where this Composition's own Crossplane
+            # ConfigMap from the LOCAL cluster (the dev cluster, where this Composition's own Crossplane
             # runs - matches Bootstrap-tier's centralized-on-dev design, no cross-cluster read
             # needed for the gate itself). Standard two-pass behavior: the reconcile that first
             # adds this requirement won't see data yet (.extraResources empty) - $clusterOk stays
@@ -200,7 +200,6 @@ spec:
             <<- $appName := $spec.appName >>
             <<- $env := $spec.env >>
             <<- $cluster := $spec.cluster >>
-            <<- $platformOwner := "jfillman" >>
             <<- $tenantsRepo := printf "gitops-cluster-%s-tenants" $cluster >>
             <<- /* An InfraService's deploy repo is gitops-infra-<name> (no source repo exists, so the same repo
                    is also its "app" repo), unlike an app's gitops-<name>. spec.appType says which; default app.
@@ -211,11 +210,6 @@ spec:
             <<- if eq $appType "infra" >>
               <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
             <<- end >>
-            <<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
-            <<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
-            <<- if eq $appType "infra" >>
-              <<- $appRepoUrl = $gitopsRepoUrl >>
-            <<- end >>
             <<- $configMapGenerator := $spec.configMapGenerator | default false >>
             <<- $chart := $spec.chart | default dict >>
             <<- $allExtra := .extraResources | default dict >>
@@ -224,13 +218,30 @@ spec:
             <<- $clusterOk := false >>
             <<- $clusterType := "" >>
             <<- $crossplaneReady := "" >>
+            <<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+                   record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+                   without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+                   owner-dependent objects fall back to what they already observe or wait. */ ->>
+            <<- $platformOwner := "" >>
             <<- if gt (len $items) 0 >>
               <<- $cm := (index $items 0).resource >>
               <<- $clusterType = $cm.data.type >>
               <<- $crossplaneReady = index $cm.data "crossplaneReady" | default "" >>
+              <<- /* The registry record's tenantsRepo wins over the gitops-cluster-<cluster>-tenants convention, the same
+                     field the Bootstrap tier's dev-cluster gate already reads. */ ->>
+              <<- with index $cm.data "tenantsRepo" >><<- $tenantsRepo = . >><<- end >>
+              <<- $platformOwner = index $cm.data "scmOwner" | default "" >>
+              <<- if not $platformOwner >>
+                <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+              <<- end >>
               <<- if and (eq $clusterType "upper") (eq $crossplaneReady "true") >>
                 <<- $clusterOk = true >>
               <<- end >>
+            <<- end >>
+            <<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
+            <<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
+            <<- if eq $appType "infra" >>
+              <<- $appRepoUrl = $gitopsRepoUrl >>
             <<- end >>
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
@@ -400,12 +411,12 @@ spec:
             # Renamed from cluster-app-yaml.yaml, content reshaped from flat app.yaml fields to
             # the nested platformIdentity: schema (2026-08-18) - the two files this catalog wrote
             # per app were "almost identical, one a subset of the other," sitting side by side in
-            # the same tenants/<app>/ directory on kind-dev (see nodejsapplication's own
+            # the same tenants/<app>/ directory on the dev cluster (see nodejsapplication's own
             # cicd-identity-yaml.yaml header for the full history, including the real .git-suffix
             # PaC-matching bug that made a naive merge unsafe until the whole system standardized
             # on one no-.git convention). This file is that same consolidation applied to the
             # OTHER cluster this catalog writes a tenant identity file onto - upper-env clusters
-            # other than kind-dev, which never got a CICD-identity file at all before now (no
+            # other than the dev cluster, which never got a CICD-identity file at all before now (no
             # platform-cicd instance runs there), only ever this one. Same nested schema as
             # nodejsapplication's identity.yaml everywhere, even though THIS cluster's own
             # tenant-appprojects chart still only reads .platformIdentity.appName/.gitopsRepoUrl
@@ -489,8 +500,8 @@ spec:
             ---
             # Commits two SecretStore XR manifests into this cluster's OWN
             # gitops-cluster-<cluster>-tenants/tenants/<appName>/xr-requests/ - picked up by
-            # THAT cluster's own xr-requests ApplicationSet (kind-dev's already existed;
-            # kind-prod's is new, gitops-cluster-kind-prod/02-argocd-apps/xr-requests/ -
+            # THAT cluster's own xr-requests ApplicationSet (the dev cluster's already existed;
+            # each upper cluster has its own, gitops-cluster-<cluster>/02-argocd-apps/xr-requests/ -
             # every upper cluster needs its own copy of this mechanism now, mirrored, not
             # shared, since xr-requests is inherently per-cluster: it applies directly onto
             # whichever cluster's ArgoCD is watching it).
@@ -696,6 +707,10 @@ spec:
             # instead, same "structural backstop, refuse rather than partially succeed" instinct
             # already used for the ClusterReady condition (status/status.yaml).
             #
+            # clusterType (2026-10-16) is the target cluster's registry `type`, read by 00-cluster-gate.yaml
+            # (always "upper" here: the gate admits nothing else). The chart decides its dev-vs-upper secret
+            # layout from it instead of comparing `cluster` with a dev cluster name it used to default.
+            #
             # Identity only, no rollout: key (2026-10-10). The environment gets the chart's default
             # workload (a service), and nothing renders until a release names an image (release.yaml,
             # written by Glidepath). This used to seed rollout: null as "nothing deployed yet", but that
@@ -781,6 +796,7 @@ spec:
                   appName: <<$appName>>
                   appType: <<$appType>>
                   cluster: <<$cluster>>
+                  clusterType: <<$clusterType>>
                   envName: <<$env>>
                 commitMessage: <<printf "Bootstrap %s environment: add %s/%s/values.yaml" $env $cluster $env | toJson>>
             <<- end >>

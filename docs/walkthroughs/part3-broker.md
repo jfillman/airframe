@@ -2,11 +2,13 @@
 
 Converted from [`../user/quickstart-broker.md`](../user/quickstart-broker.md).
 
+Placeholders: `<dev-context>` are the names chosen when the clusters were built (render with `--dev-cluster` etc. to fill them in).
+
 ## skyport-broker is a synced, ready InfraService with a real RabbitMQ cluster behind it
 
 ```bash
-kubectl --context kiac-dev get infraservice skyport-broker -n infra-skyport-broker-cicd
-kubectl --context kiac-dev get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
+kubectl --context "<dev-context>" get infraservice skyport-broker -n infra-skyport-broker-cicd
+kubectl --context "<dev-context>" get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
 ```
 
 **Expected:** the InfraService XR is Synced/Ready; the RabbitmqCluster reports AllReplicasReady=True
@@ -14,7 +16,7 @@ kubectl --context kiac-dev get rabbitmqcluster skyport-broker -n app-skyport-bro
 ## flight-api is attached to the broker as a publisher (its own mq credentials exist)
 
 ```bash
-kubectl --context kiac-dev get secret flight-mq-user-credentials -n app-flight-api-dev
+kubectl --context "<dev-context>" get secret flight-mq-user-credentials -n app-flight-api-dev
 ```
 
 **Expected:** a flight-mq-user-credentials Secret exists with username/password keys

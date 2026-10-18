@@ -165,6 +165,7 @@
   section > h3 { margin-top: 1.6rem; }
   section > p.prose { max-width: 68ch; }
 </style>
+<div class="wrap" style="border:1px solid #c96442;border-radius:8px;padding:10px 14px;margin:12px auto;background:#fff"><b>Out of date in places (2026-10-16).</b> This illustrated copy predates <code>deploy.environments</code> (it still shows the removed <code>lowerEnvironments</code>/<code>upperEnvironments</code> keys) and uses example cluster names. The <a href="../quickstart-flight-api.md">markdown guide</a> is current; follow it where the two differ. Cluster names are <code>&lt;dev-cluster&gt;</code>/<code>&lt;prod-cluster&gt;</code>, chosen when the clusters were built.</div>
 <div class="wrap">
 <div class="masthead">
 <p class="eyebrow">Hangar Platform · Airframe · Developer Guide · Part 2</p>
@@ -317,7 +318,7 @@
 </div>
 <div class="steps"><div class="step">
 <h3>Tower → Create → SpringBootApplication</h3>
-<div class="table-scroll"><table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td class="name">Name</td><td><code>flight-api</code></td></tr><tr><td class="name">devCluster</td><td><code>dev</code></td></tr><tr><td class="name">description</td><td>Skyport system of record: flights and gates in Postgres</td></tr><tr><td class="name">javaVersion</td><td><code>21</code></td></tr><tr><td class="name">buildTool</td><td><code>maven</code></td></tr><tr><td class="name">groupId</td><td><code>io.skyport.flight</code></td></tr><tr><td class="name">port</td><td><code>8080</code></td></tr><tr><td class="name">visibility</td><td><code>private</code></td></tr></tbody></table></div>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody><tr><td class="name">Name</td><td><code>flight-api</code></td></tr><tr><td class="name">devCluster</td><td><code>&lt;dev-cluster&gt;</code></td></tr><tr><td class="name">description</td><td>Skyport system of record: flights and gates in Postgres</td></tr><tr><td class="name">javaVersion</td><td><code>21</code></td></tr><tr><td class="name">buildTool</td><td><code>maven</code></td></tr><tr><td class="name">groupId</td><td><code>io.skyport.flight</code></td></tr><tr><td class="name">port</td><td><code>8080</code></td></tr><tr><td class="name">visibility</td><td><code>private</code></td></tr></tbody></table></div>
 <div class="callout" style="border-left-color:var(--accent);background:var(--accent-tint)">
 <p class="label" style="color:var(--accent)">Two values that matter</p>
 <p><b><code>dev</code> exactly</b>, even if your dev cluster goes by another name (see part 1, section 02: the dev ApplicationSets hard-code that name). <b><code>io.skyport.flight</code></b> for <code>groupId</code>: the scaffold uses it as the app's one Java package, and the code you copy in sits in <code>io/skyport/flight/</code>.</p>
@@ -366,7 +367,7 @@ git add -A &amp;&amp; git commit -m "flight-api: flights and gates in Postgres"<
 </div>
 <div class="steps"><div class="step">
 <h3>Declare the environment</h3>
-<span class="filepath">flight-api/platform/envs/dev.yaml <span class="tag ground">ground</span></span>
+<span class="filepath">flight-api/glidepath/envs/dev.yaml <span class="tag ground">ground</span></span>
 <pre>envName: dev
 
 components:
@@ -421,7 +422,7 @@ pipelines:
 </div>
 <div class="step">
 <h3>Commit both, merge the .tekton PR, push</h3>
-<p class="prose">As in part 1 the <code>deploy</code> stage commits the image straight into <code>platform/envs/dev.yaml</code> on <code>main</code>, so <code>git pull</code> before your next push. The first start is slower than a NodeJS app: the JVM starts, then Flyway waits for the database if it isn't up yet (it retries for about two and a half minutes) and runs the two migrations.</p>
+<p class="prose">As in part 1 the <code>deploy</code> stage commits the image straight into <code>glidepath/envs/dev.yaml</code> on <code>main</code>, so <code>git pull</code> before your next push. The first start is slower than a NodeJS app: the JVM starts, then Flyway waits for the database if it isn't up yet (it retries for about two and a half minutes) and runs the two migrations.</p>
 
 </div>
 <div class="step">
@@ -481,7 +482,7 @@ cp /tmp/airframe/examples/skyport/boarding-api/{app.js,index.js,reservations.js}
 cp /tmp/airframe/examples/skyport/boarding-api/public/index.html public/
 cp /tmp/airframe/examples/skyport/boarding-api/test/app.test.js test/
 npm test                                     # 11 passing</pre>
-<p class="prose">Then add one line to its <code>platform/envs/dev.yaml</code>, commit and push:</p>
+<p class="prose">Then add one line to its <code>glidepath/envs/dev.yaml</code>, commit and push:</p>
 <pre>env:
   - { name: REDIS_URL, value: "redis://cache-master:6379" }
   - { name: FLIGHT_API_URL, value: "http://flight-api.app-flight-api-dev.svc.cluster.local:8080" }</pre>
@@ -509,7 +510,7 @@ npm test                                     # 11 passing</pre>
 </div>
 <div class="steps"><div class="step">
 <h3>Declare it and create the environment</h3>
-<p class="prose">Add <code>{ name: staging, tier: flight, cluster: prod }</code> to <code>deploy.environments</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts with no image, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
+<p class="prose">Add <code>{ name: staging, tier: flight, cluster: &lt;prod-cluster&gt; }</code> to <code>deploy.environments</code>, <code>governance.allowedCommitSigners</code> and a <code>release</code> stage to <code>cicd.yaml</code> (as in part 1), merge the <code>.tekton/</code> PR, then <b>Tower → Create → ApplicationEnvironment</b> named <code>flight-api-prod-staging</code>. The environment starts with no image, so <b>the database is created first</b>, in <code>app-flight-api-staging</code>.</p>
 
 </div>
 <div class="step">

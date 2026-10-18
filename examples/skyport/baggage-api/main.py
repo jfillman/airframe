@@ -5,6 +5,7 @@ import socket
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from auth import Unauthorized, Verifier
 from baggage import BaggageStore, connect
 from events import Consumer
 
@@ -20,6 +21,7 @@ if not MONGODB_URI:
     sys.exit(1)
 STORE = BaggageStore(connect(MONGODB_URI))
 CONSUMER = Consumer(STORE, os.environ)
+AUTH = Verifier.from_env(os.environ)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -31,6 +33,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0].rstrip("/") or "/"
+        if AUTH.requires_auth(path):
+            try:
+                AUTH.check(self.headers.get("Authorization"))
+            except Unauthorized as e:
+                return self._unauthorized(str(e))
         if path == "/healthz":
             return self._json(200, {"status": "ok"})
         if path == "/api/whoami":
@@ -46,6 +53,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, f) if f else self._json(404, {"error": "no bags seen for that flight yet"})
         self._json(200, {"app": "baggage-api", "endpoints": ["/api/bags", "/api/bags/{flight}", "/api/reroutes",
                                                             "/api/events/status", "/api/whoami", "/healthz"]})
+
+    def _unauthorized(self, why):
+        body = json.dumps({"error": "unauthorized"}).encode()
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("WWW-Authenticate", 'Bearer error="invalid_token", error_description="%s"' % why.replace('"', "'"))
+        self.end_headers()
+        self.wfile.write(body)
 
     def log_message(self, *a):
         pass

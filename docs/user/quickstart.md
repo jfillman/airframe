@@ -17,6 +17,12 @@ to make canary and blue/green deployments *visible*.
 > not prose - is [`../walkthroughs/part1-boarding-api.yaml`](../walkthroughs/part1-boarding-api.yaml)
 > (run it with `tools/walkthrough-runner`).
 
+**Cluster names in this guide.** `<dev-cluster>` and `<prod-cluster>` are the names the two clusters
+were given when they were built (in the owner's lab, for example, `hangar-dev` and `hangar-prod`). Each
+is the cluster's `name:` in the fleet's `clusters.yaml` and, by the one-name rule, also its `kubectl`
+context. Infisical projects are named `<app>-<cluster>`. Standing up both clusters' Skyport from nothing,
+in order, is the [Skyport runbook](skyport-runbook.md).
+
 **What has and hasn't been verified.**
 - **Verified:** the app itself. Its 11 tests pass, and it was run against a real Redis
   container, including two instances sharing one counter.
@@ -31,10 +37,11 @@ to make canary and blue/green deployments *visible*.
 
 **Starting over?** If a previous `boarding-api` was decommissioned, finish
 [decommissioning](decommission-app.md) first — in particular delete its Infisical
-projects (`boarding-api-dev`, `boarding-api-prod`) and any
+projects (`boarding-api-<dev-cluster>`, `boarding-api-<prod-cluster>`) and any
 `boarding-api` key in the prod cluster's `secretstore-provisioner` ConfigMap, or the new
 app tries to adopt a dead project. Also move any old local `boarding-api` checkout
-out of the way: section 04 clones into that directory name.
+out of the way: section 04 clones into that directory name. The runbook's
+[before you start](skyport-runbook.md#before-you-start-leftovers-from-a-previous-run) lists every leftover.
 
 **Two architectures.** The dev cluster is arm64 and the prod cluster is
 amd64. Leave `build.platforms` unset in `cicd.yaml` so your image is built for both;
@@ -48,9 +55,9 @@ mechanisms with different review bars.
 | | **Ground** | **Flight** |
 |---|---|---|
 | What it is | A disposable environment on the dev cluster | A governed environment on a real upper cluster |
-| Declared in | `platform/envs/<name>.yaml` in **your source repo** | An `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml` |
-| Gets its image from | Your pipeline's `deploy` stage, **committed straight to `main`** — no PR | Your pipeline's `release` stage, as a **reviewed pull request** |
-| Configured with | Editing `platform/envs/<name>.yaml` by hand | Tower's **App Configuration** tab (each save is a PR) |
+| Declared in | `glidepath/envs/<name>.yaml` in **your source repo** | An `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml` |
+| Gets its image from | Your pipeline's `deploy` stage, **committed straight to `main`** (into `glidepath/envs/<name>.release.yaml`) — no PR | Your pipeline's `release` stage, as a **reviewed pull request** |
+| Configured with | Editing `glidepath/envs/<name>.yaml` by hand, or Tower's Environments tab (a PR) | Tower's **App Configuration** tab (each save is a PR) |
 | Cluster | Dev cluster only | Any cluster the registry marks `type: upper` |
 
 Both render through the same Helm chart, `airframe-application`. "Ground" and
@@ -66,16 +73,21 @@ its XRD. Fill in:
 | Field | Value |
 |---|---|
 | Name | `boarding-api` |
-| `devCluster` | `dev` |
+| `devCluster` | `<dev-cluster>` |
 | `description` | Skyport gate board: Redis-cached flight lookups and a canary visualizer |
 | `nodeVersion` | `20` |
 | `packageManager` | `npm` |
 | `port` | `8080` |
 | `visibility` | `private` |
 
-**Use `dev` exactly, even if your dev cluster goes by another name.** The dev ApplicationSets hard-code `cluster: dev` when they render an environment's ExternalSecret, so it reads the store `<app>-dev`. An app created with any other `devCluster` value gets a store named `<app>-<that value>`, its ExternalSecret never syncs, and its pods sit in `CreateContainerConfigError`. And don't remove `dev` from the cluster-registry: every existing app is pinned to it, and removing it turns their stores `InvalidProviderConfig` fleet-wide.
+**`devCluster` is the dev cluster's registry name**, the `name:` of its record in the fleet's
+`clusters.yaml`. The same name is Glidepath's `devClusterName` and the `cluster:` the dev ApplicationSets
+stamp when they render an environment's ExternalSecret, which reads the store `<app>-<that name>`. An app
+created with any other value gets a store nobody reads, its ExternalSecret never syncs, and its pods sit in
+`CreateContainerConfigError`. Don't remove or rename a cluster in the registry while apps are pinned to it:
+their stores turn `InvalidProviderConfig` fleet-wide.
 
-Submitting opens a pull request into `gitops-cluster-dev-tenants` at
+Submitting opens a pull request into the dev cluster's tenants repo (its `tenantsRepo` in `clusters.yaml`) at
 `tenants/boarding-api/xr-requests/boarding-api.yaml`. **Merge it** — the
 `xr-requests` ApplicationSet applies that file to the dev cluster as a
 `NodeJSApplication` XR:
@@ -93,8 +105,15 @@ boarding-api   True     True    nodejsapplications.catalog.hangar.io    3m
 Crossplane then creates the real `boarding-api` source repo and an empty
 `gitops-boarding-api` repo, and registers the app with Glidepath. The source repo
 starts with a hello-world `index.js`, a `package.json`, a `Containerfile`, and a
-minimal `cicd.yaml` (`build` only, `agent: nodejs-20`, unit tests off). You now have a
+starter `cicd.yaml` (build, then deploy to `dev`; `agent: nodejs-20`, unit tests off). You now have a
 repo — but no running pipeline yet, and nothing deployed.
+
+> **Replace the starter `cicd.yaml` before the first build.** As of this writing the scaffold
+> (`compositions/*/templates/render-github-resources/cicd-yaml.yaml`) still writes
+> `deploy.lowerEnvironments` / `upperEnvironments` / `promotionOrder`, which Glidepath removed on
+> 2026-10-07: `preflight` refuses them ("cicd.yaml sets deploy.lowerEnvironments, which
+> deploy.environments replaced") and so does the `glidepath-app` chart. Section 06 gives the
+> replacement; make it part of your first push.
 
 ## 03 — Merge the pipeline onboarding PR
 
@@ -114,10 +133,14 @@ These files are never hand-edited. From then on, **every push that changes
 `cicd.yaml` opens a fresh PR** regenerating `.tekton/` if anything changed —
 merge those too. (You will meet this again in sections 06 and 07.) If nothing
 happens after you push, check first that the platform's GitHub App has access to
-the repo.
+the repo, then that webhooks reach the dev cluster at all (Glidepath known gap 8:
+when the delivery path dies, pushes trigger nothing, silently).
+
+**Pull-request pipelines need the `preview` label.** A PR shows no checks until it is
+labelled `preview`; adding the label is what starts them (Glidepath known gap 7).
 
 Once merged, a push to `main` runs the scaffolded `build` stage and publishes a
-multi-arch image to `ghcr.io/<owner>/boarding-api`.
+multi-arch image to `ghcr.io/<github-owner>/boarding-api`.
 
 ## 04 — Pull in the code
 
@@ -126,7 +149,7 @@ The scaffold's `index.js` is hello-world. The real `boarding-api` lives in the
 
 ```bash
 git clone https://github.com/jfillman/airframe.git /tmp/airframe
-git clone https://github.com/jfillman/boarding-api.git && cd boarding-api   # fails if ./boarding-api already exists
+git clone https://github.com/<github-owner>/boarding-api.git && cd boarding-api   # fails if ./boarding-api already exists
 
 cp -R /tmp/airframe/examples/skyport/boarding-api/. .
 git add -A && git commit -m "boarding-api: gate board with Redis-backed lookups"
@@ -167,9 +190,9 @@ anywhere.** Onboarding creates the app, its repos, and its pipeline; it does not
 create a Deployment. Environments are separate objects, added next. There are two
 places to configure them, matching the two tiers:
 
-- **Ground** — onboarding scaffolds `platform/envs/dev.yaml` and a build-then-deploy-to-`dev`
-  `cicd.yaml` for you; you only edit them to customize (section 06).
-  *(Apps onboarded before 2026-10-03 have neither and need the manual steps in section 06.)*
+- **Ground** — onboarding scaffolds `glidepath/envs/dev.yaml` and a build-then-deploy-to-`dev`
+  `cicd.yaml` for you; you edit them to customize (section 06), and the `cicd.yaml` must be
+  rewritten to the current schema (the note in section 02).
 - **Flight** — you use Tower's **App Configuration** tab (section 07). That tab
   edits `gitops-<app>/<cluster>/<env>/values.yaml` through pull requests, and it
   only lists **flight** environments — the `tier: flight` entries your `cicd.yaml` declares
@@ -182,9 +205,9 @@ A ground environment is two things: a file that creates the namespace, and a
 pipeline stage that puts an image in it.
 
 **Step 1 — declare the environment.** New apps already have this file: the
-onboarding PR adds `platform/envs/dev.yaml` (plus `platform/base.yaml` and
-`platform/pr-env.yaml`) for every `tier: ground` entry in `deploy.environments`. For an app
-onboarded earlier, create `platform/envs/dev.yaml` in the `boarding-api` repo:
+onboarding PR adds `glidepath/envs/dev.yaml` (plus `glidepath/base.yaml` and
+`glidepath/pr-env.yaml`) for every `tier: ground` entry in `deploy.environments`. For an app
+onboarded earlier, create `glidepath/envs/dev.yaml` in the `boarding-api` repo:
 
 ```yaml
 # envName, not env — env is a reserved key in the chart's container env-var list.
@@ -193,12 +216,12 @@ onboarded earlier, create `platform/envs/dev.yaml` in the `boarding-api` repo:
 envName: dev
 ```
 
-Do not copy another app's `platform/envs/*.release.yaml` — it is machine-owned, wins the
+Do not copy another app's `glidepath/envs/*.release.yaml` — it is machine-owned, wins the
 merge over everything else, and pins that app's image (a copied one made `sky-marshall`
 run `boarding-api`'s container).
 
 A dev-cluster-only `ApplicationSet` (`boarding-api-lower-envs`) watches
-`platform/envs/*.yaml` in your repo. Within a sync interval you get an empty
+`glidepath/envs/*.yaml` in your repo (never `*.release.yaml`). Within a sync interval you get an empty
 namespace, `app-boarding-api-dev`, with the baseline ServiceAccount and
 NetworkPolicy and no workload.
 
@@ -215,7 +238,7 @@ build:
     enabled: true         # runs ./test.sh, which the code you copied in provides
 
 deploy:
-  environments:
+  environments:          # every environment once, in promotion order
     - { name: dev, tier: ground }
 
 pipelines:
@@ -235,17 +258,17 @@ Separately, ArgoCD reads the new `cicd.yaml` and provisions the deploy RBAC for
 `app-boarding-api-dev`.
 
 **Step 4 — run it.** Push to `main`. The `deploy` stage **commits
-`rollout.image.repository` and `rollout.image.tag` directly into
-`platform/envs/dev.yaml` on `main`** — no branch, no PR. `git pull` before your
-next push, or you'll be rebasing over the bot's commit.
+`release.image.repository` and `release.image.tag` into
+`glidepath/envs/dev.release.yaml` on `main`** — no branch, no PR. That file is
+machine-owned; your `dev.yaml` is not touched. `git pull` before your next push,
+or you'll be rebasing over the bot's commit.
 
 ```yaml
-# platform/envs/dev.yaml after the first deploy
-envName: dev
-rollout:
+# glidepath/envs/dev.release.yaml after the first deploy (machine-owned)
+release:
   image:
-    repository: ghcr.io/jfillman/boarding-api
-    tag: 0.1.0-a1b2c3d
+    repository: ghcr.io/<github-owner>/boarding-api
+    tag: 1.1.0-a1b2c3d
 ```
 
 The chart's defaults apply for everything else: two replicas, container port
@@ -272,7 +295,7 @@ several times: the counter jumps around, because the two pods each count on thei
 own (`counter: memory`). Keep that in mind for section 08.
 
 To change ground settings (replicas, ports, probes, resources), edit
-`platform/envs/dev.yaml` directly — the App Configuration tab does not cover it.
+`glidepath/envs/dev.yaml` directly, or the row's Values tab in Tower's Environments tab (a PR).
 
 ## 07 — Flight: a governed environment on an upper cluster
 
@@ -286,7 +309,7 @@ environment list from the `tier: flight` entries here:
 deploy:
   environments:             # promotion order (ADR-0019)
     - { name: dev, tier: ground }
-    - { name: staging, tier: flight, cluster: prod }
+    - { name: staging, tier: flight, cluster: <prod-cluster> }
 
 governance:
   allowedCommitSigners:
@@ -316,27 +339,27 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 
 | Field | Value | Notes |
 |---|---|---|
-| Name | `boarding-api-prod-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
+| Name | `boarding-api-<prod-cluster>-staging` | The XR's own name. Convention is `<app>-<cluster>-<env>`, as with every existing env. |
 | Namespace | `app-boarding-api-cicd` | The app's tenant namespace, `app-<app>-cicd` (`infra-<app>-cicd` for an InfraService). The `xr-requests` AppProject permits only these two prefixes, and the XR must be in the same namespace as its app. |
-| Owner | `group:default/jfillman` | Same as every existing env. |
+| Owner | a Backstage group, e.g. `group:default/<your-team>` | Who owns the env in the catalog. |
 | `appName` | `boarding-api` | Required. Labels the env and drives a deletion-protection `Usage` on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist. |
-| `cluster` | `prod` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
+| `cluster` | `<prod-cluster>` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
 | `env` | `staging` | Required. A DNS label, max 20 characters (`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) — it becomes part of the namespace `app-boarding-api-staging` and a git path. |
-| `configMapGenerator` | off | Opt-in to a Kustomize `configMapGenerator` source for this env's config files. Leave off unless you need it. |
+| `configMapGenerator` | off | Opt-in to a Kustomize `configMapGenerator` source for this env's config files. **Leave it off.** On, the env's Application also reads `<cluster>/<env>/configmap`, which nothing creates, so the first sync fails with `app path does not exist` until you add that folder by hand (Airframe [known gap 1](../admin/known-gaps.md)). |
 
 The Crossplane Settings page can stay at its defaults.
 
-Submitting opens a PR into `gitops-cluster-dev-tenants`
-(`tenants/boarding-api/xr-requests/boarding-api-prod-staging.yaml`). Merge
+Submitting opens a PR into the dev cluster's tenants repo
+(`tenants/boarding-api/xr-requests/boarding-api-<prod-cluster>-staging.yaml`). Merge
 it. Crossplane then commits a bootstrap `values.yaml` to
-`gitops-boarding-api/prod/staging/` and an onboarding entry to
+`gitops-boarding-api/<prod-cluster>/staging/` and an onboarding entry to
 the prod cluster's own tenants repo, so **the prod cluster's own ArgoCD** picks the env up — no
 cross-cluster credential is involved.
 
 ```
 $ kubectl get applicationenvironment -n app-boarding-api-cicd
 NAME                             SYNCED   READY   COMPOSITION                              AGE
-boarding-api-prod-staging   True     True    applicationenvironments.catalog.hangar.io   2m
+boarding-api-<prod-cluster>-staging   True     True    applicationenvironments.catalog.hangar.io   2m
 ```
 
 `kubectl describe` shows `ClusterReady: True` and `AppResolved: True`. The
@@ -370,9 +393,14 @@ step, so until it runs the Rollout has no image to start.
 ### Step 4 — release an image
 
 Push to `main`. After `build`, `test` and `deploy` to dev, the `release` stage
-opens a PR against `gitops-boarding-api` setting `rollout.image` for `staging`.
-Merge it — as a **signed** commit; GitHub's merge button produces an unsigned one,
-see Glidepath's `docs/admin/commit-signing.md` ("Merge strategy matters"). The prod cluster's
+opens a PR against `gitops-boarding-api` writing the image into
+`<prod-cluster>/staging/release.yaml`. Merge it **without GitHub's merge button**:
+all three button strategies (merge, squash, rebase) create a new, unsigned commit and
+the `provenance` gate fails. Fast-forward the signed commit instead
+(`git merge --ff-only <branch> && git push`); see Glidepath's
+[commit-signing.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/commit-signing.md)
+("Merge strategy matters"). Your commits must be `gitsign`-signed by an address in
+`governance.allowedCommitSigners`. The prod cluster's
 ArgoCD syncs it and the Rollout comes up on the target cluster (`kubectl get rollout`, or Tower).
 
 ## 08 — Add a Redis cache
@@ -406,7 +434,7 @@ Both tiers have what they need, and both clusters run airframe v0.3.83, which
 includes the Redis naming fix. All the images involved are multi-arch, checked
 against the registries.
 
-### Ground: add it to `platform/envs/dev.yaml`
+### Ground: add it to `glidepath/envs/dev.yaml`
 
 Name the component whatever you like; we use **`cache`**. The Composition sets the
 Bitnami chart's `fullnameOverride` to the component name, so the Service is
@@ -428,10 +456,14 @@ env:
     valueFrom: { secretKeyRef: { name: cache, key: redis-password } }
 ```
 
-(Keep the `rollout:` block the deploy stage wrote; only add the keys above. `env:` entries with
+(The image lives in `dev.release.yaml`, so nothing else changes here. `env:` entries with
 `valueFrom` need airframe v0.3.88 or later. On an older pin, the alternative is to copy the
 password once into `boarding-api`'s Infisical project as `redis-password` and list it under
-`secrets:` — `kubectl get secret cache -n app-boarding-api-dev -o jsonpath='{.data.redis-password}' | base64 -d`.)
+`secrets:`.)
+
+**Expect `Ready=False` for about ten minutes after adding or changing the component.** Redis is a
+`provider-helm` `Release`, which reports not-ready until its next poll though the pods are fine.
+Check the pods and the `cache` Secret instead of waiting on the XR.
 
 ### See it
 
@@ -495,16 +527,18 @@ the chart's own values, but no canary has been run with this app yet.
   `cicd.yaml` change. No merge, no pipeline.
 - **Copy the demo code over the scaffold**, keep the scaffolded `Containerfile`.
 - **Ground deploys itself after onboarding**: merge the onboarding PR(s) and the first push
-  builds and deploys to `dev` (the scaffold has both `platform/envs/dev.yaml` and a
-  `deploy` stage). Flight needs an `ApplicationEnvironment`, App Configuration, and a
+  builds and deploys to `dev` (the scaffold has both `glidepath/envs/dev.yaml` and a
+  `deploy` stage; rewrite the starter `cicd.yaml` to `deploy.environments` first). Flight needs an `ApplicationEnvironment`, App Configuration, and a
   `release` stage.
 - **App Configuration is flight-only**, and only lists `tier: flight` envs declared in
   `deploy.environments`.
 - **`envName`, never `env`**, as the environment's name key in
-  `platform/envs/*.yaml`.
+  `glidepath/envs/*.yaml`.
 - **No `rollout:` key means a service** (the chart default, rendered once a release sets
   an image); `rollout.enabled: false` is how an environment says it runs none.
-- **The ground deploy commits to `main` itself** — pull before you push.
+- **The ground deploy commits to `main` itself** (`glidepath/envs/<env>.release.yaml`) — pull before you push.
+- **Never merge a release PR with GitHub's button** — fast-forward the signed commit, or `provenance` fails.
+- **PR pipelines need the `preview` label.**
 - **`ApplicationEnvironment` rejects dev clusters** — `cluster` is live-gated to
   `type: upper`.
 - **Redis is a component**, not a Bootstrap object: add it to `components:`; its Service is `<name>-master`.

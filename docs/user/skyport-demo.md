@@ -10,10 +10,18 @@ Airframe's XRDs and versioned alongside them, while `hangar` is the docs umbrell
 Each service directory is what you copy into the source repo Airframe scaffolds for
 you (see the [quickstart](quickstart.md), section 03).
 
-> **Status.** `boarding-api` (Phase 0) and `flight-api` (Phase 1) exist. Everything else is a
-> plan (six AI-workload phases were added 2026-09-26, see below). The components the later phases depend on — RabbitMQ, MongoDB, OAuth server — are
-> **unbuilt** in Airframe today; each phase below lists what has to be built first. Postgres
-> is built: a dedicated CloudNativePG cluster per app environment.
+> **Status (2026-10-16).** All five services and both shared pieces were built and ran in the previous
+> lab, on its dev cluster and its prod cluster's staging, except `skyport-auth`, which ran on dev only.
+> Every component exists in Airframe: Redis, PostgreSQL, RabbitMQ (broker + attach), MongoDB, and Dex
+> (server + attach) as the OAuth server. Token enforcement (Phase 4's second half) is written, on the
+> apps' `dex-tokens` branches, and Dex comes to the prod cluster with Apron's prod profile; neither has
+> run on a cluster yet. The AI-workload phases are not built. The lab is being
+> rebuilt from scratch; nothing has been replayed on the new clusters yet. The order to stand it all
+> up again is the [Skyport runbook](skyport-runbook.md).
+>
+> `gate-api` (NodeJS) and `checkin-api` (Python) are two small extra services, outside the original
+> five, that took the release-file split end to end first ([part 6](quickstart-gate-api.md),
+> [part 7](quickstart-checkin-api.md)).
 
 ## The five services
 
@@ -22,7 +30,7 @@ you (see the [quickstart](quickstart.md), section 03).
 | **boarding-api** | `NodeJSApplication` | Redis · RabbitMQ (consumer) | The passenger-facing **gate board**: flight/gate lookups, boarding-pass scans, and the canary visualizer. Caches lookups in Redis. |
 | **flight-api** | `SpringBootApplication` | Postgres · RabbitMQ (producer) · OAuth (resource server) | System of record for flights and gates. A scheduled simulator delays flights and changes gates, recording an event each time (published to the broker from Phase 2). |
 | **baggage-api** | `PythonApplication` | RabbitMQ (consumer) · MongoDB | Tracks each bag's journey as a document. Consumes flight events to re-route bags when a gate changes. |
-| **skyport-auth** | `InfraService` | `oauth-server` | The OIDC provider. Issues the tokens `flight-api` and `baggage-api` validate. |
+| **skyport-auth** | `InfraService` | `dex` (server) | The OIDC provider (Dex, `client_credentials` only). Issues the tokens `flight-api` and `baggage-api` validate and `boarding-api` sends. |
 | **skyport-broker** | `InfraService` | `rabbitmq` | The shared message broker `flight-api`, `baggage-api` and `boarding-api` all attach to. |
 
 `GoApplication` is deliberately left out; the other four Bootstrap stacks
@@ -82,7 +90,7 @@ two unrelated consumers of one fact, which is exactly what a queue is for.
 | Postgres | flight-api | A relational system of record, schema migration on deploy, credentials read straight from the component's Secret |
 | RabbitMQ | flight-api → boarding-api, baggage-api | Fan-out events; a shared broker via `InfraService` |
 | MongoDB | baggage-api | Document storage that doesn't fit rows |
-| OAuth server | flight-api, baggage-api, boarding-api | Service-to-service tokens; one issuer for the platform |
+| Dex (OAuth server) | flight-api, baggage-api (resource servers), boarding-api (caller) | Service-to-service tokens; one issuer per cluster/env |
 | SLO / RolloutWatch / SecretStore | all five | The components that already exist, on every service |
 
 ## The canary test bench
@@ -125,15 +133,16 @@ Diagram: `hangar/docs/autopilot/diagrams/plan/07-skyport-ai-workloads.html`.
 
 ## Phases
 
-Each phase ends with something you can run. Nothing later than Phase 1 is built.
+Each phase ends with something you can run. "Previous lab" means it ran there; nothing has been
+replayed on the rebuilt clusters yet, and each part's walkthrough is how that gets proven.
 
 | Phase | Adds | Must exist first | Status |
 |---|---|---|---|
-| 0 | `boarding-api` (NodeJS) + Redis + canary UI — [quickstart](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Deployed on the dev cluster with Redis.** The canary and flight environment are the parts not yet walked. |
-| 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [quickstart part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Code written and tested against a real Postgres, and boarding-api verified against it. Not yet deployed through Airframe.** |
-| 2 | `skyport-broker` (RabbitMQ), flight events, `baggage-api` (Python), cache eviction | `rabbitmq` component (built: one shared broker per cluster/env, attach per app) | **Broker, flight-api (publisher) and boarding-api (consumer/cache eviction) built and walked on the dev cluster: [quickstart part 3](quickstart-broker.md). `baggage-api` (Python consumer of `flights.events`, re-routes bags between carousels on a gate change) built and verified on dev on 2026-09-26: a gate change in flight-api moved AC123's bags from carousel 2 to 3 within seconds. Its staging environment is not created yet, and nothing is on the prod cluster for it. State is in memory, so it runs one replica until phase 3.** |
-| 3 | MongoDB for `baggage-api` | `mongodb` component | Planned |
-| 4 | `skyport-auth` and enforced JWTs | `oauth-server` component; Keycloak-vs-alternative decision | Planned |
+| 0 | `boarding-api` (NodeJS) + Redis + canary UI — [part 1](quickstart.md) | Redis component, `provider-helm` on the target cluster | **Built; ran on dev with Redis and on prod staging (previous lab).** The canary itself has not been walked with this app. |
+| 1 | `flight-api` (Spring) + Postgres; boarding-api calls it — [part 2](quickstart-flight-api.md) | `postgresql` component (built) | **Built; ran on dev and on prod staging with a two-instance database (previous lab).** boarding-api's staging call to flight-api was not exercised. |
+| 2 | `skyport-broker` (RabbitMQ), flight events, cache eviction — [part 3](quickstart-broker.md) | `rabbitmq` component (built) | **Built; walked on dev; broker staging env existed on prod (previous lab).** The prod half of part 3 was not walked end to end. |
+| 3 | `baggage-api` (Python) + MongoDB, consuming flight events — [part 4](quickstart-baggage-api.md) | `mongodb` component (built) | **Built; ran on dev and on prod staging with its MongoDB and broker attach (previous lab).** One replica, by design (one queue). |
+| 4 | `skyport-auth` and enforced JWTs — [part 5](quickstart-skyport-auth.md) | `dex` component (built; chosen over Keycloak); Dex on prod from Apron's prod profile | **Built, not yet run.** Dex server ran on dev (previous lab). Enforcement is on the apps' `dex-tokens` branches: baggage-api and boarding-api tested; flight-api written but not yet compiled. |
 | 5 | *(optional)* an nginx edge as a third `InfraService` | `nginx` component; its scope is still undecided | Planned |
 | 6 | **First agent: `flight-briefer`** (task) | Autopilot core: Clearance, `AgentRun`, a model proxy | Planned; not started |
 | 7 | **`gate-copilot`** (session) | session channel and Tower's Agent tab | Planned |
@@ -143,12 +152,14 @@ Each phase ends with something you can run. Nothing later than Phase 1 is built.
 | 11 | **`irregular-ops-team`** (team) | `run.spawn`, approvals | Planned |
 
 Phases 6 to 11 are numbered in the order they will be built, and slot in after phases 3 and 4 because
-the agents read `baggage-api`. Phase 5 (nginx) moves after them. The unified plan is
+the agents read `baggage-api`. The two extra services, `gate-api` and `checkin-api`, are not phases:
+they are built and ran on dev and prod staging in the previous lab ([part 6](quickstart-gate-api.md),
+[part 7](quickstart-checkin-api.md)). Phase 5 (nginx) moves after them. The unified plan is
 [hangar/docs/autopilot/roadmap.md](https://github.com/jfillman/hangar/blob/main/docs/autopilot/roadmap.md).
 
-RabbitMQ's questions are settled (shared broker, `provider-rabbitmq` not used). The open
-design questions behind Phases 3–5 — shared vs dedicated tenancy for Mongo, what `nginx`
-covers — are in `hangar/docs/service-catalog-design.md`. This plan doesn't settle them.
+RabbitMQ's questions are settled (shared broker, `provider-rabbitmq` not used), and so are Mongo's
+(dedicated per environment, like PostgreSQL) and the OAuth server's (Dex, shared, `client_credentials`).
+What `nginx` covers is still open (`hangar/docs/service-catalog-design.md`).
 
 ## Two architectures
 
@@ -175,9 +186,9 @@ in Skyport has to run on both:
   (GHSA-6v7p-g79w-8964, CVE-2025-47273); upgrading does not remove them, so the Containerfile runs
   `pip uninstall -y setuptools pip` after installing dependencies. The scaffold's `Containerfile` should do
   the same (a scorecard item).
-- **In-memory state and replicas (baggage-api).** Every replica declares the same queue and they
-  compete for its messages, so with two replicas each holds half of the event history. Run one replica until
-  the state moves to MongoDB (phase 3).
+- **Replicas (baggage-api).** Every replica declares the same queue and they compete for its messages, so
+  with two replicas each applies half of the events. State is in MongoDB now, but this still caps it at one
+  replica until the consumer changes.
 - **First deploy.** Configure an app before it has an image with `rollout: null` on chart versions before
   v0.3.91; from v0.3.91 the chart renders no workload until an image exists, so ordinary rollout config is safe.
   Since v0.3.140 `rollout.enabled: false` (not `rollout: null`) says an environment runs no service.

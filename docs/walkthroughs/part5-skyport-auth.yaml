@@ -1,0 +1,190 @@
+title: "Airframe quickstart part 5: skyport-auth (shared Dex) and enforced tokens"
+app: skyport-auth
+sourceDoc: ../user/quickstart-skyport-auth.md
+steps:
+  - id: "02-function-dex-healthy"
+    title: "function-dex is installed and healthy, and the Dex XRD is established, on both clusters"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get function function-dex
+      kubectl --context "${PROD_CONTEXT}" get function function-dex
+      kubectl --context "${DEV_CONTEXT}" get xrd dexes.catalog.hangar.io
+      kubectl --context "${PROD_CONTEXT}" get xrd dexes.catalog.hangar.io
+    expected: "on each cluster the Function is Installed=True Healthy=True and the XRD is Established=True (prod's come from the Apron prod profile)"
+    verify: |
+      set -euo pipefail
+      for ctx in "$DEV_CONTEXT" "$PROD_CONTEXT"; do
+        c="$(kubectl --context "$ctx" get function function-dex -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
+        est="$(kubectl --context "$ctx" get xrd dexes.catalog.hangar.io -o jsonpath='{.status.conditions[?(@.type=="Established")].status}')"
+        echo "$ctx: $c Established=$est"
+        grep -q "Installed=True" <<<"$c"
+        grep -q "Healthy=True" <<<"$c"
+        [ "$est" = "True" ]
+      done
+
+  - id: "03-infraservice"
+    title: "skyport-auth is a synced, ready InfraService"
+    command: |
+      tools/airframe-verify infraservice app-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
+    expected: "xr-synced, dev-cluster-ready, cicd-onboarded and gitops-repo pass"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" infraservice app-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
+
+  - id: "03-dex-server-dev"
+    title: "Ground: the Dex server passes its verify contract (DexServerReady, OIDC discovery answers)"
+    command: |
+      tools/airframe-verify dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+    expected: "COMPONENT DexServerReady; server-discovery gets 200 from /dex/.well-known/openid-configuration on 5556"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+
+  - id: "03-server-allows-apps-dev"
+    title: "Ground: the server's NetworkPolicy opens 5556 to all three apps' dev namespaces, 5557 only to crossplane-system"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o yaml
+    expected: "an ingress rule on 5556 from app-flight-api-dev, app-baggage-api-dev and app-boarding-api-dev; 5557 from crossplane-system only"
+    verify: |
+      set -euo pipefail
+      np="$(kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o json)"
+      NP="$np" ENV=dev python3 -c '
+      import json, os
+      np = json.loads(os.environ["NP"]); env = os.environ["ENV"]
+      by_port = {}
+      for rule in np["spec"].get("ingress", []):
+          nss = [f["namespaceSelector"]["matchLabels"]["kubernetes.io/metadata.name"] for f in rule.get("from", [])]
+          for p in rule.get("ports", []):
+              by_port.setdefault(p["port"], set()).update(nss)
+      print(by_port)
+      want = {"app-%s-%s" % (a, env) for a in ("flight-api", "baggage-api", "boarding-api")}
+      assert want <= by_port.get(5556, set()), by_port
+      assert by_port.get(5557) == {"crossplane-system"}, by_port
+      '
+
+  - id: "04-clients-dev"
+    title: "Ground: each app's attach client is registered and mints a token the JWKS verifies"
+    command: |
+      tools/airframe-verify dex app-flight-api-dev/flight-oauth --context "${DEV_CONTEXT}"
+      tools/airframe-verify dex app-baggage-api-dev/bag-oauth --context "${DEV_CONTEXT}"
+      tools/airframe-verify dex app-boarding-api-dev/board-oauth --context "${DEV_CONTEXT}"
+    expected: "DexAttachReady for each; client-id/client-secret present; token-issuance passes (RS256 signature checked, token never printed)"
+    verify: |
+      set -euo pipefail
+      for ref in app-flight-api-dev/flight-oauth app-baggage-api-dev/bag-oauth app-boarding-api-dev/board-oauth; do
+        "$AIRFRAME_ROOT/tools/airframe-verify" dex "$ref" --context "${DEV_CONTEXT}"
+      done
+
+  - id: "05-enforcement-configured-dev"
+    title: "Ground: the resource servers have OAUTH_JWKS_URL and the caller has its client settings"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get rollout flight-api -n app-flight-api-dev -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'
+    expected: "flight-api and baggage-api carry OAUTH_ISSUER and OAUTH_JWKS_URL; boarding-api carries OAUTH_TOKEN_URL, OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET"
+    verify: |
+      set -euo pipefail
+      names() { kubectl --context "${DEV_CONTEXT}" get rollout "$1" -n "app-$1-dev" -o jsonpath='{.spec.template.spec.containers[0].env[*].name}'; }
+      for app in flight-api baggage-api; do
+        n="$(names "$app")"; grep -qw OAUTH_JWKS_URL <<<"$n"; grep -qw OAUTH_ISSUER <<<"$n"
+      done
+      n="$(names boarding-api)"
+      for v in OAUTH_TOKEN_URL OAUTH_CLIENT_ID OAUTH_CLIENT_SECRET; do grep -qw "$v" <<<"$n"; done
+
+  - id: "06-flight-api-enforced-dev"
+    title: "Ground: flight-api refuses /api/flights without a token (401) and serves it with one (200); probes stay open"
+    command: |
+      . docs/walkthroughs/lib/dex.sh
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      expect_enforced "${DEV_CONTEXT}" app-flight-api-dev flight-api 8080 /api/flights/AC123 "$tok"
+    expected: "without a token 401, with a token 200; /actuator/health/liveness 200 without a token"
+    verify: |
+      set -euo pipefail
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      expect_enforced "${DEV_CONTEXT}" app-flight-api-dev flight-api 8080 /api/flights/AC123 "$tok"
+      [ "$(http_status "${DEV_CONTEXT}" app-flight-api-dev flight-api 8080 /actuator/health/liveness)" = "200" ]
+
+  - id: "06-baggage-api-enforced-dev"
+    title: "Ground: baggage-api refuses /api/bags without a token (401) and serves it with one (200); /healthz stays open"
+    command: |
+      . docs/walkthroughs/lib/dex.sh
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      expect_enforced "${DEV_CONTEXT}" app-baggage-api-dev baggage-api 8080 /api/bags "$tok"
+    expected: "without a token 401, with a token 200; /healthz 200 without a token"
+    verify: |
+      set -euo pipefail
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      expect_enforced "${DEV_CONTEXT}" app-baggage-api-dev baggage-api 8080 /api/bags "$tok"
+      [ "$(http_status "${DEV_CONTEXT}" app-baggage-api-dev baggage-api 8080 /healthz)" = "200" ]
+
+  - id: "06-boarding-api-sends-token-dev"
+    title: "Ground: boarding-api's own lookups reach the enforcing flight-api (it sends a valid token)"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" -n app-boarding-api-dev port-forward svc/boarding-api 8080:8080 &
+      curl -s localhost:8080/api/boarding/AC123
+    expected: >-
+      200 with "source": "flight-api". With flight-api enforcing, that answer needs boarding-api to have
+      fetched a token from Dex in-cluster and flight-api to have checked it against Dex's JWKS. A cached
+      answer (3 minutes) only proves a lookup succeeded earlier, so the check tries seeded flights until one
+      answers uncached.
+    verify: |
+      set -euo pipefail
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      ok=""
+      for f in AC456 WS410 PD720 AC789 WS512 PD811 AC101 WS618; do
+        body="$(http_body "${DEV_CONTEXT}" app-boarding-api-dev boarding-api 8080 "/api/boarding/$f")"
+        if BODY="$body" python3 -c 'import json,os,sys; b=json.loads(os.environ["BODY"]); sys.exit(0 if b.get("source")=="flight-api" and b.get("cached") is False else 1)' 2>/dev/null; then
+          echo "$f answered from flight-api, uncached"; ok=1; break
+        fi
+      done
+      [ -n "$ok" ]
+
+  - id: "07-dex-server-prod"
+    title: "Flight: the staging Dex server on the prod cluster passes its verify contract"
+    command: |
+      kubectl --context "${DEV_CONTEXT}" get applicationenvironment skyport-auth-${PROD_CLUSTER}-staging -n app-skyport-auth-cicd
+      tools/airframe-verify dex app-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
+    expected: "the ApplicationEnvironment is Synced/Ready; DexServerReady and discovery 200 on the prod cluster"
+    verify: |
+      set -euo pipefail
+      "$AIRFRAME_ROOT/tools/airframe-verify" applicationenvironment "app-skyport-auth-cicd/skyport-auth-${PROD_CLUSTER}-staging" --context "${DEV_CONTEXT}"
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
+
+  - id: "07-clients-prod"
+    title: "Flight: each app's staging attach client is registered and mints a verifiable token"
+    command: |
+      tools/airframe-verify dex app-boarding-api-staging/board-oauth --context "${PROD_CONTEXT}"
+    expected: "DexAttachReady and token-issuance pass for flight-oauth, bag-oauth and board-oauth in staging"
+    verify: |
+      set -euo pipefail
+      for ref in app-flight-api-staging/flight-oauth app-baggage-api-staging/bag-oauth app-boarding-api-staging/board-oauth; do
+        "$AIRFRAME_ROOT/tools/airframe-verify" dex "$ref" --context "${PROD_CONTEXT}"
+      done
+
+  - id: "07-enforced-prod"
+    title: "Flight: flight-api and baggage-api on the prod cluster answer 401 without a token and 200 with one"
+    command: |
+      . docs/walkthroughs/lib/dex.sh
+      tok="$(dex_token "${PROD_CONTEXT}" app-boarding-api-staging board-oauth)"
+      expect_enforced "${PROD_CONTEXT}" app-flight-api-staging flight-api 8080 /api/flights/AC123 "$tok"
+      expect_enforced "${PROD_CONTEXT}" app-baggage-api-staging baggage-api 8080 /api/bags "$tok"
+    expected: "without a token 401, with a token 200, for both; health paths stay open"
+    verify: |
+      set -euo pipefail
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      tok="$(dex_token "${PROD_CONTEXT}" app-boarding-api-staging board-oauth)"
+      expect_enforced "${PROD_CONTEXT}" app-flight-api-staging flight-api 8080 /api/flights/AC123 "$tok"
+      expect_enforced "${PROD_CONTEXT}" app-baggage-api-staging baggage-api 8080 /api/bags "$tok"
+      [ "$(http_status "${PROD_CONTEXT}" app-flight-api-staging flight-api 8080 /actuator/health/liveness)" = "200" ]
+      [ "$(http_status "${PROD_CONTEXT}" app-baggage-api-staging baggage-api 8080 /healthz)" = "200" ]
+
+  - id: "07-tokens-do-not-cross-clusters"
+    title: "A token from the dev cluster's Dex is refused on the prod cluster"
+    command: |
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      http_status "${PROD_CONTEXT}" app-flight-api-staging flight-api 8080 /api/flights/AC123 "$tok"
+    expected: "401: each cluster's Dex has its own keys and issuer"
+    verify: |
+      set -euo pipefail
+      . "$AIRFRAME_ROOT/docs/walkthroughs/lib/dex.sh"
+      tok="$(dex_token "${DEV_CONTEXT}" app-boarding-api-dev board-oauth)"
+      [ "$(http_status "${PROD_CONTEXT}" app-flight-api-staging flight-api 8080 /api/flights/AC123 "$tok")" = "401" ]

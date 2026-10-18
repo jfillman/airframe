@@ -11,8 +11,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard widget-service: add tenants/widget-service/identity.yaml for CICD pipeline onboarding'
-      content: "platformIdentity:\n  appName: widget-service\n  type: <no value>\n  gitopsRepoUrl: https://github.com/jfillman/gitops-widget-service\n\
-        \  appRepoUrl: https://github.com/jfillman/widget-service\n  githubOwner: jfillman\n  catalogNamespace: platform-catalog\n\
+      content: "platformIdentity:\n  appName: widget-service\n  type: <no value>\n  gitopsRepoUrl: https://github.com/example-org/gitops-widget-service\n\
+        \  appRepoUrl: https://github.com/example-org/widget-service\n  githubOwner: example-org\n  catalogNamespace: platform-catalog\n\
         \  registerPipelinesAsCode: <no value>\n"
       file: tenants/widget-service/identity.yaml
       overwriteOnCreate: true
@@ -33,7 +33,7 @@ xr:
     reason: CicdOnboardingPending
     status: 'False'
     type: CicdOnboarded
-  - message: kind-dev is a registered, cicdReady dev cluster - widget-service onboards onto it.
+  - message: example-dev is a registered, cicdReady dev cluster - widget-service onboards onto it.
     reason: DevClusterReady
     status: 'True'
     type: DevClusterReady

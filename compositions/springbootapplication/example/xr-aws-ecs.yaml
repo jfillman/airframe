@@ -17,7 +17,7 @@ spec:
   ecs:
     region: us-east-1
     architecture: arm64
-  devCluster: kind-dev
+  devCluster: example-dev
   javaVersion: "21"
   buildTool: maven
   groupId: io.idp.apps

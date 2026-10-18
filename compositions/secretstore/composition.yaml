@@ -49,7 +49,7 @@ spec:
             # instance per cluster" was weighed and rejected for the extra live infra cost). A
             # plain type: dev check would incorrectly route it to local Kubernetes Auth against an
             # Infisical that isn't running there. `infisicalHost` is a separate, independent
-            # registry field from `type` for exactly this reason - see kind-dev.yaml's own header.
+            # registry field from `type` for exactly this reason.
             #
             # Declared once here (this Composition's single function-go-templating pipeline step
             # concatenates every templates/*.yaml file into one template execution - see
@@ -235,8 +235,8 @@ spec:
             # spec.conditions.namespaceRegexes restricts this store to exactly this app's own
             # namespaces on this cluster (item 8's resolved scope: "cluster-scoped" doesn't mean
             # "visible to every app") - app-<appName>-<env>, this catalog's live-confirmed
-            # namespace convention (kind-dev: app-checkout-api-dev, app-widget-api-dev; kind-prod:
-            # app-checkout-api-prod - checked directly via `kubectl get ns`, not assumed).
+            # namespace convention (dev cluster: app-checkout-api-dev, app-widget-api-dev; an upper
+            # cluster: app-checkout-api-prod - checked directly via `kubectl get ns`, not assumed).
             #
             # ONLY rendered in "shared" mode (environmentSlug == "shared") - the wide-open store
             # covering every env namespace for this (app, cluster) pair. See

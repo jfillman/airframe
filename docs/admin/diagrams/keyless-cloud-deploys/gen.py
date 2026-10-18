@@ -193,7 +193,7 @@ def fig_before():
 # =========================================================================================================
 def fig_sequence():
     g = SVG("fed-sequence", 1000, 516, "Exchanging a ServiceAccount token for AWS access",
-            "A deploy pod receives a signed token from the kiac-dev API server, presents it to AWS STS, which checks it against the published keys and returns a one-hour session the pod uses to update its Lambda function.")
+            "A deploy pod receives a signed token from the dev cluster's API server, presents it to AWS STS, which checks it against the published keys and returns a one-hour session the pod uses to update its Lambda function.")
     xs = [112, 304, 500, 696, 888]
     for x in xs:
         g.line(x, 76, x, 460)
@@ -208,8 +208,8 @@ def fig_sequence():
     g.arrow([(xs[0] + 4, 428), (xs[4] - 4, 428)], color="link"); g.label_h(592, 428, "UPDATE CODE", LINK)
     # actors
     g.node(xs[0] - 88, 24, 176, 52, "backend", None, "Deploy step pod", "glidepath-cloud-deployer")
-    g.node(xs[1] - 88, 24, 176, 52, "backend", None, "kiac-dev API server", "the issuer: signs tokens")
-    g.node(xs[2] - 88, 24, 176, 52, "external", None, "hangarplatform.dev", "/oidc/kiac-dev")
+    g.node(xs[1] - 88, 24, 176, 52, "backend", None, "dev cluster API server", "the issuer: signs tokens")
+    g.node(xs[2] - 88, 24, 176, 52, "external", None, "hangarplatform.dev", "/oidc/<dev-cluster>")
     g.node(xs[3] - 88, 24, 176, 52, "focal", None, "AWS STS", "sts.amazonaws.com")
     g.node(xs[4] - 88, 24, 176, 52, "external", None, "Lambda + ECR", "this function only")
     for i, y in enumerate((124, 172, 220, 260, 316, 380, 428), 1):
@@ -224,7 +224,7 @@ def fig_sequence():
 # =========================================================================================================
 def fig_trust():
     g = SVG("fed-trust", 1000, 488, "The trust chain behind keyless deploys",
-            "kiac-dev publishes its token-signing keys on hangarplatform.dev; an IAM identity provider trusts them, so Crossplane and each app's deploy step can assume their own IAM roles, and every role Crossplane creates sits inside a permissions boundary.")
+            "The dev cluster publishes its token-signing keys on hangarplatform.dev; an IAM identity provider trusts them, so Crossplane and each app's deploy step can assume their own IAM roles, and every role Crossplane creates sits inside a permissions boundary.")
     g.zone(24, 40, 288, 384, "KIAC-DEV CLUSTER")
     g.zone(336, 40, 192, 384, "PUBLIC WEB")
     g.zone(552, 40, 424, 384, "AWS ACCOUNT 700017004810")
@@ -238,12 +238,12 @@ def fig_trust():
     g.arrow([(672, 256), (672, 332)]); g.label_v(672, 276, "CREATES")
     g.arrow([(796, 226), (868, 226), (868, 332)]); g.label_h(832, 226, "CREATES")
     # nodes
-    g.node(48, 72, 240, 60, "backend", "ISSUER", "kiac-dev API server", "signs ServiceAccount tokens")
+    g.node(48, 72, 240, 60, "backend", "ISSUER", "dev cluster API server", "signs ServiceAccount tokens")
     g.node(48, 196, 240, 60, "backend", "PODS", "Crossplane AWS providers", "SA provider-aws-*")
     g.node(48, 332, 240, 60, "backend", "PODS", "Deploy step · bootstrap Job", "SA glidepath-cloud-deployer")
-    g.node(368, 72, 144, 60, "external", "STATIC", "Published keys", "/oidc/kiac-dev")
+    g.node(368, 72, 144, 60, "external", "STATIC", "Published keys", "/oidc/<dev-cluster>")
     g.node(576, 72, 200, 60, "external", "IAM", "Identity provider", "trusts the issuer")
-    g.node(576, 196, 220, 60, "backend", "ROLE", "hangar-crossplane-kiac-dev", "builds the infrastructure")
+    g.node(576, 196, 220, 60, "backend", "ROLE", "hangar-crossplane-<dev-cluster>", "builds the infrastructure")
     g.node(576, 336, 192, 60, "focal", "ROLE", "glidepath-deploy-<fn>", "this repo · this function")
     g.node(784, 336, 168, 60, "store", "ROLE", "<fn>-exec", "runs the function")
     g.legend(460, [("backend", "workload or role"), ("external", "public / AWS service"), ("security", "boundary"),

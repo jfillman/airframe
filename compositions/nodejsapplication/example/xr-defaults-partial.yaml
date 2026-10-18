@@ -5,7 +5,7 @@ metadata:
   name: widget-service
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   nodeVersion: '20'
   packageManager: npm
   port: 8080

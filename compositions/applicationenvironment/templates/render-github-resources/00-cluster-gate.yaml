@@ -3,7 +3,7 @@
 # the first actual use of this mechanism in this catalog, confirmed against
 # function-go-templating v0.12.3's own docs rather than assumed: a `kind:
 # ExtraResources` meta-resource below asks Crossplane's core to fetch a named
-# ConfigMap from the LOCAL cluster (kind-dev, where this Composition's own Crossplane
+# ConfigMap from the LOCAL cluster (the dev cluster, where this Composition's own Crossplane
 # runs - matches Bootstrap-tier's centralized-on-dev design, no cross-cluster read
 # needed for the gate itself). Standard two-pass behavior: the reconcile that first
 # adds this requirement won't see data yet (.extraResources empty) - $clusterOk stays
@@ -41,7 +41,6 @@
 <<- $appName := $spec.appName >>
 <<- $env := $spec.env >>
 <<- $cluster := $spec.cluster >>
-<<- $platformOwner := "jfillman" >>
 <<- $tenantsRepo := printf "gitops-cluster-%s-tenants" $cluster >>
 <<- /* An InfraService's deploy repo is gitops-infra-<name> (no source repo exists, so the same repo
        is also its "app" repo), unlike an app's gitops-<name>. spec.appType says which; default app.
@@ -52,11 +51,6 @@
 <<- if eq $appType "infra" >>
   <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
 <<- end >>
-<<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
-<<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
-<<- if eq $appType "infra" >>
-  <<- $appRepoUrl = $gitopsRepoUrl >>
-<<- end >>
 <<- $configMapGenerator := $spec.configMapGenerator | default false >>
 <<- $chart := $spec.chart | default dict >>
 <<- $allExtra := .extraResources | default dict >>
@@ -65,13 +59,30 @@
 <<- $clusterOk := false >>
 <<- $clusterType := "" >>
 <<- $crossplaneReady := "" >>
+<<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+       record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+       without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+       owner-dependent objects fall back to what they already observe or wait. */ ->>
+<<- $platformOwner := "" >>
 <<- if gt (len $items) 0 >>
   <<- $cm := (index $items 0).resource >>
   <<- $clusterType = $cm.data.type >>
   <<- $crossplaneReady = index $cm.data "crossplaneReady" | default "" >>
+  <<- /* The registry record's tenantsRepo wins over the gitops-cluster-<cluster>-tenants convention, the same
+         field the Bootstrap tier's dev-cluster gate already reads. */ ->>
+  <<- with index $cm.data "tenantsRepo" >><<- $tenantsRepo = . >><<- end >>
+  <<- $platformOwner = index $cm.data "scmOwner" | default "" >>
+  <<- if not $platformOwner >>
+    <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+  <<- end >>
   <<- if and (eq $clusterType "upper") (eq $crossplaneReady "true") >>
     <<- $clusterOk = true >>
   <<- end >>
+<<- end >>
+<<- $gitopsRepoUrl := printf "https://github.com/%s/%s" $platformOwner $gitopsRepo >>
+<<- $appRepoUrl := printf "https://github.com/%s/%s" $platformOwner $appName >>
+<<- if eq $appType "infra" >>
+  <<- $appRepoUrl = $gitopsRepoUrl >>
 <<- end >>
 apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
 kind: ExtraResources

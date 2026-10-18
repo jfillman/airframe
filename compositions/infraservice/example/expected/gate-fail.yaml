@@ -97,19 +97,6 @@ resources:
     providerConfigRef:
       kind: ClusterProviderConfig
       name: default
-- apiVersion: catalog.hangar.io/v1alpha1
-  kind: TektonCICD
-  metadata:
-    name: shared-cache-tektoncicd
-    namespace: infra-services
-  name: tektoncicd
-  spec:
-    appName: shared-cache
-    appRepoUrl: https://github.com/jfillman/gitops-infra-shared-cache
-    devCluster: kind-dev
-    gitopsRepoUrl: https://github.com/jfillman/gitops-infra-shared-cache
-    registerPipelinesAsCode: false
-    type: infra
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (shared-cache-tektoncicd) to report its own CicdOnboarded condition
@@ -122,7 +109,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: cicd-yaml-stub, gitops-repo, gitops-repo-readme, and 1 more'
+  - message: 'Unready resources: cicd-yaml-stub, gitops-repo, and gitops-repo-readme'
     reason: Creating
     status: 'False'
     type: Ready

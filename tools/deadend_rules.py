@@ -8,7 +8,6 @@ airframe-ai-friendly.md's AF-4 seed-rule table.
 """
 import re
 
-CANONICAL_DEV_CLUSTER = "kind-dev"  # the registry's canonical value - see AGENTS.md and every handoff.
 PIPELINE_STAGE_NAMES = {"build", "test", "deploy", "release"}
 
 # High-precision secret-shape patterns only (AF-SECRET-001) - deliberately no generic entropy
@@ -29,11 +28,13 @@ def _known_component_kinds(schema):
 
 
 def cluster_rule(data):
+    """AF-CLUSTER-001: devClusterName was removed (2026-10-16). The chart no longer compares cluster names; the
+    dev-vs-upper decision is clusterType, the cluster's registry `type`. A file still setting it is a dead end:
+    the schema rejects the key, and this says what replaced it."""
     out = []
-    v = data.get("devClusterName")
-    if v is not None and v != CANONICAL_DEV_CLUSTER:
-        out.append(("/devClusterName", "AF-CLUSTER-001", f"devClusterName is '{v}', not the registry's canonical dev value",
-                     f"use '{CANONICAL_DEV_CLUSTER}' even if the physical cluster is named differently", "error"))
+    if "devClusterName" in data:
+        out.append(("/devClusterName", "AF-CLUSTER-001", "devClusterName was removed: the chart compares no cluster names",
+                     "delete it; the platform sets clusterType (dev | upper, from the cluster registry) and cluster", "error"))
     return out
 
 

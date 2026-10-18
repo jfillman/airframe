@@ -3,7 +3,7 @@ release:
   image: {repository: registry.example/guard-test, tag: v2}
 releaseTracking:
   appNamespace: app-guard-test-cicd
-  releaseId: "chain1:kind-prod/staging"
+  releaseId: "chain1:example-prod/staging"
 rollout:
   labels: {team: payments}
   annotations: {owner: sre}

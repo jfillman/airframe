@@ -20,12 +20,14 @@ import yaml
 TOOLS = Path(__file__).resolve().parent
 ROOT = TOOLS.parent
 TECH = ROOT.parent
-TENANT_REPOS = [TECH / "gitops-cluster-dev-tenants", TECH / "gitops-cluster-kind-prod-tenants"]
+# Every tenants repo checked out next to airframe (gitops-cluster-<cluster>-tenants, or a registry tenantsRepo
+# like gitops-cluster-dev-tenants); no cluster name is assumed.
+TENANT_REPOS = sorted(TECH.glob("gitops-cluster-*-tenants"))
 
 GOOD = {
     "apiVersion": "catalog.hangar.io/v1alpha1", "kind": "ApplicationEnvironment",
-    "metadata": {"name": "parachute-kind-prod-staging", "namespace": "app-parachute-cicd"},
-    "spec": {"appName": "parachute", "cluster": "kind-prod", "env": "staging", "configMapGenerator": False},
+    "metadata": {"name": "parachute-example-prod-staging", "namespace": "app-parachute-cicd"},
+    "spec": {"appName": "parachute", "cluster": "example-prod", "env": "staging", "configMapGenerator": False},
 }
 
 

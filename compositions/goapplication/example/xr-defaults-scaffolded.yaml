@@ -7,7 +7,7 @@ metadata:
   name: widget-service
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   goVersion: '1.23'
   port: 8080
   visibility: private

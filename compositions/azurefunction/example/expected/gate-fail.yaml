@@ -239,16 +239,6 @@ resources:
     providerConfigRef:
       kind: ClusterProviderConfig
       name: default
-- apiVersion: catalog.hangar.io/v1alpha1
-  kind: TektonCICD
-  metadata:
-    name: thumb-fn-tektoncicd
-    namespace: demo-apps
-  name: tektoncicd
-  spec:
-    appName: thumb-fn
-    appRepoUrl: https://github.com/jfillman/thumb-fn
-    devCluster: kind-dev
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (thumb-fn-tektoncicd) to report its own CicdOnboarded condition - resolves
@@ -261,7 +251,7 @@ xr:
     reason: DevClusterNotReady
     status: 'False'
     type: DevClusterReady
-  - message: 'Unready resources: src-repo, src-repo-cicd-yaml, src-repo-dockerfile, and 6 more'
+  - message: 'Unready resources: src-repo, src-repo-cicd-yaml, src-repo-dockerfile, and 5 more'
     reason: Creating
     status: 'False'
     type: Ready

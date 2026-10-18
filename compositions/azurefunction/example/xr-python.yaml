@@ -4,7 +4,7 @@ metadata:
   name: thumb-py
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   runtime: python3.12
   resourceGroup: glidepath-smoke
   visibility: private

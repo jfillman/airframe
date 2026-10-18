@@ -9,8 +9,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard resize-go: add tenants/resize-go/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: resize-go-kind-dev\nspec:\n\
-        \  appRef:\n    name: resize-go\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: resize-go-example-dev\nspec:\n\
+        \  appRef:\n    name: resize-go\n  cluster: example-dev\n"
       file: tenants/resize-go/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -168,7 +168,7 @@ resources:
   spec:
     forProvider:
       commitMessage: 'LambdaFunction scaffold: go.mod'
-      content: 'module github.com/jfillman/resize-go
+      content: 'module github.com/example-org/resize-go
 
 
         go 1.24
@@ -282,8 +282,8 @@ resources:
   name: tektoncicd
   spec:
     appName: resize-go
-    appRepoUrl: https://github.com/jfillman/resize-go
-    devCluster: kind-dev
+    appRepoUrl: https://github.com/example-org/resize-go
+    devCluster: example-dev
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (resize-go-tektoncicd) to report its own CicdOnboarded condition - resolves

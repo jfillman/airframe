@@ -26,8 +26,8 @@ message | hint`. `--format json` emits one JSON object per file with a `problems
 
 Rules: AF-SCHEMA-001 unknown key, AF-SCHEMA-002 wrong type/value, AF-RENDER-001 helm failed,
 AF-COMP-002 (AF-3): an env[].fromComponent reference names a components[] entry or output that
-doesn't exist. AF-4b dead-end rules (tools/deadend_rules.py): AF-CLUSTER-001 (devClusterName isn't
-the registry's canonical dev value), AF-ENV-001 (envName named like a pipeline stage), AF-COMP-001
+doesn't exist. AF-4b dead-end rules (tools/deadend_rules.py): AF-CLUSTER-001 (the removed
+devClusterName key is set), AF-ENV-001 (envName named like a pipeline stage), AF-COMP-001
 (unknown component type), AF-SECRET-001 (a secret-shaped literal in env/configMaps), AF-COMP-003
 (warning: a hand-written valueFrom matches a real component's own output - use fromComponent).
 AF-OWNER-001 (error, AF-5b): a release-owned key (`release`, `releaseTracking`, the deprecated
@@ -164,7 +164,7 @@ def check_file(path, schema, args):
         app = args.app or (parents[2].name if len(parents) > 2 else None)
         with tempfile.TemporaryDirectory() as td:
             base = Path(td) / "base.yaml"
-            base.write_text(yaml.safe_dump({"appName": app or "validate", "cluster": args.cluster,
+            base.write_text(yaml.safe_dump({"appName": app or "validate", "cluster": args.cluster, "clusterType": args.cluster_type,
                                             "envName": data.get("envName", "dev")}))
             r = subprocess.run(["helm", "template", "validate", str(CHART), "-f", str(base), "-f", str(path)],
                                capture_output=True, text=True)
@@ -286,7 +286,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+")
     ap.add_argument("--app")
-    ap.add_argument("--cluster", default="kind-dev")
+    # Render-only stand-ins: a values file is checked against the chart, not against a real cluster, and the
+    # platform supplies the real cluster name (and its registry type) at deploy time. No fleet name is assumed.
+    ap.add_argument("--cluster", default="validate-cluster", help="cluster name to render with (a stand-in by default)")
+    ap.add_argument("--cluster-type", default="upper", choices=["dev", "upper"],
+                    help="the cluster's registry type to render with (default upper)")
     ap.add_argument("--no-render", action="store_true")
     ap.add_argument("--xr", action="store_true", help="the files are XR requests; validate them against the XRDs")
     ap.add_argument("--format", choices=["text", "json"], default="text")

@@ -10,7 +10,7 @@ resources:
   name: deploy-role
   spec:
     forProvider:
-      assumeRolePolicy: '{"Statement":[{"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"issuer.example/oidc/kind-dev:aud":"sts.amazonaws.com","issuer.example/oidc/kind-dev:sub":"system:serviceaccount:app-smoke-ecs-cicd:glidepath-cloud-deployer"}},"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::012345678901:oidc-provider/issuer.example/oidc/kind-dev"}}],"Version":"2012-10-17"}'
+      assumeRolePolicy: '{"Statement":[{"Action":"sts:AssumeRoleWithWebIdentity","Condition":{"StringEquals":{"issuer.example/oidc/example-dev:aud":"sts.amazonaws.com","issuer.example/oidc/example-dev:sub":"system:serviceaccount:app-smoke-ecs-cicd:glidepath-cloud-deployer"}},"Effect":"Allow","Principal":{"Federated":"arn:aws:iam::012345678901:oidc-provider/issuer.example/oidc/example-dev"}}],"Version":"2012-10-17"}'
       description: Deploys the smoke-ecs-dev ECS service from app-smoke-ecs-cicd (Airframe AwsEcsTarget smoke-ecs)
       inlinePolicy:
       - name: deploy-this-service

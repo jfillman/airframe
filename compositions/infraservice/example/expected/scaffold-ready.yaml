@@ -106,8 +106,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard shared-cache: add tenants/shared-cache/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: shared-cache-kind-dev\nspec:\n\
-        \  appRef:\n    name: shared-cache\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: shared-cache-example-dev\nspec:\n\
+        \  appRef:\n    name: shared-cache\n  cluster: example-dev\n"
       file: tenants/shared-cache/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -127,9 +127,9 @@ resources:
   name: tektoncicd
   spec:
     appName: shared-cache
-    appRepoUrl: https://github.com/jfillman/gitops-infra-shared-cache
-    devCluster: kind-dev
-    gitopsRepoUrl: https://github.com/jfillman/gitops-infra-shared-cache
+    appRepoUrl: https://github.com/example-org/gitops-infra-shared-cache
+    devCluster: example-dev
+    gitopsRepoUrl: https://github.com/example-org/gitops-infra-shared-cache
     registerPipelinesAsCode: false
     type: infra
 xr:

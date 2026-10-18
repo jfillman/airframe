@@ -6,7 +6,7 @@ metadata:
   name: thumb-fn
   namespace: demo-apps
 spec:
-  devCluster: kind-dev
+  devCluster: example-dev
   runtime: python3.12
   resourceGroup: glidepath-thumb-fn-rg
   target:

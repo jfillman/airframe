@@ -9,8 +9,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard thumb-py: add tenants/thumb-py/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: thumb-py-kind-dev\nspec:\n \
-        \ appRef:\n    name: thumb-py\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: thumb-py-example-dev\nspec:\n\
+        \  appRef:\n    name: thumb-py\n  cluster: example-dev\n"
       file: tenants/thumb-py/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -59,8 +59,8 @@ resources:
   name: tektoncicd
   spec:
     appName: thumb-py
-    appRepoUrl: https://github.com/jfillman/thumb-py
-    devCluster: kind-dev
+    appRepoUrl: https://github.com/example-org/thumb-py
+    devCluster: example-dev
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (thumb-py-tektoncicd) to report its own CicdOnboarded condition - resolves

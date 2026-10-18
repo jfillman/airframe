@@ -21,8 +21,8 @@ resources:
   spec:
     forProvider:
       commitMessage: 'Onboard thumb-fn: add tenants/thumb-fn/xr-requests/secretstore.yaml'
-      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: thumb-fn-kind-dev\nspec:\n \
-        \ appRef:\n    name: thumb-fn\n  cluster: kind-dev\n"
+      content: "apiVersion: catalog.hangar.io/v1alpha1\nkind: SecretStore\nmetadata:\n  name: thumb-fn-example-dev\nspec:\n\
+        \  appRef:\n    name: thumb-fn\n  cluster: example-dev\n"
       file: tenants/thumb-fn/xr-requests/secretstore.yaml
       overwriteOnCreate: true
       repository: gitops-cluster-dev-tenants
@@ -274,8 +274,8 @@ resources:
   name: tektoncicd
   spec:
     appName: thumb-fn
-    appRepoUrl: https://github.com/jfillman/thumb-fn
-    devCluster: kind-dev
+    appRepoUrl: https://github.com/example-org/thumb-fn
+    devCluster: example-dev
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (thumb-fn-tektoncicd) to report its own CicdOnboarded condition - resolves

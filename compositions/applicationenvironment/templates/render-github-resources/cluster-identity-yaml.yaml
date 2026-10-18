@@ -17,12 +17,12 @@
 # Renamed from cluster-app-yaml.yaml, content reshaped from flat app.yaml fields to
 # the nested platformIdentity: schema (2026-08-18) - the two files this catalog wrote
 # per app were "almost identical, one a subset of the other," sitting side by side in
-# the same tenants/<app>/ directory on kind-dev (see nodejsapplication's own
+# the same tenants/<app>/ directory on the dev cluster (see nodejsapplication's own
 # cicd-identity-yaml.yaml header for the full history, including the real .git-suffix
 # PaC-matching bug that made a naive merge unsafe until the whole system standardized
 # on one no-.git convention). This file is that same consolidation applied to the
 # OTHER cluster this catalog writes a tenant identity file onto - upper-env clusters
-# other than kind-dev, which never got a CICD-identity file at all before now (no
+# other than the dev cluster, which never got a CICD-identity file at all before now (no
 # platform-cicd instance runs there), only ever this one. Same nested schema as
 # nodejsapplication's identity.yaml everywhere, even though THIS cluster's own
 # tenant-appprojects chart still only reads .platformIdentity.appName/.gitopsRepoUrl

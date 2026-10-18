@@ -14,7 +14,7 @@ cases:
 - name: checkout-api-staging
   xr: xr-checkout-api-staging.yaml
   required:
-  - cluster-registry-upper-kind-prod.yaml
+  - cluster-registry-upper-example-prod.yaml
   - secretstore-provisioner.yaml
 - name: checkout-api-kubernetes-auth
   xr: xr-checkout-api.yaml

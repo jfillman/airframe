@@ -147,7 +147,7 @@ resources:
 
         '
       file: example-prod/staging/values.yaml
-      overwriteOnCreate: true
+      overwriteOnCreate: false
       repository: gitops-widget-service
     managementPolicies:
     - Create

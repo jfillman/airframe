@@ -12,14 +12,15 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 5. `docs/user/`: the Skyport quickstarts, worked end to end.
 6. `tools/airframe-validate` (schema + discriminated `components[]` union + `tools/deadend_rules.py`'s convention and policy rules, in one pass; `--format json` for tooling). *(planned)* `airframe.plan`, `airframe.explain`.
 
-## The model in five lines
-- **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment.
+## The model at a glance
+- **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment. The four app stacks take `deployTarget: kubernetes | aws-ecs`; with `aws-ecs` they compose an `AwsEcsTarget` for their dev environment.
 - **Function XRDs** (`LambdaFunction`, `AzureFunction`): a repo, CI/CD and a handler for a container-image function that Glidepath deploys to an existing AWS Lambda function or Azure Container App. No chart, no Ground/Flight environments. *Not usable end to end yet*: Glidepath cannot push to ECR (Lambda needs it), and neither deploy target has run against a real account.
 - **Cloud targets** (`AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`): the minimum cloud infrastructure a
   `deploy.target: aws-lambda | aws-ecs | azure-container-apps` deploy needs, stood up and torn down on request as a
   stand-alone XR in the app's xr-requests (docs/user/cloud-targets.md). Each publishes `status.cicd`, the deploy block
   to paste into the app's `cicd.yaml`, and a `TargetReady` condition with a closed reason set. `LambdaFunction` and
-  `AzureFunction` can compose their target themselves with `spec.target.enabled: true`.
+  `AzureFunction` can compose their target themselves with `spec.target.enabled: true`, and the app stacks do with
+  `deployTarget: aws-ecs`.
 - **Ground** environment: `glidepath/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.

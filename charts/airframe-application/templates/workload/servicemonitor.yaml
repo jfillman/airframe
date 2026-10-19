@@ -1,10 +1,6 @@
 {{/*
-Auto-wires Prometheus scraping from the same Service this chart already renders -
-kube-prometheus-stack is already installed cluster-side (idp_session_phase2_holmesgpt,
-namespace `observability`), so this is near-zero-cost: every app gets scraped
-without hand-authoring its own ServiceMonitor. serviceMonitor.additionalLabels is
-the escape hatch for whatever selector label the actual Prometheus CR on a given
-cluster requires (not confirmed - see values.yaml's own comment).
+Prometheus scraping of the first port (or serviceMonitor.port). additionalLabels is for a Prometheus that
+selects ServiceMonitors by label.
 */}}
 {{- if and .Values.serviceMonitor.enabled (eq (include "airframe-application.hasRollout" .) "true") }}
 {{- $firstPort := index .Values.rollout.ports 0 }}

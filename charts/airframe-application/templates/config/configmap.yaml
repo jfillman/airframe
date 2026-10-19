@@ -1,14 +1,6 @@
 {{/*
-List-of-objects, one ConfigMap per entry - §3's revised shape, answering both
-"multiple keys in one ConfigMap" (nest more entries in one data: block) and
-"multiple separate ConfigMap objects" (add another list entry) without picking one.
-
-Only entries with `data:` render an object here - an entry using
-`existingConfigMap:` instead references one this chart doesn't own, so there's
-nothing to render (the fail-fast validation for "set exactly one of the two" lives
-in airframe-application.configMapObjectName, called from every template that needs the
-resolved name - workloadVolumeMounts/workloadVolumes/workloadEnvFrom - so a
-malformed entry still errors even though it never reaches this file).
+One ConfigMap per configMaps: entry that sets data:. An existingConfigMap: entry refers to one created
+elsewhere, so nothing renders here; configMapObjectName validates both shapes.
 */}}
 {{- range .Values.configMaps }}
 {{- if hasKey . "data" }}

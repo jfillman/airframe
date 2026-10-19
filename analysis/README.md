@@ -1,8 +1,8 @@
 # Analysis catalog
 
-ClusterAnalysisTemplates for Argo Rollouts canary analysis, one copy per cluster. Each cluster installs them with its
-own `analysis-catalog` Application (`20-service-catalog/analysis-catalog/application.yaml` in the cluster's gitops repo,
-`path: analysis`), pinned separately from `idp-service-catalog` so a new template does not drag a composition bump along:
+ClusterAnalysisTemplates for Argo Rollouts canary analysis, one copy per cluster. Apron installs them on each cluster
+with its `analysis-catalog` Application (`templates/20-service-catalog/analysis-catalog/application.yaml`, `path:
+analysis`), pinned separately from `airframe-service-catalog` so a new template does not drag a composition bump along:
 bump that Application's `targetRevision` when the catalog gains a template. An app uses one from its values with
 `clusterScope: true` (Tower's Release tab lists the templates a cluster has and warns about a reference it lacks).
 
@@ -18,5 +18,4 @@ bump that Application's `targetRevision` when the catalog gains a template. An a
 
 Every template takes `namespace` and `app` (the pod-name prefix). A query with no data passes rather than blocks, so a
 template whose metrics are not being collected is inert, not a failed rollout. The Prometheus address is the
-kube-prometheus-stack service every cluster uses; kind-prod has no Prometheus yet, so there the templates exist and
-query nothing.
+kube-prometheus-stack service; on a cluster without Prometheus the templates exist and query nothing.

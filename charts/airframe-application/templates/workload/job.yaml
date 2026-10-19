@@ -1,11 +1,7 @@
 {{/*
-One-off Job per jobs: entry - e.g. a pre-upgrade DB migration, run once before the
-new Rollout comes up. hook: true (default) makes it a real Helm pre-install/
-pre-upgrade hook, deleted and recreated on every release (before-hook-creation,
-hook-succeeded), so it always re-runs without needing a new name each time -
-hook: false renders a plain, persistent Job instead (rerunning it later is on the
-developer, ordinary Job semantics). Container built by airframe-application.batchContainer
-- see _helpers.tpl for the image-fallback/env/volume sharing rules.
+One Job per jobs: entry. By default a Helm pre-install,pre-upgrade hook (ArgoCD runs it before the sync), so
+a migration runs before the new Rollout comes up, and it is recreated on every release. hook: false makes it
+a plain Job. The container comes from airframe-application.batchContainer.
 */}}
 {{- range .Values.jobs }}
 {{- $container := fromYaml (include "airframe-application.batchContainer" (dict "ctx" $ "entry" .)) }}

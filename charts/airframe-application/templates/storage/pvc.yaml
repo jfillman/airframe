@@ -1,7 +1,6 @@
 {{/*
-PVC support, §3's 2026-08-13 revision - one PersistentVolumeClaim per volumes:
-entry, same list-of-objects + range-loop pattern as configMaps. The matching
-volumeMount is added onto the main container by rollout.yaml, not here.
+One PersistentVolumeClaim per volumes: entry. The workload* helpers mount it on the Rollout and every Job
+and CronJob.
 */}}
 {{- range .Values.volumes }}
 apiVersion: v1

@@ -3,10 +3,11 @@
 # Usage: charts/airframe-application/tests/run.sh
 set -u
 cd "$(dirname "$0")/.."
-# helm template takes its default namespace from the ambient kube context (found 2026-10-06: a
-# context set to app-gate-api-cicd made the fromComponent host assertion fail). The render must not
-# depend on whatever cluster the person running this happens to be pointed at.
-export KUBECONFIG=/dev/null
+# helm template takes its default namespace from the ambient kube context; the render must not depend on
+# whatever cluster the person running this is pointed at. An empty, private file (not /dev/null, which
+# makes helm warn on stderr and break the assertions that parse 2>&1 output).
+KUBECONFIG=$(mktemp); export KUBECONFIG
+trap 'rm -f "$KUBECONFIG"' EXIT
 fail=0
 
 kinds() { helm template t . -f "tests/fixtures/$1.yaml" 2>&1 | grep -E '^kind:|^Error' | sort -u | tr '\n' ' '; }

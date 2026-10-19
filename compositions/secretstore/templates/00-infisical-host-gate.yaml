@@ -1,40 +1,16 @@
-# Real Crossplane extra-resources lookup against the cluster registry
-# (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
-# same `matchName` pattern applicationenvironment's own 00-cluster-gate.yaml and
-# nodejsapplication's own 00-devcluster-gate.yaml already use, added here 2026-08-18.
+# Reads this cluster's record from the cluster registry (the crossplane-system ConfigMap named
+# after spec.cluster) and sets, for every later template in this step:
+#   $isInfisicalHost  true on the cluster that runs Infisical (registry infisicalHost: "true").
+#                     It selects Kubernetes auth there and universal auth everywhere else. It is
+#                     its own registry field because a cluster's type doesn't say whether
+#                     Infisical runs on it.
+#   $infisicalUrl     the address this cluster reaches Infisical at (registry infisicalUrl)
+#   $infisicalOrgId   the Infisical organization (registry infisicalOrgId)
+# Both values come from the top-level infisical: block of the fleet's clusters.yaml, which
+# charts/cluster-registry renders into every record.
 #
-# Replaces what used to be a plain `eq $spec.cluster "kind-dev"` string comparison in
-# each of this directory's three resource files (clustersecretstore.yaml,
-# infisicalproject.yaml, per-env-secretstore.yaml) - a prior session deliberately chose
-# that static comparison over a live lookup, reasoning "which cluster hosts Infisical
-# is a static topology fact... today: only ever kind-dev" (see this catalog's own git
-# history). That reasoning assumed a single permanent dev cluster; the fleet now
-# supports multiple, which breaks it: a SECOND dev cluster is still type: dev but does
-# NOT physically run Infisical (idp/docs/service-catalog-design.md Item 8 deliberately
-# keeps one shared Infisical instance, not one per dev cluster - "second Infisical
-# instance per cluster" was weighed and rejected for the extra live infra cost). A
-# plain type: dev check would incorrectly route it to local Kubernetes Auth against an
-# Infisical that isn't running there. `infisicalHost` is a separate, independent
-# registry field from `type` for exactly this reason.
-#
-# Declared once here (this Composition's single function-go-templating pipeline step
-# concatenates every templates/*.yaml file into one template execution - see
-# build-composition.sh - so $isInfisicalHost below is available to every later file in
-# this same directory without redeclaring the ExtraResources requirement itself,
-# matching 00-cluster-gate.yaml's own "declared once, persists across --- separators"
-# convention). Each resource file still redeclares its own $spec locally, matching this
-# Composition's existing per-file convention (infisicalproject.yaml/
-# clustersecretstore.yaml/per-env-secretstore.yaml each already redeclare $spec/
-# $appName/$envSlug/$projectSlug independently, even within this same step).
-#
-# Behavior-preserving for any cluster name that ISN'T registered at all (a typo, or a
-# cluster mid-onboarding before its registry entry lands): $items stays empty,
-# $isInfisicalHost stays false, exactly matching the ORIGINAL code's "anything other
-# than the literal kind-dev" fallback to Universal Auth - no new hard gate introduced,
-# unlike ApplicationEnvironment/NodeJSApplication's own registry gates which refuse to
-# render entirely. This Composition still makes no OTHER cross-cluster call (xrds/
-# secretstore.yaml's own header) - this lookup is local-cluster-only, same as
-# ApplicationEnvironment's and NodeJSApplication's.
+# Every templates/*.yaml file is concatenated into one template run, so variables set here
+# persist across the --- separators.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $allExtra := .extraResources | default dict >>
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
@@ -51,10 +27,9 @@
   <<- $registryInfisicalUrl = index $cm.data "infisicalUrl" | default "" >>
   <<- $registryInfisicalOrgId = index $cm.data "infisicalOrgId" | default "" >>
 <<- end >>
-<<- /* Review C9: where Infisical lives is a fleet fact in clusters.yaml (top-level infisical: block), rendered by
-       the cluster-registry chart into this cluster's record as infisicalUrl and infisicalOrgId. No fallback: a
-       record without them fails the render with a fatal result, which leaves every composed object as it is and
-       surfaces the cause in Synced=False (knownFailures InfisicalRegistryKeysMissing in xrds/secretstore.meta.yaml). */>>
+<<- /* A record without infisicalUrl and infisicalOrgId fails the render. A fatal result leaves every composed
+       object as it is and names the cause in Synced=False (knownFailures InfisicalRegistryKeysMissing in
+       xrds/secretstore.meta.yaml). */>>
 <<- /* Only once Crossplane has answered the lookup: the first pass of every reconcile runs before it has, and only
        the final pass's output is applied, so failing there would fail every reconcile. */>>
 <<- if and (hasKey $allExtra "cluster-registry-entry") (not (and $registryInfisicalUrl $registryInfisicalOrgId)) >>

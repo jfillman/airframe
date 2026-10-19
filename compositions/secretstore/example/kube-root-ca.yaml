@@ -1,5 +1,5 @@
 # Every namespace carries this ConfigMap; the kubernetes-auth branch reads the cluster CA from it
-# (01-k8s-reviewer-secret-gate.yaml) instead of from the token-reviewer Secret.
+# (01-k8s-reviewer-secret-gate.yaml).
 apiVersion: v1
 kind: ConfigMap
 metadata:

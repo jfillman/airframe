@@ -2933,7 +2933,7 @@
                       "properties": {
                         "appRef": {
                           "type": "object",
-                          "description": "Names the owning NodeJSApplication/SpringBootApplication XR this store belongs to. Labeling/audit only - not a live lookup, same convention as every other Attached-tier XRD's environmentRef in this catalog. Deliberately NOT named environmentRef like every other Attached-tier resource - this store explicitly must not pin to one env, item 8's whole point.",
+                          "description": "The application this store belongs to (any application kind or an InfraService). Its name sets the project slug and the namespaces the store serves; it is not a live lookup. The store belongs to the app, not to one environment.",
                           "required": [
                             "name"
                           ],
@@ -2941,20 +2941,20 @@
                             "name": {
                               "type": "string",
                               "minLength": 1,
-                              "description": "The owning application's XR name (NodeJSApplication/SpringBootApplication), not an ApplicationEnvironment - this store is app-scoped, not env-scoped."
+                              "description": "The owning application's XR name (not an ApplicationEnvironment)."
                             }
                           },
                           "additionalProperties": false
                         },
                         "cluster": {
                           "type": "string",
-                          "description": "Which cluster's ESO this store targets. No hard registry gate on this value itself (unlike ApplicationEnvironment/NodeJSApplication - an unregistered or mistyped name still renders a store, just with Universal Auth against the shared Infisical instance, not a refusal) - this XRD's Composition makes no cross-cluster call, only local ones (this cluster's own ESO + a call out to whichever cluster hosts Infisical). It DOES do one live cluster-registry read now (2026-08-18): whether Infisical itself is reachable in-cluster from here (registry field infisicalHost) decides Kubernetes Auth vs. Universal Auth - see compositions/secretstore/ templates/00-infisical-host-gate.yaml.",
+                          "description": "The cluster registry name of the cluster this store is for. Its registry record decides the rest: infisicalHost selects Kubernetes auth (on the cluster that runs Infisical) or universal auth (everywhere else), and infisicalUrl and infisicalOrgId say where Infisical is. A missing record, or one without those two keys, fails the render and leaves existing objects unchanged.",
                           "minLength": 1
                         },
                         "environmentSlug": {
                           "type": "string",
                           "default": "shared",
-                          "description": "\"shared\" (the default): this XR creates the project/identity/ ClusterSecretStore for this (app, cluster) pair, with one Infisical environment named \"shared\", wide-open across every env namespace. Any OTHER value: this XR does NOT create a project - it adds one more Infisical environment (this value) to the ALREADY-existing project from the \"shared\" XR, plus a second ClusterSecretStore narrowed to exactly one k8s namespace (app-<appRef.name>-<environmentSlug>). Real per-env isolation - see xrds/secretstore.yaml's own header for the full mechanism."
+                          "description": "\"shared\" (the default) creates the project, its \"shared\" environment, the identity and a ClusterSecretStore open to every app-<appRef.name>-* namespace. Any other value adds that environment to the existing project and a ClusterSecretStore limited to the namespace app-<appRef.name>-<environmentSlug>, and creates no project."
                         }
                       },
                       "additionalProperties": false

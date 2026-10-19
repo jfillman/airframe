@@ -1,7 +1,4 @@
 # Same record as cluster-registry-upper.yaml, for the example-prod cluster the staging XR names.
-# This cluster's record as the cluster-registry chart renders it for a cluster that does not host Infisical
-# (review C9): infisicalUrl is the address other clusters reach Infisical at, infisicalOrgId the fleet's org.
-# The values are the live ones from clusters.yaml.
 apiVersion: v1
 kind: ConfigMap
 metadata:

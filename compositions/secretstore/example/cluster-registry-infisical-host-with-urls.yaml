@@ -1,5 +1,5 @@
-# The Infisical-hosting cluster's record with the review-C9 keys (infisicalUrl is the in-cluster URL there).
-# Values differ from the old literals on purpose; see cluster-registry-upper-with-infisical.yaml.
+# The record of the cluster that runs Infisical (infisicalUrl is the in-cluster URL there), with made-up values
+# so the cases that use it prove hostAPI and orgId come from the registry.
 apiVersion: v1
 kind: ConfigMap
 metadata:

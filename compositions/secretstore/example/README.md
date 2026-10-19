@@ -1,58 +1,40 @@
-# SecretStore Composition — local render example
+# SecretStore Composition: render cases
 
-Fast offline check of the templates' Go-template syntax, no cluster needed.
-Because the Composition uses `source: Inline` (see `../build-composition.sh`),
-`../composition.yaml` is directly renderable as-is — no wrapper script needed.
+`cases.yaml` lists every render case: an XR, the cluster-registry and other lookup fixtures it
+sees, and observed resources that stand in for a later reconcile. Each case renders through the
+real functions and is compared with `expected/<case>.yaml`. From the repo root:
 
 ```shell
-crossplane render xr-checkout-api.yaml ../composition.yaml functions.yaml -x -r
+python3 tools/build-compositions secretstore              # after any change to ../templates/
+python3 tools/test_compositions.py secretstore            # check
+python3 tools/test_compositions.py --update secretstore   # regenerate expected/, then review the diff
 ```
 
-Requires Docker (`crossplane render` pulls and runs `function-go-templating` /
-`function-auto-ready` in containers by default).
-
-`xr-checkout-api.yaml` exercises `"shared"` mode (the default, `environmentSlug`
-omitted) targeting example-dev (the Infisical host) - renders an `InfisicalProject` + a Kubernetes-Auth
-`ClusterSecretStore`. `xr-checkout-api-staging.yaml` exercises the per-environment
-mode (`environmentSlug: staging`, `cluster: example-prod`) added in Item 8's
-multi-cluster revision - renders an `InfisicalEnvironment` + a narrowed,
-Universal-Auth `ClusterSecretStore` instead, with NO `InfisicalProject` (deliberate -
-per-environment XRs reference an already-existing project, never create one). Run
-either the same way, swapping the XR filename.
-
-**If you edit `../templates/*.yaml`**, run `../build-composition.sh` first to
-regenerate `../composition.yaml` from them before re-running this example.
-
-This fixture only exercises the Composition's own rendering (both resources'
-field values, deterministic naming) — it doesn't exercise
-`infisical-secretstore-operator`'s own reconciliation against a real Infisical
-API, which only happens on a real cluster (see that operator's own README).
+| Case | XR | What it shows |
+|---|---|---|
+| `checkout-api-new-project` | `xr-checkout-api.yaml` | Shared mode on a cluster that doesn't run Infisical: a new project and universal auth. |
+| `checkout-api-adopted` | `xr-checkout-api.yaml` | The same, adopting an existing project through `secretstore-provisioner.yaml`. |
+| `checkout-api-staging` | `xr-checkout-api-staging.yaml` | Per-environment mode: one environment and a store limited to `app-checkout-api-staging`. No project. |
+| `checkout-api-kubernetes-auth` | `xr-checkout-api.yaml` | Shared mode on the cluster that runs Infisical: Kubernetes auth, plus the credentials Secret once the Identity is observed. |
+| `checkout-api-universal-creds` | `xr-checkout-api.yaml` | Universal auth once the client secret is observed: the credentials Secret and its server-side copy of the secret. |
+| `registry-url-universal-auth`, `registry-url-kubernetes-auth` | `xr-checkout-api.yaml` | Infisical's address and org id taken from the registry record, for each auth method. |
+| `registry-keys-missing` | `xr-checkout-api.yaml` | A registry record without `infisicalUrl`/`infisicalOrgId`: the render fails and nothing is applied. |
 
 ## Adopting an existing project
 
-The Composition always provisions through provider-infisical (`Project`,
-`ProjectEnvironment`, `Identity`, `IdentityUniversalAuth` / `IdentityKubernetesAuth`,
-`ProjectIdentity`, and the `<slug>-infisical-creds` Secret). The old
-`infisical-secretstore-operator` path was removed on 2026-09-23 once every kind-prod
-project had been migrated; the operator is retired.
+A new app needs nothing: its project is created. To adopt a project that already exists in
+Infisical, so its secrets stay where they are, add an entry for its slug (`<app>-<cluster>`) to
+the `secretstore-provisioner` ConfigMap with its `projectId`, `sharedEnvId` and `envIds` (format
+in `secretstore-provisioner.yaml` and `../templates/02-provisioner-gate.yaml`). The provider's
+machine identity must already be an `admin` member of that project, or every read is a 403.
 
-A NEW app needs nothing: its project is created fresh. To **adopt** a project that already
-exists in Infisical (so its secrets stay put), add an entry to the
-`secretstore-provisioner` ConfigMap (see `secretstore-provisioner.yaml`) with its
-`projectId`, `sharedEnvId` and `envIds`, and make sure the provider's machine identity is
-already an `admin` member of that project - otherwise every read is a 403. The old
-`provisioner: provider` key is ignored.
+## Deleting a SecretStore keeps the Infisical project
 
-## Deleting a SecretStore does not delete the Infisical project
-
-The Composition renders the `Project` and `ProjectEnvironment` managed resources with
-`managementPolicies: [Create, Observe, Update, LateInitialize]` - **no `Delete`**. Deleting
-the SecretStore XR, or ArgoCD pruning the file that declares it, removes the Kubernetes
-objects but leaves the Infisical project, its environments and every secret in them. The
-identity, its auth config and its client secrets keep `Delete`, so credentials are still
+`Project` and `ProjectEnvironment` have `managementPolicies: [Create, Observe, Update,
+LateInitialize]`, with no `Delete`. Deleting the XR, or ArgoCD pruning the file that declares
+it, removes the Kubernetes objects and leaves the project, its environments and their secrets.
+The identity, its auth config and its client secrets keep `Delete`, so credentials are still
 revoked.
 
-The catch: a decommissioned app's project is left behind and keeps its slug. Onboarding an
-app with the same slug later would try to create a colliding project. Either **adopt** the
-leftover (an entry in the `secretstore-provisioner` ConfigMap, see above) or delete the
-project in Infisical by hand once you are sure the secrets are not wanted.
+A decommissioned app's project therefore keeps its slug. Before onboarding an app with the same
+name, adopt the leftover project (above) or delete it in Infisical.

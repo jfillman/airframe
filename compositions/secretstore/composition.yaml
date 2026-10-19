@@ -1,18 +1,10 @@
 # GENERATED FILE - do not hand-edit the pipeline's `input.inline.template`
-# block below. Edit templates/*.yaml instead, then run ./build-composition.sh
-# to regenerate this file. See compositions/slo/build-composition.sh for why
-# this catalog uses `source: Inline` for every Composition rather than
-# `source: FileSystem` against a shared mount.
+# block below. Edit templates/*.yaml instead, then run
+# `tools/build-compositions secretstore` to regenerate it (CI runs --check).
 #
-# Renders the provider-infisical resource chain (project, environments, machine identity
-# and auth config, membership) and an ESO ClusterSecretStore pointed at the credentials
-# that chain produces - idp/docs/service-catalog-design.md Item 8. (Until 2026-09-23 this
-# was an InfisicalProject CR reconciled by the infisical-secretstore-operator, now retired.) NOT yet wired into
-# ApplicationEnvironment's auto-provisioning (create-on-first-env, reference on
-# later ones) - this XRD is standalone-creatable for this first pass, same as SLO
-# was before any Attached-tier auto-provisioning existed. That wiring needs the
-# idempotent-git-file-write mechanism discussed for the "N sibling XRs, one shared
-# resource" problem - separate follow-up, deliberately not bolted on here.
+# SecretStore: provider-infisical resources (project, environments, machine identity and its
+# auth, project membership) and an External Secrets ClusterSecretStore that logs in with them.
+# xrds/secretstore.yaml describes the two modes and who requests them.
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
@@ -32,43 +24,19 @@ spec:
         source: Inline
         inline:
           template: |
-            # Real Crossplane extra-resources lookup against the cluster registry
-            # (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
-            # same `matchName` pattern applicationenvironment's own 00-cluster-gate.yaml and
-            # nodejsapplication's own 00-devcluster-gate.yaml already use, added here 2026-08-18.
+            # Reads this cluster's record from the cluster registry (the crossplane-system ConfigMap named
+            # after spec.cluster) and sets, for every later template in this step:
+            #   $isInfisicalHost  true on the cluster that runs Infisical (registry infisicalHost: "true").
+            #                     It selects Kubernetes auth there and universal auth everywhere else. It is
+            #                     its own registry field because a cluster's type doesn't say whether
+            #                     Infisical runs on it.
+            #   $infisicalUrl     the address this cluster reaches Infisical at (registry infisicalUrl)
+            #   $infisicalOrgId   the Infisical organization (registry infisicalOrgId)
+            # Both values come from the top-level infisical: block of the fleet's clusters.yaml, which
+            # charts/cluster-registry renders into every record.
             #
-            # Replaces what used to be a plain `eq $spec.cluster "kind-dev"` string comparison in
-            # each of this directory's three resource files (clustersecretstore.yaml,
-            # infisicalproject.yaml, per-env-secretstore.yaml) - a prior session deliberately chose
-            # that static comparison over a live lookup, reasoning "which cluster hosts Infisical
-            # is a static topology fact... today: only ever kind-dev" (see this catalog's own git
-            # history). That reasoning assumed a single permanent dev cluster; the fleet now
-            # supports multiple, which breaks it: a SECOND dev cluster is still type: dev but does
-            # NOT physically run Infisical (idp/docs/service-catalog-design.md Item 8 deliberately
-            # keeps one shared Infisical instance, not one per dev cluster - "second Infisical
-            # instance per cluster" was weighed and rejected for the extra live infra cost). A
-            # plain type: dev check would incorrectly route it to local Kubernetes Auth against an
-            # Infisical that isn't running there. `infisicalHost` is a separate, independent
-            # registry field from `type` for exactly this reason.
-            #
-            # Declared once here (this Composition's single function-go-templating pipeline step
-            # concatenates every templates/*.yaml file into one template execution - see
-            # build-composition.sh - so $isInfisicalHost below is available to every later file in
-            # this same directory without redeclaring the ExtraResources requirement itself,
-            # matching 00-cluster-gate.yaml's own "declared once, persists across --- separators"
-            # convention). Each resource file still redeclares its own $spec locally, matching this
-            # Composition's existing per-file convention (infisicalproject.yaml/
-            # clustersecretstore.yaml/per-env-secretstore.yaml each already redeclare $spec/
-            # $appName/$envSlug/$projectSlug independently, even within this same step).
-            #
-            # Behavior-preserving for any cluster name that ISN'T registered at all (a typo, or a
-            # cluster mid-onboarding before its registry entry lands): $items stays empty,
-            # $isInfisicalHost stays false, exactly matching the ORIGINAL code's "anything other
-            # than the literal kind-dev" fallback to Universal Auth - no new hard gate introduced,
-            # unlike ApplicationEnvironment/NodeJSApplication's own registry gates which refuse to
-            # render entirely. This Composition still makes no OTHER cross-cluster call (xrds/
-            # secretstore.yaml's own header) - this lookup is local-cluster-only, same as
-            # ApplicationEnvironment's and NodeJSApplication's.
+            # Every templates/*.yaml file is concatenated into one template run, so variables set here
+            # persist across the --- separators.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $allExtra := .extraResources | default dict >>
             <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
@@ -85,10 +53,9 @@ spec:
               <<- $registryInfisicalUrl = index $cm.data "infisicalUrl" | default "" >>
               <<- $registryInfisicalOrgId = index $cm.data "infisicalOrgId" | default "" >>
             <<- end >>
-            <<- /* Review C9: where Infisical lives is a fleet fact in clusters.yaml (top-level infisical: block), rendered by
-                   the cluster-registry chart into this cluster's record as infisicalUrl and infisicalOrgId. No fallback: a
-                   record without them fails the render with a fatal result, which leaves every composed object as it is and
-                   surfaces the cause in Synced=False (knownFailures InfisicalRegistryKeysMissing in xrds/secretstore.meta.yaml). */>>
+            <<- /* A record without infisicalUrl and infisicalOrgId fails the render. A fatal result leaves every composed
+                   object as it is and names the cause in Synced=False (knownFailures InfisicalRegistryKeysMissing in
+                   xrds/secretstore.meta.yaml). */>>
             <<- /* Only once Crossplane has answered the lookup: the first pass of every reconcile runs before it has, and only
                    the final pass's output is applied, so failing there would fail every reconcile. */>>
             <<- if and (hasKey $allExtra "cluster-registry-entry") (not (and $registryInfisicalUrl $registryInfisicalOrgId)) >>
@@ -106,22 +73,11 @@ spec:
                 matchName: <<$spec.cluster>>
             ---
             ---
-            # kubernetes-auth branch inputs (review C2, 2026-10-09): the cluster CA only.
-            #
-            # Until 2026-10-09 this gate read the token-reviewer ServiceAccount Secret
-            # (infisical/infisical-token-reviewer-token) through ExtraResources and infisicalproject.yaml
-            # rendered its JWT into IdentityKubernetesAuth.spec.forProvider.tokenReviewerJwt: the long-lived
-            # token sat in etcd as plain CR spec, in every XR desired-state round trip and in every function
-            # request and response. Now the JWT never enters the function pipeline:
-            #   - the CA comes from the kube-root-ca.crt ConfigMap every namespace has (public material, same
-            #     bytes as the Secret's ca.crt);
-            #   - the token reaches the identity through a Secret in the XR's namespace that a provider-kubernetes
-            #     Object copies server-side from infisical/infisical-token-reviewer-token with
-            #     references[].patchesFrom (infisicalproject.yaml, infisical-token-reviewer-secret), and
-            #     IdentityKubernetesAuth points at it with tokenReviewerJwtSecretRef (provider-infisical >=
-            #     v0.0.0-8, where upjet marks the field sensitive).
-            # Missing ConfigMap (a namespace without kube-root-ca.crt does not exist on a supported cluster)
-            # renders an empty CA, which the provider rejects loudly rather than silently trusting nothing.
+            # Kubernetes-auth input: the cluster CA, from the kube-root-ca.crt ConfigMap every namespace
+            # has (public material). The token-reviewer JWT is never read here: a provider-kubernetes Object
+            # copies it server-side (infisicalproject.yaml, infisical-token-reviewer-secret), so no
+            # credential passes through the function pipeline. A missing ConfigMap renders an empty CA,
+            # which the provider rejects loudly.
             <<- $caExtra := .extraResources | default dict >>
             <<- $caEntry := index $caExtra "kube-root-ca" | default dict >>
             <<- $caItems := index $caEntry "items" | default list >>
@@ -140,29 +96,18 @@ spec:
                 matchName: kube-root-ca.crt
             ---
             ---
-            # Adoption ids for THIS (app, cluster) pair's Infisical project, read from an optional
-            # ConfigMap, crossplane-system/secretstore-provisioner, keyed by project slug
-            # (<appRef.name>-<cluster>).
+            # Adoption ids for this (app, cluster) pair's Infisical project, from the optional ConfigMap
+            # crossplane-system/secretstore-provisioner, keyed by project slug (<appRef.name>-<cluster>).
+            # A slug with no entry gets a new project, which is the normal case.
             #
-            # History: until 2026-09-23 this also chose between the provider-infisical chain and the
-            # old infisical-secretstore-operator's InfisicalProject CR ("provisioner: provider" opted an
-            # app in; the default was the operator). Every project on every cluster is now
-            # provider-managed and the operator is retired, so the provider is the only path and the
-            # `provisioner` key is ignored - old entries may still carry it.
-            #
-            # What the ConfigMap is still for: ADOPTING a project that already exists in Infisical,
-            # so its secrets stay in place instead of a fresh project being created. A slug with no
-            # entry simply gets a NEW project (the normal path for a newly onboarded app).
-            #
-            # Entry format (YAML text under the slug key):
-            #   projectId: <uuid>              # adopt this existing Infisical project
-            #   sharedEnvId: <uuid>            # adopt its existing "shared" environment
-            #   envIds: {staging: <uuid>}      # adopt existing per-env environments
-            # The ids set crossplane.io/external-name on the composed resource so the provider
-            # observes the existing object instead of creating a colliding one. They only matter on
-            # the first reconcile; the provider maintains the annotation itself afterwards. The
-            # provider's machine identity must already be a member (admin) of an adopted project, or
-            # every read is a 403.
+            # An entry adopts objects that already exist in Infisical, so their secrets stay in place:
+            #   projectId: <uuid>              # the project
+            #   sharedEnvId: <uuid>            # its "shared" environment
+            #   envIds: {staging: <uuid>}      # per-environment environments
+            # The ids become crossplane.io/external-name on the composed resources, so the provider
+            # observes the existing objects instead of creating new ones. They matter only on the first
+            # reconcile. The provider's machine identity must already be an admin member of an adopted
+            # project, or every read is a 403. A `provisioner` key in older entries is ignored.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $gateSlug := printf "%s-%s" $spec.appRef.name $spec.cluster >>
             <<- $provExtra := .extraResources | default dict >>
@@ -189,71 +134,21 @@ spec:
                 namespace: crossplane-system
                 matchName: secretstore-provisioner
             ---
-            # The client secret the provider publishes for the universal-auth chain. Read here
-            # (rather than from the managed resource's connection details) so it is available to the
-            # credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
-            # unconditionally; on every other branch it simply matches nothing.
             ---
-            # Rendered by function-go-templating (source: Inline, see composition.yaml/
-            # build-composition.sh).
+            # The shared-mode ClusterSecretStore (environmentSlug == "shared"), named after the project slug
+            # and open to every app-<app>-* namespace on this cluster. per-env-secretstore.yaml renders the
+            # narrowed per-environment sibling under a different name, so the two never collide.
             #
-            # Wrapped in an objects.kubernetes.m.crossplane.io Object (provider-kubernetes),
-            # NOT composed as a first-class ClusterSecretStore directly - confirmed live:
-            # Crossplane v2 rejects composing a cluster-scoped native resource from a
-            # namespaced XR ("cannot apply cluster scoped composed resource... for a namespaced
-            # composite resource"), the exact same restriction NodeJSApplication's own
-            # provider-github already hit for Cluster-scoped repo resources - same fix, the
-            # namespaced managed-resource family (kubernetes.m.crossplane.io, not
-            # kubernetes.crossplane.io), wrapping the actual manifest inside
-            # spec.forProvider.manifest instead. See 10-crds-operators/crossplane/
-            # provider-kubernetes-config.yaml for the ClusterProviderConfig + RBAC this needed
-            # (neither existed before this Composition needed them).
+            # Wrapped in a provider-kubernetes Object (kubernetes.m.crossplane.io): Crossplane v2 won't let a
+            # namespaced XR compose a cluster-scoped resource directly.
             #
-            # spec.provider.infisical schema (inside the wrapped manifest) confirmed against
-            # ESO's real upstream Go source (apis/externalsecrets/v1/secretsstore_infisical_types.go),
-            # not the vendored CRD's own docs comments - auth.kubernetesAuthCredentials.identityId
-            # is a SecretKeySelector (same shape as universalAuthCredentials was), and the
-            # optional serviceAccountTokenPath field is deliberately left unset below: confirmed
-            # against providers/v1/infisical/provider.go that an unset value makes ESO's
-            # controller present ITS OWN in-pod projected SA token to Infisical's login, not
-            # read anything from a Secret - the actual zero-persisted-credential mechanism, not
-            # just a marketing claim.
-            #
-            # hostAPI points at this cluster's own in-cluster Infisical Service - the default
-            # (https://app.infisical.com/api) is Infisical's SaaS, wrong for a self-hosted
-            # on-prem instance. identityId references the credentials Secret InfisicalProject's
-            # operator writes (same namespace as this XR, hence this app's own namespace - see
-            # infisicalproject.yaml's credentialsSecretName) - that Secret doesn't exist yet on
-            # this store's very first reconcile (the operator writes it asynchronously, seconds
-            # after the InfisicalProject CR appears) - not a problem, same eventual-consistency
-            # shape as any other not-yet-ready secretKeyRef; ESO's own controller reports
-            # Ready:False until it resolves, then self-heals, no ordering/wait logic needed in
-            # this Composition. Unlike the old universalAuthCredentials.clientSecret, what's in
-            # that Secret (identityId) isn't itself sensitive - see infisicalproject.yaml's own
-            # credentialsSecretName description for why.
-            #
-            # spec.conditions.namespaceRegexes restricts this store to exactly this app's own
-            # namespaces on this cluster (item 8's resolved scope: "cluster-scoped" doesn't mean
-            # "visible to every app") - app-<appName>-<env>, this catalog's live-confirmed
-            # namespace convention (dev cluster: app-checkout-api-dev, app-widget-api-dev; an upper
-            # cluster: app-checkout-api-prod - checked directly via `kubectl get ns`, not assumed).
-            #
-            # ONLY rendered in "shared" mode (environmentSlug == "shared") - the wide-open store
-            # covering every env namespace for this (app, cluster) pair. See
-            # per-env-secretstore.yaml for the narrowed, per-env sibling.
-            #
-            # $projectSlug computed from spec fields, not this XR's own name - see
-            # infisicalproject.yaml's header for why. This store's own object NAME is also
-            # $projectSlug (not $xrName) - deliberate: a per-env XR (per-env-secretstore.yaml)
-            # computes and creates ITS OWN differently-named ClusterSecretStore, and the two
-            # must never collide.
-            #
-            # hostAPI/authMethod both branch on $isInfisicalHost (00-infisical-host-gate.yaml,
-            # same pipeline step - see that file's own header for why this is a live cluster-
-            # registry lookup now, not the plain string comparison this used to be). The
-            # hostAPI is the registry's infisicalUrl for this cluster (review C9): the in-cluster Service DNS on the
-            # cluster that hosts Infisical, the address other clusters reach it at everywhere else - both stated once
-            # in clusters.yaml's top-level infisical: block. See 00-infisical-host-gate.yaml.
+            # hostAPI is the registry's infisicalUrl and the auth method follows $isInfisicalHost
+            # (00-infisical-host-gate.yaml). Both auth methods read <slug>-infisical-creds in the XR's
+            # namespace, written by infisicalproject.yaml:
+            #   - Kubernetes auth reads identityId. serviceAccountTokenPath stays unset, so ESO presents its
+            #     own controller's projected token and no credential is stored.
+            #   - Universal auth reads clientId and clientSecret.
+            # Until that Secret exists ESO reports the store not Ready, and it recovers on its own.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $appName := $spec.appRef.name >>
@@ -293,8 +188,7 @@ spec:
                               name: <<$credsSecretName>>
                               namespace: <<$xrNamespace>>
                               key: identityId
-                            # serviceAccountTokenPath deliberately omitted - see this file's
-                            # header. ESO presents its own controller SA token, not a stored one.
+                            # serviceAccountTokenPath unset: ESO presents its own controller token.
                           <<- else >>
                           universalAuthCredentials:
                             clientId:
@@ -314,75 +208,23 @@ spec:
             <<- end >>
             ---
             ---
-            # Rendered by function-go-templating (source: Inline, see composition.yaml/
-            # build-composition.sh), double-angle-bracket delimiters (no PromQL/Sloth-syntax
-            # collision reason here like the SLO Composition has, but kept consistent with this
-            # catalog's one other Inline-mode Composition rather than introducing a second
-            # delimiter convention for no reason).
+            # The shared-mode Infisical resources (environmentSlug == "shared"), all through provider-infisical:
+            #   Project, ProjectEnvironment "shared"    the project <appRef.name>-<cluster>, never deleted
+            #   Identity                                org role no-access
+            #   IdentityKubernetesAuth                  on the cluster that runs Infisical, or
+            #   IdentityUniversalAuth + ClientSecret    on every other cluster
+            #   ProjectIdentity                         role viewer on this project only
+            #   <slug>-infisical-creds Secret           what the ClusterSecretStores log in with
+            # A per-env XR creates none of these; it finds this project by the same computed slug.
             #
-            # NOTE: never write two literal delimiter characters adjacent to each other
-            # anywhere in this file outside a real action, including in comments - the lexer
-            # scans raw text for the pair regardless of YAML comment syntax, and an accidental
-            # empty action fails the whole render (hit this live building this exact file).
+            # The slug is computed from spec fields, never from the XR's name, so both modes agree on it.
             #
-            # ONLY rendered in "shared" mode (environmentSlug == "shared", the default) - a
-            # non-"shared" XR references this project by its own computed $projectSlug (below)
-            # but never creates one; see per-env-secretstore.yaml for that mode.
+            # No credential passes through the function pipeline. provider-kubernetes Objects copy the
+            # token-reviewer JWT and the universal-auth client secret server-side (references[].patchesFrom);
+            # only ids, which are not secret, are rendered here.
             #
-            # $projectSlug is computed from spec fields (appRef.name + cluster), NOT from this
-            # XR's own metadata.name - a deliberate change from this XRD's first pass (which
-            # used $xrName directly, back when only one XR ever existed per (app,cluster)). Both
-            # modes now need the SAME formula so a per-env XR (a DIFFERENT k8s object, DIFFERENT
-            # name) can compute the identical project slug its "shared" sibling already created,
-            # with no ExtraResources lookup needed either way.
-            #
-            # authMethod: an ExtraResources cluster-registry lookup (00-infisical-host-gate.yaml,
-            # same pipeline step) against the registry's own `infisicalHost` field - see that
-            # file's own header for the full multi-cluster reasoning.
-            #
-            # 2026-09-18 MIGRATION, kubernetes-auth branch only, NOT YET LIVE-CUT-OVER:
-            # replaces the hand-rolled infisical-secretstore-operator's single InfisicalProject
-            # CR (which atomically did project+shared-env+identity+auth-config+membership-grant+
-            # credentials-write as one hand-written REST call chain) with the real
-            # github.com/jfillman/provider-infisical resource chain - Project, ProjectEnvironment,
-            # Identity, IdentityKubernetesAuth, ProjectIdentity, plus a synthetic identityId
-            # Secret (wrapped in provider-kubernetes' Object, same reasoning
-            # clustersecretstore.yaml's own header already documents - Crossplane v2 needs a
-            # recognized managed-resource family to compose, a raw core/v1 Secret has no
-            # controller of its own). ProjectIdentity's adoptExisting: true is the native,
-            # upstream-supported fix for the old operator's own known non-idempotent
-            # ensure_project_membership() bug - a live 400 on retry, see
-            # project_kiac_dev_provider_github_bugs's sibling memory on this operator.
-            #
-            # The universal-auth branch (every cluster OTHER than the one hosting Infisical, e.g.
-            # kind-prod) now has the same provider chain (adopting existing projects by id via
-            # 02-provisioner-gate.yaml). Until 2026-09-23 it was opt-in and the default was the old
-            # InfisicalProject CR; that operator branch is removed. It was blocked until
-            # 2026-09-23 by IdentityUniversalAuthClientSecret failing its pre-Create Observe: upjet
-            # seeds the Terraform state with an empty id, the Terraform provider's Read then called
-            # the client-secret LIST endpoint (an array) instead of GET-by-id. Fixed in
-            # provider-infisical v0.0.0-7 (a non-empty seeded id) - not an upstream SDK bug, which
-            # is what this comment used to say. Chain: Project, ProjectEnvironment, Identity,
-            # IdentityUniversalAuth, IdentityUniversalAuthClientSecret, ProjectIdentity, then the
-            # same <slug>-infisical-creds Secret the operator writes (clientId + clientSecret), so
-            # the ClusterSecretStores need no change. clientId comes from the client-secret
-            # resource's status.atProvider.clientId; clientSecret is copied into that Secret by
-            # provider-kubernetes itself (Object.spec.references[].patchesFrom from the <slug>-ua-conn
-            # connection Secret), so since 2026-10-09 (review C2) it is never read by, rendered by or
-            # carried through the function pipeline. The same pattern carries the kubernetes branch's
-            # token-reviewer JWT (infisical-token-reviewer-secret).
-            #
-            # NOT YET WIRED INTO THE LIVE CLUSTER'S REAL SECRETSTORE XRS: this Composition
-            # change, once merged to main, would immediately re-render EVERY existing
-            # kubernetes-auth SecretStore XR under the new resource chain - Crossplane would
-            # garbage-collect the old (real, already-provisioned) InfisicalProject objects for
-            # every already-onboarded app on kiac-dev the moment this syncs, issuing new
-            # credentials and orphaning the old Infisical projects. Verified in isolation first
-            # (a throwaway (app,cluster) pair, applied directly, not through this XRD) before
-            # any real per-app cutover - see the session notes for how that cutover should
-            # actually happen (recreate credentials per app, re-point each ClusterSecretStore,
-            # verify, clean up the old project - one app at a time, not a blanket Composition
-            # flip). Kept on a feature branch, not main, until that per-app plan exists.
+            # Never write the two delimiter characters next to each other anywhere in this file, comments
+            # included: the template lexer scans raw text, and an accidental empty action fails the render.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- $appName := $spec.appRef.name >>
@@ -392,8 +234,7 @@ spec:
             <<- if $isInfisicalHost >>
               <<- $authMethod = "kubernetes" >>
             <<- end >>
-            # $infisicalOrgId comes from the cluster registry (infisicalOrgId, rendered from clusters.yaml's top-level
-            # infisical: block; see 00-infisical-host-gate.yaml). Review C9 moved it out of this file, where it was a literal.
+            # $infisicalOrgId comes from the cluster registry (00-infisical-host-gate.yaml).
             <<- if eq $envSlug "shared" >>
             apiVersion: project.infisical.m.hangar.io/v1alpha1
             kind: Project
@@ -405,13 +246,10 @@ spec:
                 crossplane.io/external-name: <<$adoptProjectId | toJson>>
                 <<- end >>
             spec:
-              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
-              # must never delete the Infisical project/environment and the secrets in it. The
-              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
-              # client secrets keep Delete so credentials are still revoked. Consequence: a
-              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
-              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
-              # it in Infisical by hand.
+              # No Delete: removing this XR, or ArgoCD pruning the file that declares it, must never
+              # delete the project or the secrets in it. Identities and client secrets keep Delete, so
+              # credentials are still revoked. A decommissioned app's project keeps its slug: adopt it
+              # (02-provisioner-gate.yaml) or delete it in Infisical by hand.
               managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: <<$projectSlug>>
@@ -431,13 +269,10 @@ spec:
                 crossplane.io/external-name: <<$adoptSharedEnvId | toJson>>
                 <<- end >>
             spec:
-              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
-              # must never delete the Infisical project/environment and the secrets in it. The
-              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
-              # client secrets keep Delete so credentials are still revoked. Consequence: a
-              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
-              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
-              # it in Infisical by hand.
+              # No Delete: removing this XR, or ArgoCD pruning the file that declares it, must never
+              # delete the project or the secrets in it. Identities and client secrets keep Delete, so
+              # credentials are still revoked. A decommissioned app's project keeps its slug: adopt it
+              # (02-provisioner-gate.yaml) or delete it in Infisical by hand.
               managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: shared
@@ -482,10 +317,7 @@ spec:
                   name: <<printf "%s-token-reviewer" $projectSlug>>
                   key: token
                 tokenReviewerMode: api
-                # Scoped to ESO's own controller ServiceAccount only - it presents its own
-                # in-pod projected token, matching clustersecretstore.yaml's own "zero
-                # persisted credential" posture, same ESO_SERVICEACCOUNT_NAMESPACE/
-                # ESO_SERVICEACCOUNT_NAME the current operator already restricts to.
+                # Only External Secrets' own controller ServiceAccount may log in with this identity.
                 allowedNamespaces:
                   - external-secrets
                 allowedServiceAccountNames:
@@ -550,10 +382,9 @@ spec:
                 identityIdRef:
                   name: <<$projectSlug>>
                 description: <<printf "%s (managed by the SecretStore Composition)" $projectSlug | toJson>>
-              # Same-namespace connection Secret (the namespaced MR writes into its own
-              # namespace, which is this XR's). provider-kubernetes copies key attribute.client_secret
-              # out of it into <slug>-infisical-creds (the Object below, patchesFrom); nothing in this
-              # pipeline reads it. The client id is not sensitive and comes from status.atProvider.clientId.
+              # Written into this XR's namespace. provider-kubernetes copies attribute.client_secret out of it
+              # into <slug>-infisical-creds (the Object below); nothing in this pipeline reads it. The client
+              # id is not secret and comes from status.atProvider.clientId.
               writeConnectionSecretToRef:
                 name: <<printf "%s-ua-conn" $projectSlug>>
               providerConfigRef:
@@ -575,13 +406,8 @@ spec:
                 identityIdRef:
                   name: <<$projectSlug>>
                 roles:
-                  # "viewer" here, not "no-access" - matches the current operator's own
-                  # ensure_project_membership(role="viewer") exactly (confirmed against its
-                  # source, main.py). "no-access" is correct at the ORG level for the Identity
-                  # itself (above) but would leave ESO unable to read any secret through this
-                  # store at all - hit live: ESO authenticated successfully via kubernetes
-                  # auth, then got a real 403 "not allowed to describeSecret" back from
-                  # Infisical with the project-level role wrongly set to no-access too.
+                  # viewer on this project. The identity's org role is no-access (above); no-access here
+                  # too would let ESO log in but read nothing (a 403 on every secret).
                   - roleSlug: viewer
               providerConfigRef:
                 kind: ClusterProviderConfig
@@ -616,13 +442,8 @@ spec:
                   metadata:
                     name: <<printf "%s-infisical-creds" $projectSlug>>
                     namespace: <<$xrNamespace>>
-                  # data (base64), not stringData: the API server converts stringData to data
-                  # server-side and never persists a stringData field, so provider-kubernetes'
-                  # managedFields-based Observe (which extracts only the fields it owns) finds
-                  # nothing at the stringData path and panics converting a nil into a map -
-                  # confirmed live (ReconcileError: "unable to convert managed fields ...
-                  # expected map, got <nil>") on every one of this migration's Object/Secret
-                  # resources the moment they hit their first real Observe pass.
+                  # data (base64), never stringData: the API server never stores stringData, so
+                  # provider-kubernetes' Observe finds nothing at the path it owns and fails.
                   data:
                     identityId: <<$identityId | b64enc>>
               managementPolicies: ["*"]
@@ -650,11 +471,11 @@ spec:
               annotations:
                 <<setResourceNameAnnotation "infisical-identity-secret">>
             spec:
-              # The client secret is copied server-side by provider-kubernetes from the
+              # provider-kubernetes copies the client secret server-side from the
               # IdentityUniversalAuthClientSecret's connection Secret (<slug>-ua-conn, key
-              # attribute.client_secret, same namespace) at apply time: it is never in this manifest, this
-              # XR or any function payload (review C2). Until the connection Secret exists the apply fails and
-              # retries; the placeholder key is what patchesFrom overwrites.
+              # attribute.client_secret) at apply time: it is never in this manifest, this XR or any function
+              # payload. Until the connection Secret exists the apply fails and retries; the placeholder key
+              # is what patchesFrom overwrites.
               references:
                 - patchesFrom:
                     apiVersion: v1
@@ -682,25 +503,14 @@ spec:
 
             <<- end >>
             ---
-            # ONLY rendered in per-env mode (environmentSlug != "shared"). Does NOT create a
-            # project - references the ALREADY-existing one from this (app, cluster) pair's
-            # "shared" XR via the SAME computed $projectSlug formula (infisicalproject.yaml's
-            # header) - no ExtraResources lookup needed, since airframe-application's own
-            # attached/secretstore.yaml always renders the "shared" XR alongside any per-env one,
-            # in the SAME chart release, same namespace. If the "shared" XR's own InfisicalProject
-            # hasn't finished creating that project yet, InfisicalEnvironment's own reconcile
-            # below just waits (TemporaryError) - the same eventual-consistency shape every other
-            # not-yet-ready reference in this catalog already uses, no ordering logic needed here.
+            # Per-environment mode (environmentSlug != "shared"): adds the environment <environmentSlug> to
+            # the project its shared sibling XR created (same computed slug, no lookup), and a
+            # ClusterSecretStore limited to exactly the namespace app-<app>-<environmentSlug>.
             #
-            # InfisicalEnvironment (a second CRD this same operator reconciles,
-            # secrets.idp.io/v1alpha1 - see its own CRD file's header) just ensures ONE
-            # additional environment exists in that project. The credentials Secret this store's
-            # auth block references is the SAME one the "shared" XR's InfisicalProject wrote -
-            # both XRs live in the same namespace (airframe-application's own convention: this chart
-            # renders every SecretStore-family XR for one (app, cluster) pair into one dedicated
-            # namespace - see that chart's own attached/secretstore.yaml), so a same-namespace
-            # secretKeyRef is correct without this Composition needing to know that convention
-            # by name.
+            # Creates no project and no identity. The store logs in with the shared XR's
+            # <slug>-infisical-creds Secret, which is in the same namespace because ApplicationEnvironment
+            # requests both XRs through the same xr-requests folder. If the project doesn't exist yet, the
+            # ProjectEnvironment waits for it.
             <<- $spec := .observed.composite.resource.spec >>
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
@@ -714,11 +524,6 @@ spec:
               <<- $authMethod = "kubernetes" >>
             <<- end >>
             <<- if ne $envSlug "shared" >>
-            # 2026-09-18 MIGRATION - see infisicalproject.yaml's own header for the full
-            # rationale (kubernetes-auth branch only, universal-auth unchanged below, NOT YET
-            # live-cut-over to main). Same $projectSlug convention: references the ALREADY
-            # -existing Project this (app,cluster) pair's "shared" XR already created (or is
-            # creating concurrently - same eventual-consistency shape as the original).
             apiVersion: project.infisical.m.hangar.io/v1alpha1
             kind: ProjectEnvironment
             metadata:
@@ -730,13 +535,10 @@ spec:
                 crossplane.io/external-name: <<$adoptThisEnvId | toJson>>
                 <<- end >>
             spec:
-              # No Delete, deliberately: deleting this XR (or ArgoCD pruning the file that declares it)
-              # must never delete the Infisical project/environment and the secrets in it. The
-              # Kubernetes object goes, the Infisical object stays. Identities, their auth config and
-              # client secrets keep Delete so credentials are still revoked. Consequence: a
-              # decommissioned app's project is left behind and holds its slug - to reuse the slug,
-              # adopt the leftover project through the secretstore-provisioner ConfigMap, or delete
-              # it in Infisical by hand.
+              # No Delete: removing this XR, or ArgoCD pruning the file that declares it, must never
+              # delete the project or the secrets in it. Identities and client secrets keep Delete, so
+              # credentials are still revoked. A decommissioned app's project keeps its slug: adopt it
+              # (02-provisioner-gate.yaml) or delete it in Infisical by hand.
               managementPolicies: ["Create", "Observe", "Update", "LateInitialize"]
               forProvider:
                 name: <<$envSlug>>
@@ -762,10 +564,8 @@ spec:
                     name: <<$xrName>>
                   spec:
                     conditions:
-                      # Narrowed to exactly ONE namespace (not the "shared" store's wildcard) -
-                      # the real per-env isolation this mode exists for: an ExternalSecret
-                      # anywhere else can't even resolve this store, regardless of what its own
-                      # remoteRef says.
+                      # Exactly one namespace: an ExternalSecret anywhere else can't use this store,
+                      # whatever its remoteRef says.
                       - namespaceRegexes:
                           - <<printf "^app-%s-%s$" $appName $envSlug | toJson>>
                     provider:

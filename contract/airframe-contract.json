@@ -2687,7 +2687,7 @@
       "plural": "infraservices"
     },
     "LambdaFunction": {
-      "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function.",
+      "agentSummary": "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys it to Lambda.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
       "fieldsDescribed": 11,
       "fieldsTotal": 11,

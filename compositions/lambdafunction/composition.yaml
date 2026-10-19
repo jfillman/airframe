@@ -151,19 +151,15 @@ spec:
             <<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>
             ---
             # Commits a minimal, real cicd.yaml into the function's own src repo: build, then deploy to the
-            # existing Lambda function (deploy.target: aws-lambda). Same mechanism as goapplication's copy.
+            # Lambda function (deploy.target: aws-lambda). Same mechanism as goapplication's copy.
             #
             # What the starter does NOT do, on purpose:
-            #  - It never creates the Lambda function. Glidepath's aws-lambda target only updates an
-            #    existing function's image (PackageType: Image). The function, its execution role and its
-            #    ECR repository are created by the platform owner first. See xrds/lambdafunction.yaml.
+            #  - It never creates the Lambda function. Glidepath's aws-lambda target only updates a
+            #    function's image (PackageType: Image); the function, its ECR repository and its roles come
+            #    from an AwsLambdaTarget (composed here with spec.target.enabled, or stand-alone). The deploy
+            #    step copies the built image into that ECR repository. See xrds/lambdafunction.yaml.
             #  - It declares no environments file. A function has no Helm chart, so Glidepath's onboarding
             #    must not scaffold glidepath/envs/dev.yaml for it (see glidepath docs/admin/chart-contract.md).
-            #
-            # KNOWN GAP (found by reading glidepath's deliver-onboarding-files.yaml, not yet fixed): the
-            # image repository is hardcoded to ghcr.io/<owner>/<app> at onboarding, and Lambda can only
-            # pull from ECR. Until Glidepath can build and push to ECR, the deploy stage of this starter
-            # stops at deploy-lambda's own "image-repo must be an ECR URI" error.
             <<- $xrName := .observed.composite.resource.metadata.name >>
             <<- $runtime := .observed.composite.resource.spec.runtime >>
             <<- $region := .observed.composite.resource.spec.region >>

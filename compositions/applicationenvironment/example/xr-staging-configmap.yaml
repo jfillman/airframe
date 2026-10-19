@@ -1,0 +1,13 @@
+# xr-staging.yaml with configMapGenerator: true: the render must also seed
+# example-prod/staging/configmap/kustomization.yaml (configmap-kustomization), the folder the tenant-onboarding
+# ApplicationSet's third source reads (known gap 1).
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ApplicationEnvironment
+metadata:
+  name: widget-service-example-prod-staging
+  namespace: demo-apps
+spec:
+  appName: widget-service
+  cluster: example-prod
+  env: staging
+  configMapGenerator: true

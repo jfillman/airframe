@@ -1,0 +1,26 @@
+# --observed-resources fixture: the configmap-kustomization scaffold once provider-github reports it written
+# (Ready=True). The render must still compose it and must add its name to status.scaffold.done.
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: widget-service-example-prod-staging-configmap-kustomization
+  namespace: demo-apps
+  annotations:
+    crossplane.io/composition-resource-name: configmap-kustomization
+    crossplane.io/external-name: 'gitops-widget-service:example-prod/staging/configmap/kustomization.yaml:'
+spec:
+  managementPolicies:
+  - Create
+  - Observe
+  - LateInitialize
+  forProvider:
+    repository: gitops-widget-service
+    file: example-prod/staging/configmap/kustomization.yaml
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess

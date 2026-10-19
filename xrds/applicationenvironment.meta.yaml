@@ -4,7 +4,7 @@ kind: ApplicationEnvironment
 role: environment
 summary: 'Adds a deploy environment (staging, prod) on a target cluster for an onboarded app: the env''s identity.yaml
   in that cluster''s tenants repo, SecretStore requests, and a one-time values.yaml scaffold in the app''s gitops
-  repo.'
+  repo (plus configmap/kustomization.yaml when spec.configMapGenerator is true).'
 outputs:
   valuesFile:
     kind: literal
@@ -73,6 +73,7 @@ verify:
       status: 'True'
 agentNotes:
   - "values.yaml in the app's gitops repo is a create-once scaffold (ledgered and retired); the identity files and SecretStore requests stay Update-managed because only this composition writes them."
+  - "spec.configMapGenerator true also seeds <cluster>/<env>/configmap/kustomization.yaml (an empty <appName>-app-config generator, create-once like values.yaml): the tenant-onboarding ApplicationSet's third source reads that folder and fails with 'app path does not exist' without it."
   - "Nothing is composed until spec.cluster is in the cluster registry (ClusterReady). A Usage protects the app XR named by spec.appName while the environment exists."
   - "spec.appName plus spec.env is capped at 58 characters: the environment's namespace is app-<appName>-<env>."
 owner: human

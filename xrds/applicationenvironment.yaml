@@ -221,21 +221,15 @@ spec:
                   type: boolean
                   default: false
                   description: >-
-                    Opts this env into the tenant-onboarding ApplicationSet's
-                    optional 3rd Kustomize source (a configMapGenerator for
-                    apps with many config files - see that ApplicationSet's
-                    own templatePatch comment for the full mechanism). Plumbed
-                    through to tenants/<appName>/<env>/identity.yaml's
-                    configMapGenerator: field so it survives this
-                    Composition's own continuous RepositoryFile reconciliation
-                    - added 2026-08-22 after a manual, out-of-band edit to
-                    that identity.yaml (done to live-test the mechanism
-                    2026-08-18) was silently reverted by the next reconcile,
-                    since this field didn't exist yet for the Composition to
-                    read and re-render. Caught live on kind-prod: the
-                    ApplicationSet stopped rendering the 3rd source once the
-                    flag reverted, orphaning the checkout-api-app-config
-                    ConfigMap it had generated - ArgoCD flagged it
-                    requiresPruning without ever actually deleting it (no
-                    prune: true on this Application's syncPolicy).
+                    Generate a ConfigMap for this environment from config
+                    files in the app's gitops repo. On, the environment's
+                    Application also renders
+                    <cluster>/<env>/configmap/ (a Kustomize
+                    configMapGenerator, a fixed-name <appName>-app-config
+                    ConfigMap that values.yaml can mount with
+                    existingConfigMap), and the composition seeds that
+                    folder's kustomization.yaml once. Add the files with
+                    Tower's Config tab. Leave it off if the app has no config
+                    files. Written to tenants/<appName>/<env>/identity.yaml,
+                    where the tenant-onboarding ApplicationSet reads it.
           required: ["spec"]

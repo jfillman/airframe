@@ -16,6 +16,8 @@ cases:
     conditions:
       ClusterReady: ClusterEligible
       AppResolved: AppResolved
+    absent:
+    - configmap-kustomization
 - name: staging-python
   xr: xr-staging.yaml
   required:
@@ -63,3 +65,47 @@ cases:
     status:
       scaffold:
         done: *id002
+- name: configmap-generator
+  xr: xr-staging-configmap.yaml
+  required: *id001
+  expect:
+    conditions: *id003
+    present:
+    - values-yaml
+    - configmap-kustomization
+- name: configmap-generator-gate-fail
+  xr: xr-staging-configmap.yaml
+  expect:
+    conditions:
+      ClusterReady: ClusterNotEligible
+    absent:
+    - configmap-kustomization
+- name: configmap-generator-ready
+  xr: xr-staging-configmap.yaml
+  required: *id001
+  observed:
+  - observed-scaffold-ready.yaml
+  - observed-configmap-ready.yaml
+  expect:
+    conditions: *id003
+    present:
+    - values-yaml
+    - configmap-kustomization
+    status:
+      scaffold:
+        done:
+        - configmap-kustomization
+        - values-yaml
+- name: configmap-generator-retired
+  xr: xr-staging-configmap-scaffolded.yaml
+  required: *id001
+  expect:
+    conditions: *id003
+    absent:
+    - values-yaml
+    - configmap-kustomization
+    status:
+      scaffold:
+        done:
+        - configmap-kustomization
+        - values-yaml

@@ -109,8 +109,8 @@ The image version comes from `VERSION`.
 `ApplicationEnvironment` request on the tenants repo (`checkin-api-<prod-cluster>-staging`, launched
 through the same Backstage template as **Create → ApplicationEnvironment**), then the `cicd.yaml` change
 adding `{ name: staging, tier: flight, cluster: <prod-cluster> }`. **Merge the request first**, so the
-environment exists when `cicd.yaml` names it. Leave `configMapGenerator` off (Airframe
-[known gap 1](../admin/known-gaps.md)).
+environment exists when `cicd.yaml` names it. Leave `configMapGenerator` off unless the app has config files to
+mount (see the quickstart's `configMapGenerator` row).
 
 Then add the release step to `cicd.yaml` (Glidepath tab → Pipelines, or by hand):
 

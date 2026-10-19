@@ -1,0 +1,16 @@
+# xr-staging-configmap.yaml once both of its scaffold files are in the ledger: neither is composed again.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ApplicationEnvironment
+metadata:
+  name: widget-service-example-prod-staging
+  namespace: demo-apps
+spec:
+  appName: widget-service
+  cluster: example-prod
+  env: staging
+  configMapGenerator: true
+status:
+  scaffold:
+    done:
+    - configmap-kustomization
+    - values-yaml

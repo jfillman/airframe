@@ -126,7 +126,7 @@ done
 - **Merge release PRs by fast-forwarding the signed commit**, never with GitHub's button (all three
   strategies create an unsigned commit and `provenance` fails).
 - **PR pipelines need the `preview` label.**
-- **`configMapGenerator` off** on every `ApplicationEnvironment` (Airframe known gap 1).
+- **`configMapGenerator` off** on every `ApplicationEnvironment` (no config files to mount).
 - **Python images**: alpine base and `pip uninstall -y setuptools pip`, or the image-scan gate fails.
 - **Spring liveness on `/actuator/health/liveness`**, never `/readiness`.
 - **`provider-helm` components (Redis) report `Ready=False` for about ten minutes** after any change.

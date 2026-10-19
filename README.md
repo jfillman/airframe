@@ -4,377 +4,83 @@
   <p><i>The structural core: what a compliant service is, defined once.</i></p>
 </div>
 
-Crossplane XRDs, Compositions, Composition Functions, and the
-`airframe-application` Helm chart for [Dream IDP](https://github.com/jfillman/idp)
-— the service catalog a Backstage-driven Crossplane plugin turns into
-self-service templates. Design lives in `idp`'s
-[`docs/service-catalog-design.md`](https://github.com/jfillman/idp/blob/main/docs/service-catalog-design.md);
-this repo is where it's actually built.
+Hangar's service catalog: Crossplane XRDs, their Compositions, two custom Composition Functions,
+and the `airframe-application` Helm chart every app environment installs. A request is one XR
+manifest committed to git; Airframe turns it into repositories, CI onboarding, a secrets store,
+environments on other clusters, and the running service with its components attached.
 
-## Status
+- **Building an app on Hangar?** Start with the [user guide](docs/user/README.md).
+- **Running or extending the catalog?** Read the [admin guide](docs/admin/README.md), starting
+  with [architecture.md](docs/admin/architecture.md).
+- **An agent?** Read [AGENTS.md](AGENTS.md) and [llms.txt](llms.txt) first.
 
-**Every Bootstrap app stack now scaffolds a real `cicd.yaml` at onboarding — a
-real self-service gap closed, 2026-09-21.** `NodeJSApplication`/
-`SpringBootApplication`/`GoApplication`/`PythonApplication` previously scaffolded
-a src repo with no `cicd.yaml` at all, leaving pipeline onboarding as the one
-manual, hand-authored step in an otherwise fully self-service flow — and, since
-`glidepath-control-plane`'s tenant-onboarding `ApplicationSet` always declares a
-source reading that file, a freshly onboarded app's ArgoCD `Application` had
-nothing to resolve until a developer added one. Each stack's own
-`templates/render-github-resources/cicd-yaml.yaml` now commits a minimal,
-build-only starter (`build.agent` matching the stack's own version field, no
-test stage yet) alongside its other boilerplate, same create-once-then-hands-off
-`managementPolicies`. Building this surfaced a second, separate gap: Glidepath's
-`schemas/cicd.schema.json` `build.agent` enum didn't cover `goVersion`
-1.23/1.24 or `pythonVersion` 3.12/3.13 at all — widened as part of the same fix
-(`platform-cicd-toolbox` rebuilt + tag-bumped to `2026-09-21-go-python-agents`).
-Full write-up: Glidepath's own
-[ADR-0017](https://github.com/jfillman/glidepath/blob/main/docs/admin/adr/0017-cicd-yaml-scaffolded-not-hand-authored.md).
-`InfraService`'s own zero-stage `cicd-yaml-stub.yaml` is unaffected — different,
-correct use case (no source code to build).
+## The catalog
 
-**RepositoryFile external-names follow the observed object (2026-09-24).** The provider
-rewrites the `crossplane.io/external-name` of a RepositoryFile it created to its own id
-(`repo:file:main`); templates that rendered `repo:file:` made the two overwrite each
-other every ~2s, each flip forcing an immediate re-reconcile (~2 GitHub calls) - about
-280 calls/minute from five objects, the real cause of the repeated rate-limit
-exhaustion. Every RepositoryFile template now renders the live object's annotation when
-the object exists and its computed name only for new ones. Never render a different
-spelling of a name the provider owns.
+Twenty kinds in the `catalog.hangar.io` group, all namespaced. Each XRD's `role` is declared in
+its `xrds/<kind>.meta.yaml` sidecar.
 
-**Scaffold files never delete, overwrite, or re-identify (2026-09-23).**
-The four app stacks' `src-repo.yaml` scaffold `RepositoryFile`s (Containerfile,
-`.gitignore`, README, and the language boilerplate) no longer carry a `Delete` policy and
-use `overwriteOnCreate: false`, so deleting the Kubernetes object can never remove or
-clobber a developer-owned file. Previously they were reconciled with `Create`+`Delete` and
-`overwriteOnCreate: true`, and changing a field of an already-composed object (the
-2026-09-22 Dockerfile-to-Containerfile rename) put seven objects into a retry loop that
-burned ~16,000 GitHub API calls/hour of a 5,000/hour budget shared with Backstage. An
-existing object's `file:` and `external-name` are now pinned to what the provider reports
-managing (`status.atProvider.file`), so a template default change only affects objects
-that do not exist yet. Do not "retire" these objects by rendering nothing: a missing
-object is indistinguishable from a new one, so it is recreated on the next reconcile (an
-endless create/garbage-collect loop, proved live 2026-09-23). See the header comment in
-each stack's `templates/render-github-resources/src-repo.yaml`. A composition change to a
-field of an already-composed managed resource is a fleet-wide write even when its
-`managementPolicies` has no `Update` - plan it as a migration, not a default change.
+| Role | Kinds | What one gives you |
+|---|---|---|
+| Bootstrap | `NodeJSApplication`, `PythonApplication`, `GoApplication`, `SpringBootApplication`, `InfraService`, `LambdaFunction`, `AzureFunction` | An onboarded app: source and gitops repos with starter files, CI onboarding, and a shared secrets store |
+| Environment | `ApplicationEnvironment` | A Flight environment on another cluster: its `values.yaml`, `identity.yaml` and tenant entry |
+| Platform | `TektonCICD`, `SecretStore` | Composed or requested by the kinds above, never by hand |
+| Component | `Redis`, `PostgreSQL`, `RabbitMQ`, `MongoDB`, `Dex` | A backing service for one environment, declared in its `components:` list |
+| Observability | `RolloutWatch`, `SLO` | Rollout watching with AI triage on `Degraded`; SLO rules through Sloth |
+| Cloud target | `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget` | The cloud infrastructure a non-Kubernetes deploy needs |
 
-**Every create-once scaffold adopts, never rewrites (2026-10-17).** The 2026-09-23 fix
-reached only `src-repo.yaml`. The gitops README, the app `cicd.yaml`, the InfraService
-`cicd.yaml` stub and the ApplicationEnvironment `values.yaml` still had
-`overwriteOnCreate: true`, and the README and stub had no external-name, so recreating an
-XR (empty scaffold ledger) committed the template over the live file: moving the
-skyport-auth/broker InfraServices to `infra-*-cicd` rewrote `cicd.yaml` and `README.md` in
-both gitops-infra repos. All of them now pin `crossplane.io/external-name` and set
-`overwriteOnCreate: false`; `tools/test_compositions.py` fails any create-once
-`RepositoryFile` that does not. A new repo's README scaffold now adopts GitHub's
-`autoInit` README instead of replacing it (known-gaps #7).
+How the kinds compose, what each takes and returns, and the tiering rules are in
+[architecture.md](docs/admin/architecture.md). Every kind's outputs, conditions and verify steps
+are in the generated [contract](contract/airframe-contract.json); query it with
+`tools/airframe-capabilities`.
 
-**`PythonApplication` + `GoApplication` XRDs — third and fourth Bootstrap-tier
-stacks, offline-verified, live rollout pending.** `xrds/pythonapplication.yaml` +
-`compositions/pythonapplication/` and `xrds/goapplication.yaml` +
-`compositions/goapplication/` — structural ports of `NodeJSApplication`, built after
-the `TektonCICD` extraction so both are simpler than `SpringBootApplication` was:
-CI/CD onboarding is composed via a `TektonCICD` child, not carried inline.
-`PythonApplication` adds `spec.pythonVersion`/`spec.packageManager` (pip/poetry/uv,
-branching the dependency-file shape and Containerfile install step); `GoApplication`
-adds only `spec.goVersion` (no package-manager equivalent - Go has one real
-toolchain) and derives its module path from the real repo URL rather than taking it
-as input. Both boilerplates keep the same zero-external-dependency philosophy
-`NodeJSApplication`'s own scaffold uses (stdlib `http`/`http.server`/`net/http`, no
-framework); `GoApplication`'s Containerfile is genuinely multi-stage, matching
-`SpringBootApplication`'s own precedent. The generated `main.py`/`main.go`/`go.mod`
-were validated against the real Python/Go toolchains (`py_compile`, `go build`), not
-just rendered - this also caught and fixed a pre-existing double-escaping bug
-(`\\n` instead of `\n` in the Go-template `printf` argument piped through `toJson`)
-before it could be copied into two more templates; `NodeJSApplication`'s own
-`index.js` carries the same latent bug today, cosmetic-only (affects only the `/`
-route's trailing newline, not health checks or CI/CD status), not yet fixed there.
-
-**`TektonCICD` XRD + Composition — CI/CD onboarding extracted out of
-`NodeJSApplication`/`SpringBootApplication` into its own XRD, live-verified on
-`checkout-api`/`nodejs-demo-app`/`order-api` 2026-08-25.** `xrds/tektoncicd.yaml` + `compositions/tektoncicd/` replace the
-~150 lines of near-verbatim-duplicated devCluster-gate/`identity.yaml`-commit/status
-logic each of the two app XRDs carried (flagged while discussing which stack to add
-next — a third stack would have copied it a third time). Named for the actual backend
-(`platform-cicd`'s Tekton/PaC pipeline), not a generic abstraction — a future
-alternate CI/CD backend gets its own separate XRD, not a `backend` field on this one.
-Composed as a normal child XR directly inside each app XRD's own Composition pipeline
-(a new pattern for this catalog — every prior "one catalog XRD from within another"
-relationship, e.g. `SecretStore`, goes through a GitOps `xr-requests` commit instead;
-that indirection exists to let a resource land on a remote target cluster, which
-`TektonCICD` never needs since it only calls the GitHub API). Each parent's own
-`cicd-onboarding-status` step now proxies `DevClusterReady`/`CicdOnboarded` from the
-composed child's own conditions, preserving the pre-extraction UX
-(`kubectl describe nodejsapplication/<app>` still shows both directly on the app).
-Rollout is two separate `Airframe` tags, not one: a `managementPolicies`
-safety fix (excluding `Delete` from the identity.yaml `RepositoryFile`, `v0.3.43`,
-already live-verified on all three onboarded apps) landed first, so the second tag's
-orphaning of the old composition-resource-name deletes only the k8s CR, not the real
-GitHub file — see `idp/docs/service-catalog-design.md` Item 1/2 for the full writeup.
-
-**`SpringBootApplication` XRD + Composition — Item 1/2's second Bootstrap-tier stack,
-done, live-verified end-to-end on the dev cluster 2026-08-24.** `xrds/springbootapplication.yaml`
-+ `compositions/springbootapplication/` — a structural port of `NodeJSApplication` onto
-Java/Spring Boot: same devCluster-gated onboarding mechanism, same six-field
-`identity.yaml`, same `CicdOnboarded`-not-`Ready` status convention. Stack-specific
-pieces: `spec.javaVersion`/`spec.buildTool` (replacing `nodeVersion`/`packageManager`)
-and `spec.groupId` (Maven groupId / Gradle group, and this app's single flat Java
-package — see the XRD's own header for why it's not `groupId`+artifactId nested). The
-Containerfile is genuinely multi-stage (JDK build stage, bare JRE runtime stage), a real
-difference from `NodeJSApplication`'s single-stage script, not just a style choice.
-Live-verified via a throwaway `springbootapp-verify-test` app (real `Repository`/
-`RepositoryFile` creation against GitHub, `pom.xml`/`identity.yaml`/
-`xr-requests/secretstore.yaml` content confirmed via the GitHub API,
-`DevClusterReady`/`CicdOnboarded`/`Ready` all reached `True`); the `gradle` `buildTool`
-branch was exercised via `crossplane render` only (`example/xr-gradle-custom.yaml`), not
-a real cluster apply. See `idp/docs/service-catalog-design.md` Item 1/2 for the full
-writeup, including a revisited-and-declined "shared Function" refactor decision now
-that both stacks are built.
-
-**`SecretStore`: every app's Infisical project and External Secrets store.**
-`xrds/secretstore.yaml` + `compositions/secretstore/` create, for one app on one cluster, an
-Infisical project, a machine identity that may read it, and an ESO `ClusterSecretStore` limited to
-the app's namespaces, through `provider-infisical` and `provider-kubernetes`. Nobody requests one
-by hand: the app stacks commit a shared-mode XR for the app's dev cluster, and
-`ApplicationEnvironment` commits a shared-mode and a per-environment XR for each upper-cluster
-environment, all through `xr-requests`, so the store exists from onboarding. ESO logs in with
-Kubernetes Auth on the cluster that runs Infisical and Universal Auth elsewhere; Infisical's
-address and org id come from the cluster registry. Projects and environments have no `Delete`
-policy, so removing an XR never deletes secrets. No credential passes through the function
-pipeline. Details: `xrds/secretstore.yaml`, `compositions/secretstore/example/README.md`.
-
-**AI-triage mechanism (Phase 2, first slice) — done, live-verified
-2026-08-13.** `functions/function-rollout-watcher` + `functions/diagnosis-holmes-dispatch`:
-a Crossplane Composition Function that watches an Argo Rollout and, on
-`Degraded`, dispatches a diagnosis request to a shared HolmesGPT service
-instead of running a bespoke per-app Claude agent. Extracted and redesigned
-from the [`ai-rollout`](https://github.com/jfillman/ai-rollout) prototype
-(left untouched as a standalone demo). Proven end-to-end on a fresh
-dev cluster: a real broken canary → real diagnosis → real fix PR,
-[jfillman/idp#8](https://github.com/jfillman/idp/pull/8). See each
-function's own README for the full detail.
-
-**`airframe-application` Helm chart — built, and as of 2026-08-13 live-verified
-end-to-end on a real cluster, not just `helm lint`/`helm template`.** Renders
-§3's full schema (Argo Rollout, Service, ConfigMaps, ExternalSecret, PVCs, HPA,
-PodDisruptionBudget, NetworkPolicy, AnalysisTemplates, `components:`/`slos:` as
-generic Crossplane XRs) plus real resource-coverage/simplification passes
-beyond §3: ServiceAccount, `jobs:`/`cronJobs:`, ServiceMonitor,
-`extraManifests:`, configMap/secret consumption modes, simplified NetworkPolicy
-rules. Live-verification pass: the dev cluster rebuilt from scratch under real
-GitOps management (see `gitops-cluster-dev`), `widget-api` migrated onto this
-chart for real off the standalone `ai-rollout` prototype's own Composition,
-full test pass against real cluster state (NetworkPolicy enforcement,
-ServiceMonitor scraping, a real canary rollout with a Prometheus-backed
-AnalysisRun, checksum-triggered revisions) - found and fixed two real bugs
-(`rollout.canaryAnalysis` didn't exist at all; `analysisTemplates:` silently
-dropped `args:`). See `charts/airframe-application/README.md` for the full detail
-of every pass, including the earlier fixture-only bugs (an `envName`/`env`
-naming collision, Sprig's `default` silently discarding explicit `false`/`0`).
-The ingress-controller namespace selector is resolved too now (Contour,
-confirmed live) - remaining open items: attached-resource API group, who
-provisions the image-pull Secret.
-
-**`NodeJSApplication` XRD + Composition — first Bootstrap-tier XRD, built and
-live-verified on the dev cluster 2026-08-13/14.** Item 1/2's design: given an app name,
-pure `provider-github` commits a src repo + Node.js boilerplate (Containerfile,
-`package.json`, `index.js`, README — `npm`/`pnpm`/`yarn` all covered), an empty,
-scaffolded `gitops-<appName>` repo (its real `<cluster>/<env>/values.yaml` layout
-gets populated once `ApplicationEnvironment` exists, immediately below), and a
-`tenants/<appName>/app.yaml` entry in `gitops-cluster-dev-tenants` (read by that
-repo's `tenant-appprojects` ApplicationSet to build the app's `AppProject`).
-Deliberately narrow — no upper-env provisioning, no real CICD pipeline (this
-platform's control plane isn't running on the dev cluster yet, a separate migration
-task) — the Composition reports that gap as a real `CicdOnboarded: False` custom
-condition rather than silently skipping it. Three real, load-bearing corrections
-found only by building this for real: GitHub Apps can't create repos under a
-personal (non-Org) account at all — a classic PAT (`repo`+`delete_repo` scopes)
-replaces the originally-planned GitHub App reuse; Crossplane v2 rejects a
-namespaced XR composing a Cluster-scoped managed resource, so `provider-github`'s
-namespaced `repo.github.m.upbound.io` family is required, not its Cluster-scoped
-sibling; `function-go-templating` reserves `Ready`/`Healthy`/`Synced` and errors if
-a Composition patches them directly — the custom-condition mechanism above is the
-only supported way to express "succeeded except X."
-
-**`ApplicationEnvironment` XRD + Composition — second Bootstrap-tier XRD, built
-2026-08-15, extended the same day for real multi-cluster support once a second
-cluster (prod) existed to build and live-verify against.** Item 3's design:
-given an already-onboarded app (`NodeJSApplication`) and an `env`
-(`dev`/`staging`/`prod`, enum-constrained), pure `provider-github` commits into the
-app's own `gitops-<appName>` repo and a target cluster's own
-`gitops-cluster-<cluster>-tenants` — no live cluster credential. Initial
-`values.yaml` is an identity-only stub (`rollout: null`) since this platform's CICD
-control plane isn't running yet — surfaced as a `WorkloadDeployed: False` custom
-condition (direct copy of `NodeJSApplication`'s `CicdOnboarded` mechanism).
-
-`cluster` is a **required, real spec field**, not a hardcoded constant — gated live
-against a new cluster registry (`gitops-cluster-dev/00-bootstrap/cluster-registry/`,
-a `ConfigMap` per cluster, cluster-admin-authored) via a real Crossplane
-extra-resources lookup, the first actual use of that mechanism in this catalog
-(`function-go-templating` natively supports it — confirmed against its own v0.12.3
-docs, no custom function needed). Must resolve to `type: upper` +
-`crossplaneReady: "true"` or the Composition creates nothing and reports
-`ClusterReady: False` instead — `type: dev` is a structural rejection (dev envs
-belong to the separate `platform/envs/`-live-read mechanism, per `gitops-strategy.md`
-§10). Also seeds the target cluster's own `tenants/<appName>/app.yaml` (§6 scopes
-`AppProject` per cluster), with `managementPolicies` excluding `"Delete"` so one
-env's teardown never deletes a file a sibling env on the same cluster still needs —
-**not** `spec.deletionPolicy: Orphan`, a real live gotcha:
-`provider-upjet-github` v0.19.1's `RepositoryFile` CRD has no such field at all
-(confirmed via a real `ReconcileError` + `kubectl explain`, this provider version
-uses `managementPolicies` exclusively).
-
-**`env` opened up from a closed enum to team-chosen names, live-verified 2026-08-15.**
-Was `enum: ["dev", "staging", "prod"]`; traced every real consumer (this Composition's
-own template, the `tenant-onboarding` `ApplicationSet`, the `AppProject`'s own
-`destinations` wildcard) and confirmed nothing branches on the specific value — pure
-path/name interpolation, not encoded business logic. Replaced with a `pattern`
-matching Kubernetes' own DNS-1123 namespace-label rule plus `maxLength: 20`, so an
-invalid value still fails at XR admission instead of downstream. Confirmed live on
-the dev cluster: a previously-impossible custom name (`perf-test`) reconciles end-to-end
-for real; an invalid one (`Staging!`) is rejected at admission with a clear
-pattern-mismatch error.
-
-**Live-verified end-to-end on a real second cluster**: the prod cluster bootstrapped for
-real (`gitops-cluster-prod`, reusing its pre-existing ArgoCD instance rather
-than standing up a second one — see that repo's own README), a scoped Crossplane
-install (core + `provider-kubernetes` + `function-go-templating`/
-`function-auto-ready` + just the `SLO` XRD — **not** `provider-github`, **not**
-`NodeJSApplication`/`ApplicationEnvironment`, which stay dev-cluster-only
-permanently). Both the rejection path (`crossplaneReady: "false"` → `ClusterReady:
-False`, zero resources) and the success path (real commits, the prod cluster's own
-ArgoCD picking up the new tenant unprompted, a real namespace/`ServiceAccount`/
-`NetworkPolicy`) proven live with a throwaway app, fully torn down after — including
-confirming the orphaned `app.yaml` really does survive the env XR's own deletion, as
-designed. See `idp/docs/service-catalog-design.md` §0 for the full architecture.
-
-**`AppProject`/`Application` deletion-ordering bug — fixed via `protection.
-crossplane.io` `Usage`, live-verified `v0.3.2`.** A real, twice-confirmed bug: deleting
-a `NodeJSApplication` while an `ApplicationEnvironment` still referenced it (via
-`spec.appName`) could strand the dependent ArgoCD `Application` if its `AppProject`
-got pruned before that `Application`'s own finalizer finished. Originally planned as a
-homegrown extra-resources lookup on `NodeJSApplication`'s own Composition — superseded
-before building it: `kubectl api-resources` on the dev cluster confirmed Crossplane
-already ships a real primitive for exactly this, `protection.crossplane.io/v1beta1`
-`Usage` ("defines a deletion blocking relationship between two resources"), enforced
-by an already-installed `crossplane-no-usages` admission webhook (nothing new to
-deploy). `ApplicationEnvironment`'s Composition now composes one unconditionally
-(`spec.of` = the parent `NodeJSApplication`, `spec.by` = itself) —
-`NodeJSApplication`'s own Composition needed **zero** changes, since the webhook and
-Usage controller do all the blocking purely by watching `Usage` objects. Live-verified
-end-to-end on the dev cluster with a real throwaway app+env: confirmed the `Usage` object
-and the `crossplane.io/in-use` label it drives on the app, confirmed `kubectl delete`
-on the app is cleanly rejected at admission time (not a finalizer hang) while the env
-exists, confirmed the `Usage` is garbage-collected the moment the env is deleted, and
-confirmed app deletion then succeeds. One real unknown resolved live along the way:
-`function-auto-ready`'s handling of a composed `Usage` resource hadn't been exercised
-in this catalog before — confirmed it reports `Ready: True` correctly, no stuck
-parent readiness.
-
-**`SLO` XRD + Composition — first XRD in the catalog, live-verified on
-the dev cluster.** Item 4's design (`idp/docs/service-catalog-design.md`), wraps
-Sloth (sloth.dev) rather than hand-rolling multi-window-multi-burn-rate
-PromQL: one `SLO` XRD (`catalog.hangar.io/v1alpha1`, Crossplane v2 namespaced,
-just `environmentRef`/`service`/`objective`/`indicator` - no burn-rate or
-window fields, Sloth computes the full canonical pattern itself) whose
-Composition (`function-go-templating`, `source: Inline` - see
-`compositions/slo/build-composition.sh`) renders a Sloth
-`PrometheusServiceLevel` (Sloth's own controller, installed via
-`gitops-cluster-dev/10-crds-operators/sloth/`, does the
-spec→`PrometheusRule` translation) and a Grafana dashboard `ConfigMap`
-(kube-prometheus-stack sidecar convention). `indicator.type:
-availability|latency` both covered.
-
-Went through a hand-rolled revision first (matching a kube-slo-style article
-the user found, own PromQL/burn-rate math, no Sloth dependency) before
-switching - both were live-verified independently; see
-`idp/docs/service-catalog-design.md` Item 4's revision history for the
-reasoning. Real bugs found live along the way, worth knowing before touching
-these files (full detail in the Composition/template files' own header
-comments):
-- A literal `<< >>` mention inside a plain YAML comment collides with the
-  templating engine's own delimiter scan and breaks the whole render - the
-  lexer doesn't know about YAML comment syntax. Standing gotcha called out in
-  every template file's header now.
-- Crossplane's controller `ServiceAccount` has no built-in RBAC for native
-  resource kinds a Composition composes directly - needed extending
-  `native-resources-rbac.yaml` for `PrometheusServiceLevel` (and, during the
-  hand-rolled revision, `PrometheusRule`).
-- **A second `Function` object pointing at the same package as an
-  already-installed one doesn't just mark itself unhealthy - it corrupts
-  Crossplane v2.3.4's package-manager dependency-lock graph for every OTHER
-  Function on the cluster.** Tried giving the SLO Composition its own
-  dedicated `function-go-templating-slo` Function + mount to keep its
-  templates isolated from the ai-rollout Application Composition's own
-  `/templates` mount; on a freshly-bootstrapped cluster this left
-  `function-auto-ready` with no runtime Deployment at all, silently degrading
-  the unrelated `widget-api` Rollout's Ready-status reporting. Fixed by
-  switching to `source: Inline` instead (templates embedded directly in the
-  Composition, generated from `templates/*.yaml` via `build-composition.sh`)
-  - reuses the one shared `function-go-templating` Function, no new
-  registration, no collision, and the templates are now fully GitOps-tracked
-  in the Composition itself instead of a live-cluster-only ConfigMap.
-- Sloth's own CRD claims `slo`/`slos` as `categories` (not shortNames) on
-  `prometheusservicelevels` - this XRD's own `slo` shortName collided with
-  that (`kubectl get slo` resolved to Sloth's category and 404'd looking for
-  the wrong resource type). Removed; use `kubectl get slos.catalog.hangar.io` or
-  plain `slos` (this resource's actual plural, unambiguous).
-- kube-prometheus-stack's `Prometheus` CR only loads a `PrometheusRule` if
-  the object itself carries `release: kube-prometheus-stack` - Sloth's own
-  `extraLabels` Helm value only stamps that onto each individual generated
-  rule's `labels:`, not the object's `metadata.labels`. Fixed by having the
-  Composition stamp `metadata.labels` on the `PrometheusServiceLevel` it
-  generates; Sloth propagates that onto the `PrometheusRule` it creates.
-
-**GitOps wiring — done, live-verified 2026-08-13.**
-`gitops-cluster-dev/20-service-catalog/idp-service-catalog/application.yaml`
-(directory name unchanged in that repo — `gitops-cluster-dev` wasn't part of this
-rebrand, only the `repoURL`/`path` fields inside it that point at this repo were
-updated, in `apron`, not here) pins this repo to git tag `v0.1.0` via a directory-source Application (same
-pattern already proven for `10-crds-operators`/`40-observability`), syncing
-`xrds/*.yaml` + `compositions/*/composition.yaml` only. `charts/airframe-application`
-stays un-synced here — it's rendered per app-release into `gitops-<app-name>`
-repos, not installed cluster-wide — and `functions/`'s packages stay
-registered by pinned OCI tag in `10-crds-operators/crossplane/functions.yaml`,
-not synced as source directories. Replaces the manual `kubectl apply`
-verification path used until now.
-
-**Not started yet**: the rest of the v1 XRD catalog (`SpringBootApplication` and the
-Component XRDs — Redis, `OAuthServer`, ...) and their Compositions. Also not built:
-the `ClusterAnalysisTemplate` golden-path library and `argocd-cm` `Rollout`
-health-check config (§3 says these belong in `idp-cluster-baseline`), and a real
-platform default canary step sequence (§3 "Still open" item 3 — the chart ships a
-deliberately inert placeholder in the meantime, see its README). The rest of
-`airframe-application`'s own coverage (Rollout/Service/etc.) remains fixture-only, not
-live-verified against a real `ApplicationEnvironment`-provisioned env with a real
-`rollout.image` set yet — the live-verification pass above used a direct `helm
-install`, not a real `ApplicationEnvironment` XR (that XRD didn't exist yet at the
-time).
-
-## Layout (so far)
+## Layout
 
 ```
-functions/
-  function-rollout-watcher/    Composition Function: watches Rollout, dispatches diagnosis
-  diagnosis-holmes-dispatch/   Thin Job: hands the investigation off to HolmesGPT
-charts/
-  airframe-application/        §3's Embedded+Attached tier chart - one release per (app, cluster, env)
-                               (tests/run.sh: render tests; no workload until rollout.image is set)
-tools/
-  build-compositions           regenerates every composition.yaml's inline template blocks from templates/ (--check in CI)
-  test_compositions.py         renders every composition's example/cases.yaml through the real functions and diffs the result with example/expected/ (CI)
-  airframe-validate            strict values-file check (unknown keys, XRD component specs) + helm template
-                               --xr: XR requests against the XRD schemas, unknown fields rejected (AF-XR)
-  validate.Containerfile       the image CI runs it from (ghcr.io/jfillman/airframe-validate:<tag>, built on release tags)
-AGENTS.md                      what an AI agent should know, today vs planned
-xrds/
-  nodejsapplication.yaml        NodeJSApplication XRD (catalog.hangar.io/v1alpha1)
-  applicationenvironment.yaml   ApplicationEnvironment XRD (catalog.hangar.io/v1alpha1)
-  slo.yaml                      SLO XRD (catalog.hangar.io/v1alpha1)
-compositions/
-  _shared/                      the four templates every application composition links to instead of copying (see its README)
-  nodejsapplication/            NodeJSApplication Composition (source: Inline) + templates (built by tools/build-compositions)
-  applicationenvironment/       ApplicationEnvironment Composition (source: Inline) + templates (built by tools/build-compositions)
-  slo/                          SLO Composition (source: Inline) + templates (built by tools/build-compositions)
+xrds/                         one XRD per kind, plus its <kind>.meta.yaml sidecar
+compositions/<kind>/
+  templates/                  the Go templates (<< >> delimiters); edit these
+  composition.yaml            generated from templates/ by tools/build-compositions
+  example/                    render cases (cases.yaml), fixtures, expected/ output
+compositions/_shared/         partials the application compositions symlink (see its README)
+charts/airframe-application/  the app chart; values.schema.json is the source of truth
+charts/cluster-registry/      one ConfigMap per cluster, from the fleet's clusters.yaml
+functions/                    function-rollout-watcher and function-dex; diagnosis-holmes-dispatch, the triage Job
+contract/                     generated: airframe-contract.json, appspec.schema.json
+analysis/                     ClusterAnalysisTemplates for canary analysis
+tools/                        builders, generators, validators and test runners
+docs/                         user and admin guides; examples/skyport/ is the demo system
 ```
+
+## Working in this repo
+
+Change a composition, then rebuild it and review the render diff:
+
+```shell
+python3 tools/build-compositions <kind>                 # regenerate composition.yaml
+python3 tools/test_compositions.py --update <kind>      # regenerate example/expected/
+git diff compositions/<kind>/example/expected/          # this diff is the behaviour change
+```
+
+Add a case to `example/cases.yaml` for every new branch. `tools/render-pipeline` renders any
+composition through the real functions offline, with no cluster.
+
+Change the chart's `values.schema.json`, then run `python3 tools/gen_airframe_schema.py
+--write-values` and commit the regenerated `values.yaml`. Run `charts/airframe-application/tests/run.sh`
+for chart changes.
+
+Change an XRD, a sidecar or the chart schema, then regenerate the contract with
+`python3 tools/gen_contract.py` and `python3 tools/gen_appspec_schema.py`. Autopilot vendors
+`contract/appspec.schema.json` byte for byte, so a change to it needs the same change there.
+
+CI (`.github/workflows/airframe-chart-ci.yaml`) runs every generator with `--check`, every render
+case, the sidecar and contract tests, and the chart tests.
+
+Validate a values file or an XR request before opening a pull request:
+
+```shell
+tools/airframe-validate glidepath/envs/dev.yaml
+tools/airframe-validate --xr tenants/<app>/xr-requests/<kind>.yaml
+```
+
+Never hard-code a cluster name, GitHub owner or Infisical address: compositions read them from
+the cluster registry. The rules for people and agents are in [AGENTS.md](AGENTS.md).

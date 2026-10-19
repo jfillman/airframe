@@ -68,7 +68,7 @@ Applications go, again subject to the ordering bug.
 - **`app-<app>-cicd` namespace** on the dev cluster survives, holding the per-app
   `registry-credentials`, `<app>-pr-generator-token` and `glidepath-backstage-notify`
   Secrets. Delete the namespace.
-- **Infisical project(s)** `<app>-dev`, `<app>-<upper>`: delete in the Infisical UI.
+- **Infisical project(s)** `<app>-<dev>`, `<app>-<upper>`: delete in the Infisical UI.
   The provider identity is not always a member, so its API view can't confirm deletion
   (a 404 is ambiguous: gone vs. not visible).
 - **`secretstore-provisioner` ConfigMap** (`gitops-cluster-<upper>/10-crds-operators/

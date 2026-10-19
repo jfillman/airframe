@@ -3,6 +3,8 @@ resources:
 - apiVersion: project.infisical.m.hangar.io/v1alpha1
   kind: ProjectEnvironment
   metadata:
+    annotations:
+      crossplane.io/external-name: 44444444-4444-4444-4444-444444444444
     name: checkout-api-example-prod-staging
     namespace: app-checkout-api-secrets
   name: infisical-environment

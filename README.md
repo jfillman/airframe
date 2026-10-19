@@ -132,86 +132,17 @@ a real cluster apply. See `idp/docs/service-catalog-design.md` Item 1/2 for the 
 writeup, including a revisited-and-declined "shared Function" refactor decision now
 that both stacks are built.
 
-**`SecretStore` XRD + `infisical-secretstore-operator` — Item 8, done, live-verified
-end-to-end 2026-08-17.** `xrds/secretstore.yaml` + `compositions/secretstore/`
-originally rendered an `InfisicalProject` CR reconciled by a purpose-built kopf/Python
-operator (`operators/infisical-secretstore-operator/`, since **retired and removed** - it
-was replaced by `provider-infisical`, see `hangar/docs/kind-prod-infisical-migration-plan.md`;
-the source is in git history at tag v0.3.81 and earlier) and an ESO `ClusterSecretStore`
-wrapped in a `provider-kubernetes` `Object` (Crossplane v2 rejects composing a
-cluster-scoped resource directly from this namespaced XR - same fix
-`NodeJSApplication`'s `provider-github` already needed). Full chain live-proven on
-the dev cluster: real Infisical project + identity + Universal Auth credentials → a
-`Ready: True` `ClusterSecretStore` → a real secret written via Infisical's API →
-pulled by a real `ExternalSecret` into a real K8s Secret with the correct value.
-Also fixed a real, pre-existing bug this surfaced in `airframe-application`'s own
-`ExternalSecret` template (`remoteRef.property` broke every pull against
-Infisical).
-
-**Kubernetes Auth swap + full multi-cluster auto-provisioning (Item 8's
-multi-cluster revision) — done, live-verified end-to-end on both the dev and
-prod clusters 2026-08-17.** Two real, separate builds, same day:
-
-1. Every `InfisicalProject` identity now authenticates via Kubernetes Auth by
-   default (no `clientId`/`clientSecret` minted or persisted anywhere - ESO's own
-   controller SA token, verified live via TokenReview) instead of the original
-   Universal Auth. Four real bugs found and fixed live getting this working the
-   first time: `kubernetesHost` needs the fully-qualified in-cluster DNS name (a raw
-   c-ares query, no search-domain expansion); Infisical's SSRF guard blocks private
-   IPs unless `ALLOW_INTERNAL_IP_CONNECTIONS=true`; `ensure_project_membership` was
-   never actually idempotent (a real 400 on retry, contrary to the original,
-   untested comment); `_session`'s own `Content-Type: application/json` default
-   broke every empty-body `DELETE` call (Fastify rejects it, surfaced as an
-   unhelpful 500).
-2. `SecretStore`'s auto-provisioning (the "Not yet built" item above) is real now,
-   with a real design change along the way: `environmentSlug` (already on the XRD)
-   now has TWO modes - `"shared"` (the default, original behavior) or any other
-   value, which creates ONE additional Infisical environment inside the
-   already-existing project plus a SEPARATE `ClusterSecretStore` narrowed to
-   exactly one namespace - real per-environment isolation (proven live: a
-   correctly-scoped `ExternalSecret` pulls the right value, a wrong-namespace one
-   hard-fails), not a `secretsPath` convention. `airframe-application`'s own chart
-   (`templates/attached/secretstore.yaml`, always-on like `NetworkPolicy`) is what
-   actually triggers this now, not `ApplicationEnvironment`'s Composition directly -
-   `ApplicationEnvironment` and `NodeJSApplication` are both `provider-github`-only,
-   neither can create a native resource on any cluster, including the dev cluster's own.
-   New `InfisicalEnvironment` CRD (same operator) ensures one environment exists in
-   an already-existing project. Upper-cluster stores (prod) use Universal
-   Auth, not Kubernetes Auth - Infisical only runs on the dev cluster, and validating a
-   token from a different cluster needs Gateway mode (Enterprise-only) - a real,
-   deliberate, user-confirmed tradeoff, not an oversight. Proven genuinely
-   cross-cluster, not simulated: a real secret written into Infisical on the dev cluster,
-   pulled by a real `ExternalSecret` on the prod cluster, over a live-verified NodePort
-   path (`infisical-nodeport.yaml`) - a local-sandbox stand-in for a
-   real routable endpoint between genuinely separate clusters, flagged as such, not
-   assumed reusable as-is. One more real bug caught live: Crossplane's own core
-   controller had no RBAC for the new `infisicalenvironments` CRD on either
-   cluster - `native-resources-rbac.yaml` needed extending on both.
-
-See `idp/docs/service-catalog-design.md` Item 8 for the full design writeup. (The operator-level
-detail lived in the removed `operators/infisical-secretstore-operator/README.md`; recover it
-from git history at v0.3.81 or earlier if needed.)
-
-**SecretStore provisioning moved to the Bootstrap XRs (xr-requests), off
-airframe-application's chart — done, live-verified against real existing apps on both
-clusters 2026-08-18.** Real user objection to the above: an always-on chart
-template meant secrets infrastructure only existed once someone shipped an actual
-release, not when an app/env was onboarded. `NodeJSApplication` and
-`ApplicationEnvironment` now each commit a `SecretStore` XR manifest via
-`xr-requests` instead (`airframe-application`'s `attached/secretstore.yaml` deleted
-entirely) - real nuance recorded in the design doc: `NodeJSApplication` could have
-composed it directly (same-cluster), `ApplicationEnvironment` structurally can't
-(cross-cluster, the same "no cluster holds another's API credential" constraint
-that already kept `AppProject` ownership out of direct composition). The prod cluster
-needed its own `xr-requests` mechanism for the first time (Bootstrap XRs never ran
-on upper clusters before). Also fixed the same day: `external-secret.yaml` never
-actually routed secrets through the per-environment stores the prior revision
-built - every secret silently still went through the old shared-store/path
-convention. Fixed via ESO's real per-entry `sourceRef.storeRef` override.
-
-See `idp/docs/service-catalog-design.md` Item 8's third revision for the full
-writeup, including two real bugs found live from the old and new mechanisms
-briefly coexisting mid-migration (not flaws in either design on its own).
+**`SecretStore`: every app's Infisical project and External Secrets store.**
+`xrds/secretstore.yaml` + `compositions/secretstore/` create, for one app on one cluster, an
+Infisical project, a machine identity that may read it, and an ESO `ClusterSecretStore` limited to
+the app's namespaces, through `provider-infisical` and `provider-kubernetes`. Nobody requests one
+by hand: the app stacks commit a shared-mode XR for the app's dev cluster, and
+`ApplicationEnvironment` commits a shared-mode and a per-environment XR for each upper-cluster
+environment, all through `xr-requests`, so the store exists from onboarding. ESO logs in with
+Kubernetes Auth on the cluster that runs Infisical and Universal Auth elsewhere; Infisical's
+address and org id come from the cluster registry. Projects and environments have no `Delete`
+policy, so removing an XR never deletes secrets. No credential passes through the function
+pipeline. Details: `xrds/secretstore.yaml`, `compositions/secretstore/example/README.md`.
 
 **AI-triage mechanism (Phase 2, first slice) — done, live-verified
 2026-08-13.** `functions/function-rollout-watcher` + `functions/diagnosis-holmes-dispatch`:

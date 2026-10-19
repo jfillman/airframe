@@ -1,26 +1,15 @@
-# Adoption ids for THIS (app, cluster) pair's Infisical project, read from an optional
-# ConfigMap, crossplane-system/secretstore-provisioner, keyed by project slug
-# (<appRef.name>-<cluster>).
+# Adoption ids for this (app, cluster) pair's Infisical project, from the optional ConfigMap
+# crossplane-system/secretstore-provisioner, keyed by project slug (<appRef.name>-<cluster>).
+# A slug with no entry gets a new project, which is the normal case.
 #
-# History: until 2026-09-23 this also chose between the provider-infisical chain and the
-# old infisical-secretstore-operator's InfisicalProject CR ("provisioner: provider" opted an
-# app in; the default was the operator). Every project on every cluster is now
-# provider-managed and the operator is retired, so the provider is the only path and the
-# `provisioner` key is ignored - old entries may still carry it.
-#
-# What the ConfigMap is still for: ADOPTING a project that already exists in Infisical,
-# so its secrets stay in place instead of a fresh project being created. A slug with no
-# entry simply gets a NEW project (the normal path for a newly onboarded app).
-#
-# Entry format (YAML text under the slug key):
-#   projectId: <uuid>              # adopt this existing Infisical project
-#   sharedEnvId: <uuid>            # adopt its existing "shared" environment
-#   envIds: {staging: <uuid>}      # adopt existing per-env environments
-# The ids set crossplane.io/external-name on the composed resource so the provider
-# observes the existing object instead of creating a colliding one. They only matter on
-# the first reconcile; the provider maintains the annotation itself afterwards. The
-# provider's machine identity must already be a member (admin) of an adopted project, or
-# every read is a 403.
+# An entry adopts objects that already exist in Infisical, so their secrets stay in place:
+#   projectId: <uuid>              # the project
+#   sharedEnvId: <uuid>            # its "shared" environment
+#   envIds: {staging: <uuid>}      # per-environment environments
+# The ids become crossplane.io/external-name on the composed resources, so the provider
+# observes the existing objects instead of creating new ones. They matter only on the first
+# reconcile. The provider's machine identity must already be an admin member of an adopted
+# project, or every read is a 403. A `provisioner` key in older entries is ignored.
 <<- $spec := .observed.composite.resource.spec >>
 <<- $gateSlug := printf "%s-%s" $spec.appRef.name $spec.cluster >>
 <<- $provExtra := .extraResources | default dict >>
@@ -47,7 +36,3 @@ requirements:
     namespace: crossplane-system
     matchName: secretstore-provisioner
 ---
-# The client secret the provider publishes for the universal-auth chain. Read here
-# (rather than from the managed resource's connection details) so it is available to the
-# credentials Secret this Composition assembles - see infisicalproject.yaml. Declared
-# unconditionally; on every other branch it simply matches nothing.

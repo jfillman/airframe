@@ -498,65 +498,23 @@ spec:
                 commitMessage: <<printf "Onboard %s to %s: add tenants/%s/identity.yaml" $appName $cluster $appName | toJson>>
             <<- end >>
             ---
-            # Commits two SecretStore XR manifests into this cluster's OWN
-            # gitops-cluster-<cluster>-tenants/tenants/<appName>/xr-requests/ - picked up by
-            # THAT cluster's own xr-requests ApplicationSet (the dev cluster's already existed;
-            # each upper cluster has its own, gitops-cluster-<cluster>/02-argocd-apps/xr-requests/ -
-            # every upper cluster needs its own copy of this mechanism now, mirrored, not
-            # shared, since xr-requests is inherently per-cluster: it applies directly onto
-            # whichever cluster's ArgoCD is watching it).
+            # Commits two SecretStore XR requests into this cluster's tenants repo
+            # (tenants/<app>/xr-requests/), where that cluster's xr-requests ApplicationSet applies them:
+            #   secretstore-shared.yaml   shared mode: the project and its wide store. Every environment of
+            #                             this app on this cluster writes the same file with the same
+            #                             content, so the repeated writes are harmless.
+            #   secretstore-<env>.yaml    per-environment mode: this environment's narrowed store.
+            # Both are gated on $clusterOk; $appName, $env, $cluster, $xrName and $tenantsRepo come from
+            # 00-cluster-gate.yaml.
             #
-            # Real, deliberate correction of the original design (idp/docs/
-            # service-catalog-design.md Item 8's second multi-cluster revision - see
-            # nodejsapplication's own secretstore-xr.yaml for the full "why", same reasoning
-            # applies here): this used to be airframe-application's own always-on chart resource,
-            # meaning secrets infrastructure for an upper-cluster env didn't exist until
-            # someone actually shipped a real release through it. Now it exists the moment
-            # THIS XR reconciles - a pure git commit, same as everything else this XRD
-            # already does.
+            # crossplane.io/external-name follows the observed object, and uses the computed
+            # "<repo>:<file>:" form only for a file that doesn't exist yet. It is quoted because the
+            # trailing colon is invalid plain YAML.
             #
-            # Both external-name values below are double-quoted (fixed 2026-09-04) - the unquoted
-            # "<repo>:<file>:" scalar's trailing bare colon is invalid plain-YAML. Real, fleet-wide
-            # live bug - see springbootapplication's own src-repo.yaml for the full writeup.
-            #
-            # Both resources are wrapped in the SAME $clusterOk gate as this Composition's
-            # other resources (00-cluster-gate.yaml) - no secrets infrastructure is
-            # requested for a cluster that isn't real/ready either.
-            #
-            # Resource 1, "shared" mode: same file path/content REGARDLESS of which env
-            # triggered it - every sibling ApplicationEnvironment for this (app, cluster)
-            # pair writes the identical manifest (overwriteOnCreate: true, deterministic
-            # content) - the exact same "redundant-but-harmless idempotent writes" idiom
-            # cluster-identity-yaml.yaml already established for this identical "N siblings, one
-            # shared thing" shape, not a new mechanism.
-            #
-            # Resource 2, per-environment mode: file path/content is UNIQUE per env
-            # (tenants/<appName>/xr-requests/secretstore-<env>.yaml, environmentSlug: <env>)
-            # - no redundancy concern, this one genuinely is 1:1 with this XR.
-            #
-            # $appName/$env/$cluster/$xrName/$tenantsRepo all come from 00-cluster-gate.yaml.
-            #
-            # crossplane.io/external-name on both RepositoryFiles, format "<repo>:<file>:" - same
-            # cluster-rebuild fix as this composition's own cluster-identity-yaml.yaml/
-            # values-yaml.yaml. Deterministic, platform-owned content here (no developer edits to
-            # stomp), so the stakes are an unneeded re-commit, not data loss - fixed anyway for
-            # consistent adopt-not-recreate behavior across every RepositoryFile in this catalog.
-            #
-            # managementPolicies (no "Delete") - REAL DATA LOSS, live-confirmed 2026-09-16: this
-            # file had none (defaulting to the provider's "*"), and secretstore-shared-xr is
-            # EXACTLY cluster-identity-yaml.yaml's own "N siblings, one shared file" shape this
-            # comment already claimed to follow - but never got that file's actual Delete-policy
-            # fix. The same $clusterOk transient-false window landing on an EXISTING sibling env's
-            # reconcile (not just a brand-new XR's first pass) while other envs were being
-            # onboarded on the same cluster dropped this resource from that one sibling's desired
-            # set; with Delete allowed, Crossplane deleted the real tenants/<app>/xr-requests/
-            # secretstore-shared.yaml file even though every OTHER sibling env still wanted it -
-            # which cascaded (ArgoCD pruned the SecretStore XR that file declares -> Crossplane
-            # deleted its InfisicalProject) into real, unrecoverable Infisical project + secret
-            # deletion for checkout-api-kind-prod and order-api-kind-prod. secretstore-env-xr gets
-            # the same fix even though it's single-owner (1:1, not shared) - the values-yaml.yaml
-            # bug this exact class was first fixed for was ALSO single-owner, so "not shared"
-            # provides no actual protection against the same gate-flap race.
+            # No Delete in managementPolicies, on both. The cluster gate is a live lookup that can briefly
+            # come back empty. With Delete allowed, one environment's reconcile could delete the shared file
+            # the others still need, ArgoCD would prune that SecretStore, and its Infisical project would go
+            # with it. That deleted two apps' projects on 2026-09-16, before projects lost Delete as well.
             <<- if $clusterOk >>
             apiVersion: repo.github.m.upbound.io/v1alpha1
             kind: RepositoryFile

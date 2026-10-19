@@ -8,8 +8,8 @@ resources:
   name: broker-usage
   spec:
     by:
-      apiVersion: catalog.hangar.io/v1alpha1
-      kind: RabbitMQ
+      apiVersion: rabbitmq.com/v1beta1
+      kind: User
       resourceRef:
         name: flights-mq
     of:

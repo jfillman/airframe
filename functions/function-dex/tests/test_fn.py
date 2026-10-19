@@ -219,7 +219,8 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
             usage = resource.struct_to_dict(rsp.desired.resources["server-usage"].resource)
             self.assertEqual(usage["kind"], "Usage")
             self.assertEqual(usage["spec"]["of"]["resourceRef"], {"name": "srv", "namespace": "srv-ns"})
-            self.assertEqual(usage["spec"]["by"]["resourceRef"], {"name": "my-dex"})
+            # No `by`: the XR itself as `by` deadlocks a foreground delete (see server_usage).
+            self.assertNotIn("by", usage["spec"])
             self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
 
     async def test_sidecar_secret_and_service_match_the_function(self):

@@ -327,7 +327,13 @@ def server_usage(xr, server_ref):
     """A Crossplane Usage that blocks deleting the Dex server XR while this attacher exists (review
     C13). Without it, deleting a server stranded every attacher: its credentials Secret points at an
     issuer that is gone. Declared on every attach reconcile, before any server call, so a Dex
-    outage never prunes it. Cross-namespace via of.resourceRef.namespace."""
+    outage never prunes it. Cross-namespace via of.resourceRef.namespace.
+
+    No `by`: it would have to be this XR (nothing composed here needs the server while it is deleted;
+    the client registration is not a composed resource), and a composed Usage whose `by` is its own
+    composite deadlocks a foreground delete - the Usage controller waits for `by` to be gone, while the
+    XR waits for the Usage, which carries its blockOwnerDeletion controller ref (boarding-api dev
+    board-oauth, 2026-10-19). Without `by` the Usage is released as soon as the XR's delete reaches it."""
     xr_name = safe_get(xr, "metadata", "name")
     xr_namespace = safe_get(xr, "metadata", "namespace")
     api_version = safe_get(xr, "apiVersion") or "catalog.hangar.io/v1alpha1"
@@ -344,7 +350,6 @@ def server_usage(xr, server_ref):
                     "namespace": safe_get(server_ref, "namespace") or xr_namespace,
                 },
             },
-            "by": {"apiVersion": api_version, "kind": "Dex", "resourceRef": {"name": xr_name}},
             "reason": (
                 f"Dex {xr_namespace}/{xr_name} attaches to this server via spec.serverRef"
                 " - delete the attachers first"

@@ -1,0 +1,52 @@
+# Seeds <cluster>/<env>/configmap/kustomization.yaml in the app's gitops repo when spec.configMapGenerator is true
+# (known gap 1, closed 2026-10-19). The flag makes the tenant-onboarding ApplicationSet add a third Argo CD source at
+# that folder; with nothing in it the Application fails to generate manifests ("app path does not exist") until
+# someone adds the folder by hand (baggage-api staging, then gate-api staging and prod on hangar-prod, 2026-10-19).
+#
+# What it seeds: an empty Kustomize configMapGenerator named <appName>-app-config with disableNameSuffixHash, so the
+# ConfigMap name is fixed and values.yaml can reference it as configMaps: existingConfigMap. An empty generator
+# renders an empty ConfigMap (kustomize v5), so the Application syncs before any config file exists. files: [] is
+# there for Tower's Config tab, which appends each new file to configMapGenerator[0].files.
+#
+# Create-once, exactly like values-yaml.yaml next to it (read that header for the reasoning behind each setting):
+# no Update (the file is the app's after the first write: Tower and developers add files to it), no Delete (a gate
+# flap must not delete it), the external-name pinned to "<repo>:<file>:" plus overwriteOnCreate: false (a recreated
+# XR or rebuilt cluster adopts the existing file, never rewrites it), and ledgered then retired through
+# status.scaffold.done. An existing XR whose flag is already true scaffolds it on its next reconcile; a folder someone
+# already added by hand is adopted as it is.
+#
+# Turning the flag off later leaves the file in place (the ApplicationSet just stops reading it), and turning it back
+# on finds it already ledgered.
+<<- if and $clusterOk $configMapGenerator >>
+<<- if not (has "configmap-kustomization" $scaffoldDone) >>
+<<- $kustomizationFile := printf "%s/%s/configmap/kustomization.yaml" $cluster $env >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-configmap-kustomization
+  annotations:
+    <<setResourceNameAnnotation "configmap-kustomization">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" (printf "%s:%s:" $gitopsRepo $kustomizationFile) (index (.observed.resources | default dict) "configmap-kustomization" | default dict)>>"
+spec:
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$gitopsRepo>>
+    file: <<$kustomizationFile>>
+    overwriteOnCreate: false
+    content: |
+      # The <<$env>> environment's ConfigMap, generated from the files in this folder (Airframe ApplicationEnvironment,
+      # configMapGenerator: true). Add a file here and list it under files (Tower's Config tab does both), then mount
+      # it from values.yaml: configMaps: [{name: ..., existingConfigMap: <<$appName>>-app-config}].
+      apiVersion: kustomize.config.k8s.io/v1beta1
+      kind: Kustomization
+      configMapGenerator:
+        - name: <<$appName>>-app-config
+          files: []
+      generatorOptions:
+        disableNameSuffixHash: true
+    commitMessage: <<printf "Bootstrap %s environment: add %s" $env $kustomizationFile | toJson>>
+<<- end >>
+<<- end >>

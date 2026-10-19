@@ -280,8 +280,8 @@ Merge the `.tekton/` PR it opens.
 **Step 3 - Tower → Create → ApplicationEnvironment:** `Name` `baggage-api-<prod-cluster>-staging`,
 `Namespace` `app-baggage-api-cicd`, `appName` `baggage-api`, `cluster` `<prod-cluster>`, `env` `staging`,
 **`configMapGenerator` off**. (The previous lab's env had it on, and its first sync failed with
-`app path does not exist` until `<cluster>/staging/configmap/kustomization.yaml` was added by hand;
-Airframe [known gap 1](../admin/known-gaps.md).) Merge the PR.
+`app path does not exist` until `<cluster>/staging/configmap/kustomization.yaml` was added by hand; since
+2026-10-19 the composition seeds that file.) Merge the PR.
 
 **Step 4 - the staging values**, in `gitops-baggage-api/<prod-cluster>/staging/values.yaml`, through a PR.
 Keep the identity keys Crossplane wrote (`appName`, `appType`, `cluster`, `envName`) and add:

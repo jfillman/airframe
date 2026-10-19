@@ -345,7 +345,7 @@ Merge the `.tekton/` PR this push opens (section 03). See Glidepath's
 | `appName` | `boarding-api` | Required. Labels the env and drives a deletion-protection `Usage` on the app. Not live-checked: a typo silently creates an env for an app that doesn't exist. |
 | `cluster` | `<prod-cluster>` | Required. Live-checked against the cluster registry: must be `type: upper` and `crossplaneReady`. A dev cluster is rejected, and the XR reports `ClusterReady: False` and creates nothing. |
 | `env` | `staging` | Required. A DNS label, max 20 characters (`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`) — it becomes part of the namespace `app-boarding-api-staging` and a git path. |
-| `configMapGenerator` | off | Opt-in to a Kustomize `configMapGenerator` source for this env's config files. **Leave it off.** On, the env's Application also reads `<cluster>/<env>/configmap`, which nothing creates, so the first sync fails with `app path does not exist` until you add that folder by hand (Airframe [known gap 1](../admin/known-gaps.md)). |
+| `configMapGenerator` | off | Generate a fixed-name `<app>-app-config` ConfigMap from config files in `gitops-<app>/<cluster>/<env>/configmap/`. Turn it on only if the app has config files to mount: the composition seeds that folder's `kustomization.yaml` (an empty generator, so the first sync works), you add the files with Tower's Config tab, and `values.yaml` mounts it with `configMaps: [{name: ..., existingConfigMap: <app>-app-config}]`. |
 
 The Crossplane Settings page can stay at its defaults.
 

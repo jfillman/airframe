@@ -1,6 +1,5 @@
 {{/*
-scaleTargetRef.kind: Rollout, not Deployment - Argo Rollouts supports the native
-HPA target directly (§3), no different autoscaling mechanism needed.
+CPU-based HorizontalPodAutoscaler. Argo Rollouts supports a Rollout as the scale target.
 */}}
 {{- if and .Values.autoscaling.enabled (eq (include "airframe-application.hasRollout" .) "true") }}
 apiVersion: autoscaling/v2

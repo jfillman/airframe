@@ -9,8 +9,8 @@
 # hyphens, must start and end with an alphanumeric.
 appName: ''
 
-# app runs a workload (Rollout); infra provisions components/environments only
-# (naming-conventions.md's existing distinction).
+# app runs a workload; infra is a components-only service. A label for people and tools: the chart
+# decides what to render from rollout.enabled, not from this.
 appType: app
 
 # This cluster's name in the cluster registry, which is also its kubectl context name. Used to name
@@ -67,8 +67,8 @@ serviceAccount: {annotations: {}, create: true, imagePullSecrets: [], name: '', 
 # (glidepath ADR-0021 phase 3b); kept so existing env files that set it still validate.
 platformSecretStore: {kind: ClusterSecretStore, name: platform-secret-store}
 
-# The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a
-# standalone component-only env).
+# The Argo Rollout workload. Use rollout.enabled: false for an environment with no long-running
+# service; null is read the same way.
 rollout:
   # Whether this environment runs a long-running service at all. false means only Jobs, CronJobs and
   # components: no Rollout, Service, HPA or PDB, and Glidepath refuses to release an image to it. The
@@ -86,12 +86,12 @@ rollout:
   replicas: 2
   # Container resources for the main workload.
   resources: {}
-  # Platform default steps used unless rollout.steps is set.
+  # canary (the default) or blueGreen.
   strategy: canary
   # Raw passthrough escape hatch - a real Argo Rollouts canary/blueGreen step list
   # (setWeight/pause/analysis/experiment). Tower's Config tab offers a structured builder for the common
   # shapes but falls back to raw YAML for anything else, matching this schema's own looseness here.
-  # Empty uses the platform default steps.
+  # Empty renders one setWeight: 100 step, an ordinary rolling update.
   steps: []
   # Raw passthrough - spec.strategy.canary.analysis. Typical shape: {templates: [{templateName}], args:
   # [...], startingStep}. Rendered only when strategy is canary and this is non-empty.
@@ -121,11 +121,11 @@ rollout:
   args: []
   # Container ports to expose on the main workload.
   ports: [{containerPort: 8080, name: http}]
-  # Empty object ({}) means no probe of this kind is set. Exactly one of httpGet/tcpSocket/exec when
-  # non-empty.
+  # Empty object ({}) renders the default probe, an HTTP GET of / on the first port. Exactly one of
+  # httpGet/tcpSocket/exec when non-empty.
   livenessProbe: {}
-  # Empty object ({}) means no probe of this kind is set. Exactly one of httpGet/tcpSocket/exec when
-  # non-empty.
+  # Empty object ({}) renders the default probe, an HTTP GET of / on the first port. Exactly one of
+  # httpGet/tcpSocket/exec when non-empty.
   readinessProbe: {}
   # Raw passthrough - Kubernetes PodSecurityContext, not modeled field-by-field here. Defaults to
   # non-root UID/GID 65532, the same IDs as Tower's break-glass debug container, so its process access
@@ -158,8 +158,8 @@ rollout:
   # Extra annotations on the Service (and the -preview Service for blueGreen).
   serviceAnnotations: {}
 
-# App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or
-# rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.
+# App-specific Argo Rollouts AnalysisTemplates, rendered in this namespace. Reference them by name
+# from rollout.steps or rollout.canaryAnalysis; the chart does not wire them in.
 analysisTemplates: []
 
 # Container environment variables for the main workload.
@@ -227,8 +227,8 @@ slos: []
 # per-template, if the group ever changes.
 attachedResourceApiVersion: catalog.hangar.io/v1alpha1
 
-# Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real
-# XRD yet.
+# Deliberate lookup map exception: component type string -> XR kind. A new component kind needs a row
+# here, not a template change.
 componentKinds: {dex: Dex, mongodb: MongoDB, postgresql: PostgreSQL, rabbitmq: RabbitMQ, redis: Redis}
 
 # Last-resort escape hatch - a raw list of arbitrary Kubernetes objects, rendered as-is, no labels

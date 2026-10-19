@@ -1,20 +1,10 @@
 {{/*
-Argo Rollouts, the confirmed default workload resource (§3 "Argo Rollouts as the
-default deployment resource") - replaces plain Deployment entirely, not offered as
-an option. Rendered only when rollout: is set (airframe-application.hasRollout) - an
-appType: infra release with only a components: block sets rollout: null and gets
-no workload at all, per §3's "Open design question", implemented here per the
-doc's own stated leaning.
+The Argo Rollout: the app's long-running workload. Renders only when the environment runs a service
+(rollout.enabled) and an image has been released (airframe-application.hasRollout).
 
-Build order matters for the podSpec escape hatch below: main container ->
-extraContainers -> configMap/PVC volumes -> serviceAccountName/podSecurityContext,
-THEN podSpec is mergeOverwrite'd on top of all of it last, exactly as §3 specifies
-("deep-merged ... onto the rendered .spec.template.spec AFTER every
-curated/generated field"). env/envFrom/volumeMounts/volumes come from the same
-airframe-application.workloadEnv/workloadEnvFrom/workloadVolumeMounts/workloadVolumes
-helpers job.yaml/cronjob.yaml also use - see their own header comment in
-_helpers.tpl for why that's shared rather than copied three times, and for how
-configMaps:/secrets: `as: env|volume|both` map onto env vs envFrom vs volume mounts.
+The pod spec is built in order - main container, extraContainers, volumes, serviceAccountName,
+securityContext - and rollout.podSpec is merged on top last. env/envFrom/volumeMounts/volumes come from the
+workload* helpers in _helpers.tpl, which Jobs and CronJobs share.
 */}}
 {{- if eq (include "airframe-application.hasRollout" .) "true" }}
 {{- $releaseId := "" }}
@@ -50,7 +40,7 @@ configMaps:/secrets: `as: env|volume|both` map onto env vs envFrom vs volume mou
 {{- if .Values.rollout.podSecurityContext }}{{- $_ := set $podSpec "securityContext" .Values.rollout.podSecurityContext }}{{- end }}
 {{- if .Values.rollout.podSpec }}
 {{- if hasKey .Values.rollout.podSpec "containers" }}
-{{- fail "rollout.podSpec must not set containers - use the curated container fields (command/args/ports/livenessProbe/...) for the main container, or rollout.extraContainers for sidecars. mergeOverwrite replaces whole arrays rather than merging by index, so podSpec.containers would silently clobber the chart-rendered container list instead of extending it (see §3's own warning in service-catalog-design.md)." }}
+{{- fail "rollout.podSpec must not set containers - use the curated container fields (command/args/ports/livenessProbe/...) for the main container, or rollout.extraContainers for sidecars. mergeOverwrite replaces whole arrays rather than merging by index, so podSpec.containers would replace the chart-rendered container list instead of extending it." }}
 {{- end }}
 {{- $podSpec = mergeOverwrite $podSpec .Values.rollout.podSpec }}
 {{- end }}
@@ -72,14 +62,11 @@ metadata:
   {{- if or $releaseId $userAnnotations }}
   annotations:
     {{- if $releaseId }}
-    {{- /* ADR-0021 (glidepath): release identity for the Argo Rollouts notifications
-    engine, whose templates can read a Rollout's own metadata (Argo CD's cannot). On the
-    Rollout's metadata, never the pod template, so it can never force a new ReplicaSet.
-    The label above is what the cluster's notification subscription selects on. release-id
-    is "<chain-id>:<cluster>/<env>", written by glidepath's open-release-pr.yaml into
-    releaseTracking.releaseId; app-namespace is the dev-cluster Application namespace the
-    dev-side release record lives in. Nothing else rides here: the rest of a release's
-    context stays on dev, joined by release-id. */}}
+    {{- /* Release identity for the Argo Rollouts notifications engine, which can read a
+    Rollout's metadata (Argo CD's cannot). On the Rollout, never the pod template, so it never
+    forces a new ReplicaSet. The label above is what the notification subscription selects.
+    release-id is "<chain-id>:<cluster>/<env>" (glidepath's open-release-pr); app-namespace is
+    the dev-cluster namespace holding the release record, joined by release-id. */}}
     hangar.io/release-id: {{ $releaseId | quote }}
     {{- with $.Values.releaseTracking.appNamespace }}
     hangar.io/app-namespace: {{ . | quote }}
@@ -108,21 +95,10 @@ spec:
         {{- end }}
       {{- if or .Values.configMaps .Values.secrets .Values.rollout.podAnnotations }}
       annotations:
-        {{- /* Forces a new pod template hash (and so a new Rollout revision) on a
-        pure data-value edit that leaves the pod spec's own references (ConfigMap/
-        Secret names, keys, mount paths) byte-identical - those reference-shape
-        changes already flow into the pod spec directly and don't need this.
-        checksum/configmaps hashes configmap.yaml's actual rendered output, so it's
-        blind to existingConfigMap: entries by construction (this chart can't see
-        their content) - fine, since any change to an existingConfigMap entry's own
-        metadata (mountPath, as, which name) already changes the pod spec directly.
-        checksum/secrets hashes external-secret.yaml's rendered ExternalSecret
-        declaration only - which keys/paths are referenced, NOT the actual secret
-        VALUE, which lives in Infisical and is invisible to Helm at render time.
-        Rotating a secret's value without touching this values.yaml will NOT
-        trigger a new revision - that's a live gap, not covered here (the usual
-        fix is a controller like Stakater's Reloader watching the rendered Secret
-        itself, not a Helm-render-time checksum, since Helm can't see the value). */}}
+        {{- /* A new Rollout revision when config changes without changing the pod spec.
+        checksum/configmaps hashes the rendered ConfigMaps (existingConfigMap content is
+        out of sight). checksum/secrets hashes the ExternalSecret declaration only: a
+        secret's value lives in Infisical, so rotating it does not roll the pods. */}}
         {{- if .Values.configMaps }}
         checksum/configmaps: {{ include (print $.Template.BasePath "/config/configmap.yaml") . | sha256sum }}
         {{- end }}
@@ -141,12 +117,8 @@ spec:
     {{- fail "rollout.maxSurge/maxUnavailable apply to the canary strategy only; blueGreen always runs a full preview ReplicaSet" }}
     {{- end }}
     blueGreen:
-      {{- /* activeService/previewService are NOT part of the rollout.blueGreen
-      escape hatch below - service.yaml renders exactly these two fixed names
-      ({{appName}} / {{appName}}-preview, matching this chart's own selector
-      labels), so an overridden name here would reference a Service that doesn't
-      exist. Same "guard the chart-owned identity, escape-hatch the rest" idiom
-      as podSpec's containers guard above. */}}
+      {{- /* service.yaml always renders <appName> and <appName>-preview, so rollout.blueGreen
+      may not rename them. */}}
       {{- if and .Values.rollout.blueGreen (or (hasKey .Values.rollout.blueGreen "activeService") (hasKey .Values.rollout.blueGreen "previewService")) }}
       {{- fail "rollout.blueGreen must not set activeService/previewService - service.yaml always renders {{appName}} and {{appName}}-preview, and the Rollout spec must reference those same fixed names. Use rollout.blueGreen for autoPromotionEnabled/scaleDownDelaySeconds/prePromotionAnalysis/postPromotionAnalysis/previewReplicaCount/antiAffinity instead." }}
       {{- end }}
@@ -176,11 +148,7 @@ spec:
         {{- if .Values.rollout.steps }}
         {{- toYaml .Values.rollout.steps | nindent 8 }}
         {{- else }}
-        # No platform default canary step sequence is designed yet (§3 "Still open"
-        # item 3) - this single setWeight:100 step is a deliberately inert
-        # placeholder (behaves like an ordinary rolling update, no real canary
-        # analysis) until that default is designed. Set rollout.steps explicitly for
-        # anything beyond that in the meantime.
+        {{- /* No rollout.steps: one setWeight 100 step, an ordinary rolling update. */}}
         - setWeight: 100
         {{- end }}
     {{- end }}

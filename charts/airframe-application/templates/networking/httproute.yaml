@@ -1,20 +1,8 @@
 {{/*
-Gateway API HTTPRoute, first-class alongside classic Ingress (ingress.yaml) - both
-are independent opt-in toggles off the same Service/first rollout.ports entry, a
-caller picks whichever its cluster's ingress mechanism actually is. Every real
-cluster in this fleet already runs Gateway API, not classic Ingress controllers
-(see idp_session_gateway_api_ingress, gitops-cluster-kind-prod's own
-50-gateway-routes/), so httpRoute is the one most new callers actually want -
-ingress.yaml is kept for whichever cluster/app still needs classic Ingress.
-
-Gateway API requires same-namespace backendRefs without a ReferenceGrant - this
-renders in the release's own namespace (airframe-application.namespace) right alongside
-the Service it targets, so that's satisfied by construction. parentRefs crossing
-into the Gateway's own namespace (the common case - the platform Gateway lives in
-a shared namespace like hangar-gateway, not this app's) is fine on the *parentRef*
-side with no ReferenceGrant needed, as long as the Gateway's own listener
-allowedRoutes permits it - confirmed live, every existing HTTPRoute in this fleet
-already crosses namespaces this same way (grafana-httproute.yaml et al.).
+A Gateway API HTTPRoute to the first rollout.ports entry. Needs hostnames and parentRefs (the platform
+Gateway, hangar in hangar-gateway). The route sits in the app's namespace next to its Service, so the
+backendRef needs no ReferenceGrant; the cross-namespace parentRef is allowed by the Gateway listener's
+allowedRoutes.
 */}}
 {{- if and .Values.httpRoute.enabled (eq (include "airframe-application.hasRollout" .) "true") }}
 {{- if not .Values.httpRoute.hostnames }}

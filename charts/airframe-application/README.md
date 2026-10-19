@@ -1,488 +1,156 @@
 # airframe-application
 
-One Helm release per `(app, cluster, env)` - renders the Embedded tier (Argo
-Rollout, Service, ServiceAccount, ConfigMaps, ExternalSecret, PVCs, HPA,
-PodDisruptionBudget, NetworkPolicy, AnalysisTemplates, ServiceMonitor, Jobs,
-CronJobs) and the Attached tier (`components:`, `slos:` as Crossplane XRs) from
-one `values.yaml`, plus a raw `extraManifests:` escape hatch. Built against
-[`idp/docs/service-catalog-design.md`](https://github.com/jfillman/idp/blob/main/docs/service-catalog-design.md)
-§3 - that doc is the schema's source of truth for the original Embedded/Attached
-tiers; `values.yaml` in this chart documents it field-by-field, including a
-handful of fields §3 didn't spell out. A second pass (ServiceAccount, Job,
-CronJob, ServiceMonitor, `extraManifests:`) went beyond §3 entirely; a third
-(configMaps:/secrets: consumption modes) and fourth (simplified NetworkPolicy
-rules) folded back into §3's schema, since both are genuine additions to
-fields §3 already specifies rather than new resource kinds - each pass called
-out separately below. Real Helm chart, not pseudocode - `helm lint`/`helm
-template` verified against six fixtures before any of the first four passes was
-called done, **and, as of a fifth pass, live-verified end-to-end on a real
-cluster** (a real migration of a real running app off a different mechanism
-entirely) - see "Live-verified on a real cluster" below for what that actually
-covered and the two real bugs it found.
+The Helm chart every Hangar app environment runs. One release per `(app, cluster, env)`, into the
+namespace `app-<app>-<env>`. From one set of values it renders:
 
-## No workload until an image exists
+- **The workload:** an Argo `Rollout`, its `Service` (and a `-preview` Service for blue-green), a
+  `ServiceAccount`, `ServiceMonitor`, `HorizontalPodAutoscaler`, `PodDisruptionBudget`, app-specific
+  `AnalysisTemplate`s, `Job`s and `CronJob`s.
+- **Config and secrets:** `ConfigMap`s, one `ExternalSecret` (`app-secrets`) and, for AI-triage Slack
+  notifications, a second one (`notify-secrets`).
+- **Networking:** the `Namespace`, a `NetworkPolicy`, and an optional Gateway API `HTTPRoute` or classic
+  `Ingress`.
+- **Attached XRs:** one Crossplane XR per `components:` entry (Redis, PostgreSQL, RabbitMQ, MongoDB, Dex),
+  one `SLO` per `slos:` entry, and a `RolloutWatch` for the Rollout.
+- **`extraManifests:`**, raw objects rendered as-is, for anything the chart doesn't model.
 
-The chart renders no `Rollout`, `RolloutWatch`, `Service` or `ServiceMonitor` until an image is set: **both**
-`release.image.repository` and `release.image.tag` (`airframe-application.image` resolves it). The deprecated
-`rollout.image` is still read when `release.image` is not fully set, and `release.image` wins when both are.
-The shipped defaults leave both empty, so a newly created app that is configured but not yet built renders
-nothing that runs, instead of a Rollout whose image is `":"`. Namespace, ServiceAccount, NetworkPolicy and the
-Attached-tier XRs render either way.
+Nobody installs it by hand. ArgoCD renders it: on the dev cluster, Glidepath's `ApplicationSet`s render it for
+Ground environments and PR previews; on an upper cluster, the tenant-onboarding `ApplicationSet` renders it for
+each Flight environment. Each cluster's default chart version is pinned in Apron's `cluster-defaults.yaml`; an
+app can pin its own with `deploy.chart` in its `cicd.yaml`.
 
-## Two facts, two places (2026-10-10)
+## Where the values come from
 
-| Fact | Where | Who |
+The `ApplicationSet` sets `appName`, `cluster`, `envName` and `namespace.labels` itself, then layers value files,
+later ones winning:
+
+| Environment | Human-owned files | Release file (Glidepath only) |
 |---|---|---|
-| Does this environment run a service at all? | `rollout.enabled` (default `true`) in the human values files | people, Tower's config toggle |
-| Has anything been released to it? | `release.image` in the release file | Glidepath only |
+| Flight, in `gitops-<app>` | `<cluster>/base.yaml` (optional, shared by the cluster's environments), then `<cluster>/<env>/values.yaml` | `<cluster>/<env>/release.yaml` |
+| Ground, in the app's source repo | `glidepath/envs/<env>.yaml` | `glidepath/envs/<env>.release.yaml` |
 
-A Rollout renders only when both say yes. `rollout.enabled: false` is the deliberate "Jobs, CronJobs and
-components only" choice (the `appType: infra` case): the rest of `rollout:` is kept, so turning it back on restores
-the settings, and `releaseTracking` on such an environment fails the render (Glidepath refuses to open the release
-in the first place). `rollout: null` still means `enabled: false`, for older files. A file with no `rollout:` key
-gets the chart default, a service: the ApplicationEnvironment bootstrap now writes no `rollout:` at all, where it
-used to write `rollout: null` to mean "not deployed yet" - which, once the image moved to its own release file,
-blocked every new Flight environment's first release.
-`jobs:` and `cronJobs:` entries with no `image:` of their own run the same release image.
+People and Tower edit the human-owned files; `ApplicationEnvironment` writes a Flight environment's identity there
+when it creates it. The release file holds only `release.image` and `releaseTracking`.
 
-`release` is machine-owned: the release pipeline writes it (and `releaseTracking`), people and agents do not. See
-`hangar/docs/autopilot/release-file-split.md` for why it is its own top-level key.
+`values.schema.json` marks every key `x-hangar-owner: human | release | platform`, and
+`tools/airframe-validate` fails a file that puts a key in the wrong one (`AF-OWNER-001`).
 
-## Tests
+## When a workload renders
 
-`tests/run.sh` renders fixtures with `helm template` and asserts which kinds appear (no cluster needed),
-and checks that `tools/airframe-validate` rejects the typo fixtures in `tests/validate/`
-(`rolout:`, `replcas:`, `size: gigantic`) while accepting a real env file. It fails against the
-pre-guard chart. CI runs it (`.github/workflows/airframe-chart-ci.yaml`).
+Two facts decide it, kept in two places:
 
-## Validating a values file
+| Fact | Key | Owner |
+|---|---|---|
+| Does this environment run a service at all? | `rollout.enabled` (default `true`) | people |
+| Has an image been released to it? | `release.image.repository` and `.tag` | Glidepath |
 
-```bash
-tools/airframe-validate platform/envs/dev.yaml          # strict keys + XRD check + helm template
-tools/airframe-validate FILE --no-render                # schema only
-```
+The Rollout, Service, ServiceMonitor, HPA, PDB, route and RolloutWatch render only when both say yes. A
+new environment has no image yet, so it renders its Namespace, ServiceAccount, NetworkPolicy, config and
+attached XRs, and nothing that runs. `rollout.enabled: false` is a components-and-jobs-only environment:
+the rest of `rollout:` is kept, so turning it back on restores the settings. `rollout: null` is read as
+`enabled: false`. `rollout.image` is a deprecated fallback for `release.image`, which wins when both are
+set. `jobs:` and `cronJobs:` entries without their own `image:` run the release image.
 
-The values schema itself still accepts unknown keys (the chart ignores them silently), so this tool is
-the check that turns a typo into an error with a hint (`did you mean 'rollout'?`). It also checks
-`components[].spec` against the component's XRD, which the values schema leaves open. Rules:
-`AF-SCHEMA-001` unknown key, `AF-SCHEMA-002` wrong type or value, `AF-RENDER-001` helm failed.
+`releaseTracking` (written by Glidepath's `open-release-pr`) puts `hangar.io/release-id` and
+`hangar.io/app-namespace` annotations and a `hangar.io/release-tracked` label on the Rollout's own
+metadata, never the pod template. The Argo Rollouts notifications engine reports the Rollout's phase to
+Glidepath's relay by that id (glidepath `docs/admin/release-state.md`). `releaseTracking` on an
+environment with no Rollout fails the render (`templates/release-tracking-guard.yaml`).
 
-## What §3 left to this implementation, and what was decided
+## The Rollout
 
-§3 explicitly deferred chart implementation to "a later session" and flagged a
-few things as genuinely open. This is where those got resolved, concretely:
+- `strategy: canary` (default) or `blueGreen`. `rollout.steps`, `canaryAnalysis` and `blueGreen` are raw
+  Argo Rollouts passthroughs. With no `steps`, a canary renders one `setWeight: 100` step, which behaves
+  like an ordinary rolling update: there is no platform default step sequence.
+- `blueGreen` must not set `activeService`/`previewService`: the chart always names them `<app>` and
+  `<app>-preview`.
+- `maxSurge`/`maxUnavailable` (canary only; unset keeps Argo Rollouts' 25%/25%). `maxSurge: 0` with
+  `maxUnavailable: 1` replaces a single replica without ever running two. Both 0 fails the render.
+- `rollbackWindow` (default `{revisions: 3}`): going back to one of the last three revisions skips the
+  steps and analysis, which is what a Glidepath rollback does. `null` turns it off; `{}` doesn't, because
+  Helm merges it with the default.
+- Probes: an empty `livenessProbe`/`readinessProbe` (the default) renders an HTTP GET of `/` on the first
+  port. Set one to change it.
+- Security: the pod runs as UID/GID 65532 with `runAsNonRoot`, seccomp `RuntimeDefault`, no privilege
+  escalation and every capability dropped. 65532 is also Tower's break-glass debug container's UID, so it
+  can read the app's files through `/proc/1/root`. Keys you set merge onto the defaults; `null` drops them.
+- `podSpec` is deep-merged last onto the pod spec. It must not set `containers` (use the curated fields
+  and `extraContainers`), because a merge replaces whole arrays.
+- Extra labels and annotations: `rollout.labels/annotations` (the Rollout), `podLabels/podAnnotations`
+  (every pod) and `serviceLabels/serviceAnnotations` (the Services). A label the chart owns
+  (`app.kubernetes.io/*`, `hangar.io/*`, `helm.sh/chart`) or a `checksum/*` pod annotation fails the
+  render, naming the key.
 
-- **`rollout:` is optional** (§3's own open design question) - set it to `null`
-  (or omit it) for an `appType: infra` release that's only a `components:`
-  block. Implemented per the doc's stated leaning ("optional in the same
-  chart... for mechanism reuse"), not the sibling-chart alternative.
-- **`cluster`/`envName` are new top-level values fields**, not in §3's schema
-  block. `spec.environmentRef` needs both, and a Helm release's own context
-  (`Release.Name`/`Namespace`) has no structural link back to which cluster/env
-  it is - the `ApplicationEnvironment` Composition that commits this file
-  already knows both, so it sets them here. **Named `envName`, not `env`** -
-  §3 already uses the top-level key `env` for the Embedded-tier container
-  env-var list; a same-named identity field would silently collide with it in
-  one flat values map (this was caught live by `helm lint` during this
-  build - `range .Values.env` failed with "can't iterate over dev").
-- **`secrets:` entries gained a `shared: bool` field.** Item 8 says a secret's
-  Infisical path (`/dev/*` vs `/shared/*`) is "controlled by that env's own
-  ExternalSecret (remoteRef), not by the store" but never says how that
-  control is expressed on a `secrets:` entry - this is that mechanism. Also:
-  `key` here means something different from platform-cicd's own
-  `app-secrets-external-secret.yaml` `key` field (there it overrides the
-  *backend* property; here it's the *env var name* exposed to the container,
-  since this chart - unlike platform-cicd's - actually runs a workload that
-  consumes the secret).
-- **`configMaps:`/`volumes:` entries need a `mountPath`.** §3's `volumes:`
-  entries already had one; `configMaps:` entries didn't (defaults to
-  `/config/<name>`) - added for consistency, not a new idiom.
-- **`networkPolicy.ingressControllerNamespaceSelector` - resolved 2026-08-13,
-  no longer a placeholder.** `gitops-cluster-dev/10-crds-operators/contour/` was
-  built and live-verified on `kind-dev` this same day - the cluster's real
-  ingress controller is Contour, namespace `projectcontour`, not the
-  `ingress-nginx` guess this defaulted to before. Updated to match.
-- **`attachedResourceApiVersion` defaults to `catalog.hangar.io/v1alpha1`.** The catalog's
-  API group was renamed from `catalog.hangar.io` (Tier 2 domain rename); one value, not a
-  per-template hunt, if the group ever changes again.
-- **`rollout.strategy: canary` renders a single inert `setWeight: 100` step**
-  when `rollout.steps` is empty. §3 "Still open" item 3 explicitly says the
-  platform's default canary step sequence "isn't designed here" - this chart
-  doesn't invent one either; the placeholder behaves like an ordinary rolling
-  update (no real analysis) until that default gets designed for real.
-- **`podDisruptionBudget.minAvailable: 1`** is this chart's own default (§3
-  only showed `{enabled: false}`) - a PDB needs `minAvailable` or
-  `maxUnavailable` to mean anything; picked the conservative option.
+## Config and secrets
 
-## v1 resource-coverage pass (2026-08-13, beyond §3's schema entirely)
+- `env:` entries carry `value`, `valueFrom`, or `fromComponent: {name, output}`. `fromComponent` resolves
+  against `files/component-outputs.yaml`, which `tools/gen_component_outputs.py` generates from each
+  component's `xrds/<type>.meta.yaml`, so `{name: DB_URI, fromComponent: {name: db, output: uri}}` becomes a
+  `secretKeyRef` to the Secret the PostgreSQL component created. An unknown component or output fails the
+  render.
+- `configMaps:` entries set `data:` (the chart renders the ConfigMap) or `existingConfigMap:` (one created
+  elsewhere, under a fixed name), exactly one. `as: volume` (default), `env` (every key via `envFrom`) or
+  `both`.
+- `secrets:` entries are Infisical keys, never values. All of them land in one `app-secrets` Secret. `as:
+  env` (default; the env var is `key`, or the upper-cased name), `volume` (one file per entry via
+  `subPath`, at `mountPath`) or `both`.
+- Which store a secret comes from depends on `clusterType`, the cluster's registry type, never its name:
 
-Added after the base chart above was already built and fixture-tested, in
-response to "what else should be in v1 so we don't have to keep changing this
-chart" - not part of `service-catalog-design.md` §3's original schema at all,
-though `service-catalog-design.md` was updated with a pointer to this pass.
+  | `clusterType` | Default store | `shared: true` | Infisical key |
+  |---|---|---|---|
+  | `dev` | `<app>-<cluster>` | same store | `<envName>/<name>`, or `<name>` when shared |
+  | `upper` | `<app>-<cluster>-<env>` | `<app>-<cluster>` | `<name>` |
 
-- **Custom labels and annotations** - `rollout.labels`/`rollout.annotations` (the Rollout object),
-  `rollout.podLabels`/`rollout.podAnnotations` (the pod template, so every pod: Prometheus scrape hints, Vault or
-  Reloader settings, cost-allocation labels) and `rollout.serviceLabels`/`rollout.serviceAnnotations` (the Service, and
-  the `-preview` Service for blueGreen). Elsewhere: `namespace.labels/annotations`, `serviceAccount.annotations`,
-  `ingress.annotations`, `httpRoute.annotations`, `serviceMonitor.additionalLabels`. A label the chart owns
-  (`app.kubernetes.io/*`, `hangar.io/*`, `helm.sh/chart`: the selector labels above all) or a `checksum/*` pod annotation
-  fails the render naming the key. Changing a pod label or annotation rolls the pods like any pod template change.
-- **`serviceAccount`** - a dedicated per-app ServiceAccount (`serviceAccount.create:
-  true`, name defaults to `appName`), referenced by every pod this chart renders.
-  Added specifically *before* any real deployment exists, since it's the anchor
-  point for scoped RBAC, private-registry pulls (`serviceAccount.imagePullSecrets`),
-  and a future cloud workload-identity annotation
-  (`serviceAccount.annotations`) - none of which retrofit cleanly onto pods that
-  already ran as the namespace's implicit `default` SA. **2026-08-19: registry pulls no
-  longer need a per-app opt-in.** `registryCredentials.enabled` is gone -
-  `registry-credentials` is now disseminated to every namespace this platform manages
-  via a `ClusterExternalSecret` platform-cicd's control-plane chart renders (see
-  `platform-cicd/docs/admin/secrets-management.md`), so this chart's own
-  `serviceaccount.yaml` unconditionally appends it onto
-  `serviceAccount.imagePullSecrets` - real 401 hit live on checkout-api's dev Rollout
-  (a freshly-pushed GHCR package defaults to private) is what originally motivated
-  provisioning this at all.
-  **`serviceAccount.projectedTokens`** (2026-10-16): a kubelet-rotated token of this
-  ServiceAccount for another audience, e.g. a cluster that trusts this cluster's issuer
-  (apron `docs/cluster-identity.md`). Each entry `{name, audience, expirationSeconds
-  (default 600), mountPath}` becomes a projected volume mounted read-only on the main
-  container and every Job/CronJob, token at `<mountPath>/token`. Nothing is stored.
-- **`rollout.maxSurge` / `rollout.maxUnavailable`** (canary only, default null = Argo
-  Rollouts' 25%/25%) - `maxSurge: 0` + `maxUnavailable: 1` for a single-replica app that
-  must never run two pods at once (one replaces the other, a short outage). Both 0, or
-  either on blueGreen, fails the render.
-- **`jobs:`/`cronJobs:`** - one-off and scheduled batch tasks, both sharing the
-  main workload's `env`/`secrets`/`configMaps`/`volumes` automatically (same
-  app, same config, no opt-in) and falling back to `rollout.image` when an
-  entry doesn't set its own `image:` (fails fast if neither is available - e.g.
-  an `appType: infra` release with no `rollout:` at all). `jobs:` entries
-  default to a real Helm `pre-install,pre-upgrade` hook (`hook: true`) - the
-  common "run a DB migration before the new Rollout comes up" pattern - or a
-  plain, persistent Job when `hook: false`.
-- **`serviceMonitor`** - on by default. `kube-prometheus-stack` is already
-  installed cluster-side (per `idp_session_phase2_holmesgpt`), so every app
-  gets Prometheus-scraped from its own `rollout.ports` without hand-authoring a
-  ServiceMonitor. `serviceMonitor.additionalLabels` is an escape hatch for
-  whatever selector label the real Prometheus CR on a given cluster requires -
-  **not confirmed**, same class of placeholder as
-  `networkPolicy.ingressControllerNamespaceSelector`.
-- **`extraManifests: []`** - raw, arbitrary K8s objects, rendered as-is, no
-  labels stamped. Same pattern `idp-cluster-baseline` already uses
-  (`gitops-strategy.md` §8). The deliberate point: a future one-off need (some
-  CRD nobody anticipated) never requires touching this chart's templates
-  again, only this values list.
-- **Shared helpers, not copy-paste**: `env`/`configMaps`/`volumes` plumbing
-  used to live only inline in `rollout.yaml`; it's now three named templates
-  (`airframe-application.workloadEnv`/`workloadVolumeMounts`/`workloadVolumes`) so
-  `job.yaml`/`cronjob.yaml` reuse it instead of re-deriving it a second and
-  third time. Directly in service of "don't want to change this chart much" -
-  a future change to how secrets become env vars, say, is one helper edit, not
-  three template edits kept in sync by hand.
+  The dev cluster has one shared Infisical environment per app, so the `<envName>/` prefix is what keeps
+  `pr-12` and `pr-13` apart. `secrets:` without `cluster` and `clusterType` fails the render.
+- `checksum/configmaps` and `checksum/secrets` on the pod template roll the pods when `configMaps:` data
+  or the `secrets:` list changes. A secret's value lives in Infisical, out of Helm's sight, so rotating
+  it does not roll the pods.
+- Every ServiceAccount gets `registry-credentials` as an image pull secret; the platform distributes that
+  Secret to every managed namespace. `serviceAccount.projectedTokens` mounts a kubelet-rotated token of
+  the ServiceAccount for another audience on the main container and every Job and CronJob.
 
-**A real bug this pass caught, worth remembering generally**: Sprig's
-`default` function can't distinguish "key explicitly set to the Go zero value"
-(`false`, `0`) from "key absent" - it treats both as empty and substitutes the
-default either way. `.hook | default true` silently turned an explicit `hook:
-false` back into `true` (confirmed live: the pre-upgrade hook annotation still
-rendered), and the same pattern silently discarded explicit `backoffLimit: 0`/
-`successfulJobsHistoryLimit: 0`/`failedJobsHistoryLimit: 0` (each a real,
-meaningful Kubernetes setting, not "unset"). Fixed with `hasKey`-based checks
-instead (a direct `{{- if or (not (hasKey . "hook")) .hook }}` for the boolean,
-a new `airframe-application.intOr` helper for the integers) - see that helper's own
-header comment in `_helpers.tpl` for the fuller explanation and a warning
-against reusing it inside an `{{- if }}` (an `include` always returns a
-string, and a non-empty string like `"false"` is truthy to Go's `if` - the
-same bug class relocated one level up). Worth a general caution for any future
-field on this chart where `false`/`0` is a legitimate explicit value, not
-"unset".
+## Networking
 
-## configMap/secret consumption modes (2026-08-13, third pass)
+- `NetworkPolicy` (on by default) admits same-namespace pods, the Gateway's namespace when `httpRoute` or
+  `ingress` is enabled (`networkPolicy.ingressControllerNamespaceSelector`, default `hangar-gateway`), and
+  each `allowIngressFrom` entry. Egress stays open unless `allowEgressTo` or `extraEgressRules` adds a rule.
+  `allowIngressFrom`/`allowEgressTo` entries take `namespace` (optionally with `podLabels`) or `cidr`, and
+  bare TCP `ports`; `extraIngressRules`/`extraEgressRules` are raw passthroughs for anything else.
+- `httpRoute` (Gateway API) needs `hostnames` and `parentRefs`; the platform Gateway is `hangar` in
+  `hangar-gateway`, which Apron installs. Its `pathType` is `PathPrefix | Exact | RegularExpression`,
+  unlike `ingress.pathType`.
 
-Real gaps found in code review of the base chart: `secrets:` could only ever
-become an env var (no way to mount a secret - a TLS cert, an SSH key, a
-service-account JSON, anything env vars are a bad fit for); `configMaps:`
-could only ever be volume-mounted (no `envFrom`-style option); and
-`configMaps:` could only ever be chart-owned via `data:` - no way to reference
-a ConfigMap created outside this chart, which is exactly what a Kustomize
-`configMapGenerator`'s output is.
+## Attached XRs
 
-- **Both lists gained an `as: env | volume | both` field**, default unchanged
-  from each list's original single-mode behavior (`volume` for `configMaps:`,
-  `env` for `secrets:`). A typo'd `as:` value fails fast
-  (`airframe-application.resolveAs`) rather than silently matching no mode and
-  producing neither an env var nor a mount with no error at all.
-- **`configMaps: as: env` renders one `envFrom: [{configMapRef: ...}]` entry**
-  - every key in that ConfigMap's `data:` becomes an env var verbatim (no
-    per-key renaming; use the plain top-level `env:` list for a single renamed
-    value instead).
-- **`secrets: as: volume` does NOT create a Secret/volume per entry.** Every
-  `as: volume`/`both` entry shares one `app-secrets` Secret volume (rendered
-  once, only if at least one entry needs it), each mounted at its own exact
-  file path via `subPath: <name>` - the standard mechanism for projecting one
-  key from a Secret without a volume per key. This is also why a `secrets:`
-  entry's `mountPath` means the exact file (unlike `configMaps:`'/`volumes:`'
-  `mountPath`, a directory the whole ConfigMap/PVC content mounts under) -
-  each `secrets:` entry is exactly one key, there's nothing to put in a
-  directory.
-- **`configMaps: existingConfigMap: <name>`** is the alternative to `data:`
-  (mutually exclusive - exactly one required, `airframe-application.configMapObjectName`
-  fails fast otherwise) for referencing a ConfigMap this chart doesn't own.
-  Per your call: the answer for the Kustomize-generated case specifically is a
-  **fixed name** (`disableNameSuffixHash: true` on that generator), not a
-  hash-suffixed one - a hash-suffixed name would need an external process
-  keeping this field in sync on every regeneration, which isn't solved here.
-  The tradeoff, worth remembering: that ConfigMap loses Kustomize's own
-  automatic-rollout-on-content-change property; a plain data-value edit to it
-  won't trigger a new Rollout revision on its own (this chart has no
-  visibility into its content to checksum it - see below).
-- **`checksum/configmaps`/`checksum/secrets` annotations on the Rollout's pod
-  template**, closing a related gap found at the same time: previously, editing
-  `configMaps[].data` or rotating a secret's backend value and running `helm
-  upgrade` did NOT change the Rollout's pod template at all (same ConfigMap/
-  Secret name, same keys), so Argo Rollouts never started a new canary - env
-  vars especially don't update in already-running pods without a restart.
-  **Real, honestly-stated limit**: `checksum/configmaps` hashes
-  `configmap.yaml`'s actual rendered output, so a pure `data:` edit is fully
-  covered (that data lives in `values.yaml`, visible to Helm). `checksum/secrets`
-  only hashes `external-secret.yaml`'s *declaration* (which keys/paths are
-  referenced) - the actual secret **value** lives in Infisical and is invisible
-  to Helm at render time, so rotating it without touching `values.yaml` still
-  won't trigger a new revision. That's a different, harder problem (the usual
-  fix is a controller like Stakater's Reloader watching the rendered Secret
-  itself, not a render-time checksum) - not solved here, flagged rather than
-  silently left looking closed.
+`components:` entries become XRs of the kind `componentKinds` maps their `type` to, with `spec:` passed
+through and `spec.environmentRef.name: <app>-<cluster>-<env>` added. The component's XRD validates the
+spec; `tools/airframe-validate` checks it before merge. `slos:` entries become `SLO` XRs the same way. A
+`RolloutWatch` named after the app watches the Rollout and, with `notifications.slack.enabled`, posts its
+diagnosis to Slack using the `slack-webhook-url` key from the app's shared store. All attached XRs use
+`attachedResourceApiVersion` (`catalog.hangar.io/v1alpha1`).
 
-## Simplified NetworkPolicy rules (2026-08-13, fourth pass)
+## Jobs and CronJobs
 
-The existing escape hatch (`extraIngressRules`/`extraEgressRules`, raw
-`NetworkPolicyIngressRule`/`EgressRule` passthrough) works but requires knowing
-the real K8s `NetworkPolicyPeer`/`NetworkPolicyPort` shape - nested
-`podSelector`/`namespaceSelector`/`ipBlock`, ports as `{protocol, port}`
-objects. Not simple for the overwhelmingly common case: "let this other
-namespace (optionally narrowed to some pods) or this CIDR reach me on this
-port." `allowIngressFrom:`/`allowEgressTo:` (same shape both directions) cover
-that case flatly:
+Both share the main workload's `env`, `secrets`, `configMaps`, `volumes` and projected tokens. A `jobs:`
+entry is a Helm `pre-install,pre-upgrade` hook by default (ArgoCD runs it before each sync, for
+migrations); `hook: false` makes it a plain Job. Integer fields where 0 is meaningful (`backoffLimit`, the
+history limits) use the `airframe-application.intOr` helper, because Sprig's `default` treats 0 and `false`
+as unset.
 
-```yaml
-networkPolicy:
-  allowIngressFrom:
-    - namespace: app-payments-prod
-      ports: [8080]
-    - namespace: app-payments-prod
-      podLabels: {app: worker}   # ANDed with namespace - narrows further
-      ports: [8080, 9090]
-    - cidr: 10.0.0.0/8            # external peer, instead of namespace/podLabels
-      ports: [5432]
-```
+## Editing the chart
 
-- `namespace:` resolves via the auto-populated `kubernetes.io/metadata.name`
-  label (every namespace gets one, k8s 1.21+) - the exact same mechanism
-  already used for `networkPolicy.ingressControllerNamespaceSelector`, not a
-  new idiom.
-- `ports:` is bare integers, TCP assumed - the dominant real-world case. UDP/
-  SCTP, or multiple ORed peers in one rule, still need
-  `extraIngressRules`/`extraEgressRules` - not reinvented here, both escape
-  hatches coexist with the new fields.
-- Each entry renders as its own self-contained rule (K8s ORs separate `ingress[]`/
-  `egress[]` rules together), so entries never interact with each other or with
-  the default same-namespace/ingress-controller rule.
-- `namespace:`/`cidr:` are mutually exclusive per entry -
-  `airframe-application.networkPolicyPeer` fails fast if an entry sets both or
-  neither, same fail-fast instinct as every other lookup/validation helper in
-  this chart (`componentKind`, `configMapObjectName`, `resolveAs`).
-- `allowEgressTo` (like `extraEgressRules` before it) correctly flips
-  `policyTypes` to include `Egress` - verified live that the default,
-  `allowEgressTo`-empty case is byte-identical to before this pass (no
-  behavior change for existing releases that don't use the new fields).
-
-## Gateway API HTTPRoute (2026-09-06, eighth pass)
-
-`httpRoute:` (see `values.yaml`) - a Gateway API `HTTPRoute`, first-class
-alongside classic `ingress:` (`templates/networking/ingress.yaml`), not a
-replacement for it. Every real cluster in this fleet already runs Gateway API,
-not a classic Ingress controller (`idp_session_gateway_api_ingress`,
-`gitops-cluster-kind-prod/50-gateway-routes/`), so this is the mechanism most
-new callers actually want - `ingress:` stays available for whichever
-cluster/app still needs classic Ingress. Independent opt-in toggle, off by
-default, same Service/first `rollout.ports` entry as its target; enabling both
-on one release is allowed (they render independent objects) but almost never
-wanted.
-
-- **`httpRoute.hostnames`/`httpRoute.parentRefs` are both required or the
-  render fails fast** (same instinct as `componentKind`/`configMapObjectName`/
-  `resolveAs` elsewhere in this chart) - an `HTTPRoute` with no hostname or no
-  parent Gateway isn't a real, useful object, so there's no sane default to
-  silently fall back to.
-- **No default `parentRefs` value** - this platform's Gateway (`hangar`,
-  namespace `hangar-gateway`, the one Apron installs) isn't hardcoded here, the same
-  reasoning `networkPolicy.ingressControllerNamespaceSelector` already
-  documents for its own cluster-specific guess: a different cluster could run
-  a differently-named or differently-placed Gateway.
-- **Renders in the release's own namespace, right alongside the Service it
-  targets** - Gateway API requires same-namespace `backendRefs` without a
-  `ReferenceGrant`, satisfied by construction. The cross-namespace
-  `parentRefs` case (the common one - the platform Gateway lives in its own
-  shared namespace, not this app's) needs no `ReferenceGrant` on this side;
-  it's gated by the Gateway's own listener `allowedRoutes` instead, confirmed
-  live against every existing HTTPRoute in this fleet
-  (`gitops-cluster-kind-prod/50-gateway-routes/*.yaml`, `backstage/httproute.yaml`).
-- **`httpRoute.pathType` is a different enum from `ingress.pathType`**
-  (`PathPrefix | Exact | RegularExpression`, not `Prefix | Exact |
-  ImplementationSpecific`) - different API, easy to typo across the two if
-  copy-pasting between them.
-- `helm lint`/`helm template` verified: default-off render is unchanged from
-  before this pass (no `HTTPRoute` object, byte-identical otherwise), enabled
-  render produces a correct `HTTPRoute`, and both fail-fast guards fire on a
-  missing `hostnames`/`parentRefs`.
-
-**Live-verified same day, real bug found and fixed**: rolling this out onto
-`checkout-api` (its first real HTTPRoute, both `staging`/`prod` on `kind-prod`)
-got the `HTTPRoute` itself `Accepted`/`ResolvedRefs` by the Gateway, but every
-real request 504'd. Root cause: `networkpolicy.yaml`'s ingress-controller
-allow-rule only ever checked `ingress.enabled` - a release with
-`httpRoute.enabled: true` and classic `ingress.enabled: false` (the default)
-never allow-listed the Gateway's own data-plane namespace at all, so real
-traffic hit the pod-level `NetworkPolicy` deny. Fixed by gating that rule on
-`ingress.enabled OR httpRoute.enabled` (same selector, same namespace either
-way - a release only ever uses one of the two in practice). While there, also
-fixed `networkPolicy.ingressControllerNamespaceSelector`'s default itself:
-still `projectcontour`, a live-verified value from 2026-08-13's classic-Ingress
-Contour setup that this fleet has since fully replaced with Gateway API on
-every real cluster (kiac's own bundled `kiac`/`kiac-gateway`/`traefik`,
-confirmed identical across kind-dev, kind-man, kind-prod) - dead the moment
-that migration finished for any release actually relying on the default, now
-`kiac-gateway`. Confirmed no other tenant on `kind-prod` was relying on the
-stale default (none currently set `ingress.enabled: true`), and re-verified
-`checkout-api.{staging,prod}.kiac.local` actually serve real traffic through
-the Gateway after the fix, not just that the `HTTPRoute`/`NetworkPolicy`
-objects looked right.
-
-## Not built yet
-
-- The XRDs themselves (`NodeJSApplication`, `SpringBootApplication`,
-  `ApplicationEnvironment`, `SLO`, the Component XRDs) and their Compositions -
-  this chart is what a Composition renders into `gitops-<app-name>`, not a
-  replacement for the Compositions.
-- The `ClusterAnalysisTemplate` golden-path library (`error-rate-check`,
-  `success-rate-check`) and the `argocd-cm` `Rollout` health-check
-  configuration §3 says belongs in `idp-cluster-baseline`, not here.
-- A real platform default canary step sequence (see above).
-
-## Live-verified on a real cluster (2026-08-13, fifth pass)
-
-No longer fixture-only. `kind-dev` was wiped and rebuilt from scratch under real
-GitOps management (`gitops-cluster-dev`, including a real Argo Rollouts controller,
-Calico for actual NetworkPolicy enforcement, and the full observability stack), then
-`widget-api` - previously deployed via the standalone `ai-rollout` prototype's own
-Crossplane Composition, not this chart - was migrated onto `airframe-application` for
-real (`helm install`/`helm upgrade`, no XRD/Composition in front of it yet - that
-part's still not built). Full test pass, each checked against real cluster state,
-not just successful apply:
-
-- **NetworkPolicy actually enforced**: same-namespace traffic succeeded,
-  cross-namespace traffic timed out (Calico, not kindnet - kind's default CNI
-  silently ignores NetworkPolicy objects entirely, confirmed as the reason for
-  the cluster rebuild).
-- **ServiceMonitor actually scraped** by a real Prometheus - discovered via an
-  *empty* `serviceMonitorSelector` on this specific kube-prometheus-stack install
-  (`serviceMonitorSelectorNilUsesHelmValues: false`, set so the OTel Collector's
-  own unlabeled ServiceMonitor gets discovered too), not the release-label
-  mechanism this chart's `serviceMonitor.additionalLabels` was built assuming -
-  both are real, see the field's own comment in `values.yaml` for which case
-  needs which.
-- **Real canary rollout + Prometheus-backed AnalysisRun**, on an actual image
-  update - found and fixed a real bug along the way (below).
-- **checksum/configmaps actually triggers a new Rollout revision** on a
-  config-only edit (no image/spec change) - confirmed a new ReplicaSet rolled
-  out and the new value landed in the running pods, not just that the annotation
-  changed.
-
-## Release tracking (ADR-0021)
-
-`releaseTracking:` is written by glidepath's `open-release-pr` and read for two fields:
-`releaseId` (rendered as the `hangar.io/release-id` annotation and a `hangar.io/release-tracked`
-label on the Rollout, never the pod template) and `appNamespace` (where the dev-side release
-record lives). The Argo Rollouts notifications engine reports the Rollout's phase to glidepath's
-relay, which joins it to the record by release-id; see glidepath's `docs/admin/release-state.md`.
-
-Until 2026-10-06 this chart also rendered three ArgoCD sync-hook Jobs (PreSync, PostSync,
-SyncFail) that reported a release from inside the sync, with a separate `airframe-identity`
-chart for their ServiceAccount and relay-token ExternalSecret. They are gone: a PostSync hook
-holds the sync operation open while a canary is paused, so a revert merged during a bad canary
-could not start syncing (measured, glidepath ADR-0021 phase 0), and PreSync was in the deploy
-path. Older `release.yaml` files still carry `relayUrl`, `relayHostAliasIP`, `configJsonB64` and
-other fields for them; they are ignored. `releaseTracking` on a release with no Rollout now fails
-the render (`templates/release-tracking-guard.yaml`) instead of silently reporting nothing.
-
-**Fast-track rollback (2026-10-10).** `rollout.rollbackWindow` (default `{revisions: 3}`) renders
-Argo Rollouts' `spec.rollbackWindow`: a pod template change back to one of the Rollout's last three
-revisions skips the canary steps and analysis. That is a Glidepath rollback (ADR-0021 phase 4): the
-image already ran healthy in this environment, and without the window the rollback paused at the
-first canary pause step like any release (seen live on sky-marshall staging). `rollbackWindow: null`
-turns it off; `{}` does not (Helm merges it with the default).
-
-**Non-root by default (2026-10-11).** The Rollout's pod runs as UID/GID 65532 unless the release says
-otherwise: `rollout.podSecurityContext` defaults to `runAsNonRoot: true`, `runAsUser`/`runAsGroup`/`fsGroup`
-65532 and the `RuntimeDefault` seccomp profile, and `rollout.containerSecurityContext` to
-`allowPrivilegeEscalation: false` with every capability dropped. 65532 is the UID of Tower's break-glass
-debug container: its process access can read the app's files through `/proc/1/root` only when both run
-as the same non-root user. Before this, no fleet image set `USER`, so every app ran as root and process
-access never showed its files. All ten app images on kiac-dev were run as 65532 with their real
-environment and came up ready with no permission errors; the root-owned files `COPY` leaves in the image
-are world-readable, and the JVM's `/tmp` is world-writable. Keys a release sets merge onto the default
-(`podSecurityContext: {runAsUser: 1000}` keeps the rest); `null` drops it, for an image that must run as
-root. Jobs and CronJobs are unchanged.
-
-The notes below about the 2026-08-17 pass describe what was built and verified then, including
-the hook Jobs this chart no longer renders.
-
-**Two real bugs found and fixed during this pass**:
-
-1. **`rollout.canaryAnalysis` didn't exist at all** - `strategy.canary.analysis`
-   (continuous background analysis against an AnalysisTemplate, run alongside
-   every step) is a sibling field to `steps`, not nested inside it, and had no
-   escape hatch. Added as raw passthrough, same idiom as `steps` itself.
-2. **`analysisTemplates:` entries silently dropped `args:`** - the template only
-   ever rendered `spec.metrics`. Argo Rollouts requires an argument to be
-   declared in the AnalysisTemplate's *own* `spec.args` before a metric query
-   can reference `{{args.<name>}}` - supplying the value via the Rollout's
-   `canary.analysis.args` alone isn't enough. Without this, the AnalysisRun
-   errors `Unable to resolve metric arguments` even though the Rollout's own
-   spec looks completely correct - confirmed against Argo Rollouts' own docs,
-   not guessed, after the live AnalysisRun actually failed with that exact
-   message.
-
-Also resolved, not placeholders anymore: `networkPolicy.ingressControllerNamespaceSelector`
-is `projectcontour` (Contour, confirmed live - not the `ingress-nginx` guess).
-
-## SecretStore auto-provisioning (2026-08-17, seventh pass - SUPERSEDED same-ish day)
-
-~~`templates/attached/secretstore.yaml` - always-on, same treatment as
-`NetworkPolicy`/`ServiceMonitor`, not a `components:`/`slos:` entry and not gated by
-any values field. Renders the `SecretStore` XRD's `"shared"` mode unconditionally
-(idempotent, redundant-safe across every env release for one `(app, cluster)` pair -
-same convention `applicationenvironment`'s own `cluster-app-yaml.yaml` already uses),
-plus, on any cluster other than the dev cluster (`clusterType: upper`), this env's own per-environment-mode XR too.
-Renders into a dedicated namespace, `app-<appName>-secrets`, not this release's own
-namespace - the `"shared"` XR must be the exact same object across every env release
-for one `(app, cluster)` pair, which only works if every release targets the same
-namespace+name.~~
-
-**Superseded, real complaint from you: provisioning secrets infrastructure
-shouldn't be an emergent side effect of "someone happened to deploy a real
-release."** Moved to `NodeJSApplication`/`ApplicationEnvironment`'s own
-Compositions instead - both now commit a `SecretStore` XR manifest via the
-`xr-requests` mechanism (same pattern already proven for every other Bootstrap
-XR), so secrets infrastructure exists the moment onboarding/env-creation
-reconciles, github-commit-speed, no Helm release required at all. This chart no
-longer renders `SecretStore` in any form - see
-`idp/docs/service-catalog-design.md` Item 8's second multi-cluster revision and
-`compositions/nodejsapplication/`/`compositions/applicationenvironment/`'s own
-new templates for the real mechanism. The one real bug this pass DID catch
-(quoting computed names to survive `helm lint`'s all-empty defaults - a bare `-`
-parses as an ambiguous YAML block-sequence indicator) has no chart-side
-descendant to preserve; kept here only as a note for whichever Composition
-template needs the same care next (Go's `text/template`, not Helm, but the same
-underlying YAML-ambiguity risk applies to `<<$appName>>-<<$cluster>>`-shaped
-names there too).
+- `values.schema.json` is the source of truth. `values.yaml` is generated from it
+  (`python3 tools/gen_airframe_schema.py --write-values`), and so are the contract and the AppSpec
+  `$defs` (`tools/gen_contract.py`, `tools/gen_appspec_schema.py`). CI runs each with `--check`.
+  Autopilot vendors `contract/appspec.schema.json`, so a schema description change needs an Autopilot
+  sync too.
+- `tests/run.sh` renders the fixtures in `tests/fixtures/` and checks what appears, and runs
+  `tools/airframe-validate` against `tests/validate/`. No cluster needed. CI runs it with `helm lint`
+  (`.github/workflows/airframe-chart-ci.yaml`).
+- Validate a values file with `tools/airframe-validate FILE` (schema, component XRDs, and a `helm
+  template`), or `--no-render` for the schema only.
+- The chart fails the render, with a message naming the field, rather than rendering something wrong:
+  unknown component types, both or neither of `data:`/`existingConfigMap:`, a bad `as:`, a NetworkPolicy
+  peer with both `namespace` and `cidr`, missing `httpRoute` hostnames or parentRefs. New fields should do
+  the same.

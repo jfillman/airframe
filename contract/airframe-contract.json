@@ -4,7 +4,7 @@
     "fields": {
       "analysisTemplates": {
         "default": [],
-        "description": "App-specific custom Argo Rollouts AnalysisTemplates, referenced by name from rollout.steps or rollout.canaryAnalysis. Not rendered as a Rollout - referenced only.",
+        "description": "App-specific Argo Rollouts AnalysisTemplates, rendered in this namespace. Reference them by name from rollout.steps or rollout.canaryAnalysis; the chart does not wire them in.",
         "type": "array"
       },
       "appName": {
@@ -14,7 +14,7 @@
       },
       "appType": {
         "default": "app",
-        "description": "app runs a workload (Rollout); infra provisions components/environments only (naming-conventions.md's existing distinction).",
+        "description": "app runs a workload; infra is a components-only service. A label for people and tools: the chart decides what to render from rollout.enabled, not from this.",
         "enum": [
           "app",
           "infra"
@@ -59,7 +59,7 @@
           "rabbitmq": "RabbitMQ",
           "redis": "Redis"
         },
-        "description": "Deliberate lookup map exception: component type string -> XR kind. Not every listed kind has a real XRD yet.",
+        "description": "Deliberate lookup map exception: component type string -> XR kind. A new component kind needs a row here, not a template change.",
         "type": "object"
       },
       "components": {
@@ -180,7 +180,7 @@
         ]
       },
       "rollout": {
-        "description": "The Argo Rollout workload. Set to null for an infra-type release with no custom workload (a standalone component-only env).",
+        "description": "The Argo Rollout workload. Use rollout.enabled: false for an environment with no long-running service; null is read the same way.",
         "type": [
           "object",
           "null"

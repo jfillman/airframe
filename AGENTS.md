@@ -14,7 +14,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## The model at a glance
 - **Bootstrap tier** (`NodeJSApplication`, `PythonApplication`, `SpringBootApplication`, `GoApplication`, `InfraService`): creates repos and onboarding. Not a Deployment. The four app stacks take `deployTarget: kubernetes | aws-ecs`; with `aws-ecs` they compose an `AwsEcsTarget` for their dev environment.
-- **Function XRDs** (`LambdaFunction`, `AzureFunction`): a repo, CI/CD and a handler for a container-image function that Glidepath deploys to an existing AWS Lambda function or Azure Container App. No chart, no Ground/Flight environments. *Not usable end to end yet*: Glidepath cannot push to ECR (Lambda needs it), and neither deploy target has run against a real account.
+- **Function XRDs** (`LambdaFunction`, `AzureFunction`): a repo, CI/CD and a handler for a container-image function that Glidepath deploys to an AWS Lambda function or Azure Container App. No chart, no Ground/Flight environments. Lambda and ECS deploys have run end to end against a real AWS account; the Azure target has not run against a real subscription.
 - **Cloud targets** (`AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget`): the minimum cloud infrastructure a
   `deploy.target: aws-lambda | aws-ecs | azure-container-apps` deploy needs, stood up and torn down on request as a
   stand-alone XR in the app's xr-requests (docs/user/cloud-targets.md). Each publishes `status.cicd`, the deploy block

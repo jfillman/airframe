@@ -152,8 +152,8 @@ a written policy becomes a change to an XRD or a composition.
 - `BranchProtection`: deferred until CI status-check names are stable.
 - Platform default canary steps: `rollout.strategy: canary` renders a single inert
   `setWeight: 100` step unless the values give steps.
-- End-to-end function deploys: Glidepath can't push to ECR yet, and neither function target has
-  run against a real account.
+- Azure deploys against a real subscription: `AzureFunction` and `AzureContainerAppTarget` are
+  render-tested only. Lambda and ECS deploys have run end to end.
 - A second dev cluster: the registry gate supports it, nothing has exercised it.
 - Environment deletion: a possible deadlock with ArgoCD pruning is monitored, not proven resolved.
 

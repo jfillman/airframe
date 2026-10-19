@@ -3,9 +3,10 @@
 # chart, so none of the application XRDs' parameters apply. Language and target are still
 # independent of the build, which reuses the same Containerfile -> OCI image path.
 #
-# BRING YOUR OWN FUNCTION. Glidepath's aws-lambda deploy target only updates an existing
-# function's image; nothing here creates the function, its execution role or its ECR
-# repository. Create those first (package type Image), then onboard.
+# Glidepath's aws-lambda deploy target updates a function's image; it never creates the
+# function. With spec.target.enabled: true this XR composes an AwsLambdaTarget that creates the
+# function, its ECR repository and its roles for the dev environment. Otherwise the function
+# must already exist (package type Image), for example as a stand-alone AwsLambdaTarget XR.
 #
 # No gitops-<app> repo is created: there is no Flight environment (no Helm chart), and
 # Glidepath renders the release Application only for apps that declare a release stage, which
@@ -16,8 +17,6 @@
 # The Component this produces should carry the Tower catalog annotations
 # hangar.io/service-class: function and hangar.io/deploy-target: aws-lambda
 # (tower docs/service-classes.md). Tower also infers both from the kind:lambdafunction tag.
-#
-# Not yet usable end to end: Glidepath has no way to push to ECR (see cicd-yaml.yaml's header).
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition
 metadata:
@@ -25,8 +24,8 @@ metadata:
   annotations:
     terasky.backstage.io/add-to-catalog: "true"
     terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
-    terasky.backstage.io/description: "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function."
-    hangar.io/agent-summary: "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function."
+    terasky.backstage.io/description: "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys it to Lambda."
+    hangar.io/agent-summary: "Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys it to Lambda."
 spec:
   group: catalog.hangar.io
   names:
@@ -57,7 +56,7 @@ spec:
       schema:
         openAPIV3Schema:
           type: object
-          description: "LambdaFunction: Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys to an existing function."
+          description: "LambdaFunction: Onboard a new AWS Lambda function (container image) - creates its source repo with a handler and CI/CD that deploys it to Lambda."
           properties:
             metadata:
               type: object

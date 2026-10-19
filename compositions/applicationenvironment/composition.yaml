@@ -379,15 +379,14 @@ spec:
                 resourceRef:
                   name: <<$appName>>
                   namespace: <<$xrNamespace>>
-              by:
-                # The composite's OWN apiVersion, not a literal: this template is shared by the catalog.hangar.io
-                # composition and its catalog.hangar.io twin (Tier 2 domain rename, memory
-                # project_tier2_domain_rename_plan.md). A hardcoded group here made the twin's Usage point `by` at an
-                # ApplicationEnvironment kind that does not exist under the twin's group.
-                apiVersion: <<.observed.composite.resource.apiVersion>>
-                kind: ApplicationEnvironment
-                resourceRef:
-                  name: <<$xrName>>
+              # No `by` (airframe#111's finding, 2026-10-19): `by` used to be this ApplicationEnvironment itself. Crossplane's
+              # Usage controller holds a composed Usage until its `by` is gone, and this Usage carries the XR's controller ownerRef
+              # with blockOwnerDeletion, so any foreground delete of the XR (Argo CD's default prune) deadlocked: the XR waited
+              # for the Usage, the Usage for the XR. That is the "twice-confirmed, then not reproduced" deletion deadlock in
+              # gitops-cluster-*/02-argocd-apps/xr-requests/applicationset.yaml. Without `by` the Usage still blocks deleting the
+              # app while this environment exists, and is released as the environment's own delete reaches it; nothing composed
+              # here needs the app to outlive that (the files it wrote are in other repos, and the env cluster's Application is
+              # removed by that cluster's Argo CD on its own schedule either way).
               reason: <<printf "ApplicationEnvironment %s references %s %s via spec.appName - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md §0)" $xrName $appKind $appName | toJson>>
               replayDeletion: true
             <<- end >>

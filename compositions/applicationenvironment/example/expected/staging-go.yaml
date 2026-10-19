@@ -7,11 +7,6 @@ resources:
     namespace: demo-apps
   name: app-usage
   spec:
-    by:
-      apiVersion: catalog.hangar.io/v1alpha1
-      kind: ApplicationEnvironment
-      resourceRef:
-        name: widget-service-example-prod-staging
     of:
       apiVersion: catalog.hangar.io/v1alpha1
       kind: GoApplication

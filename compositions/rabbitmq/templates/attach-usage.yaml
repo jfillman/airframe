@@ -18,9 +18,16 @@ spec:
     resourceRef:
       name: <<$xr.spec.brokerRef.name>>
       namespace: <<$xr.spec.brokerRef.namespace | default $xr.metadata.namespace>>
+  # `by` is the composed User (attach.yaml), the object that needs the broker while it is deleted, and NEVER this
+  # XR itself. Crossplane's Usage controller makes a composed Usage wait for its `by` to be gone before releasing,
+  # and this Usage carries the XR's controller ownerRef with blockOwnerDeletion. With `by` = the XR, a foreground
+  # delete (Argo CD's default prune) deadlocks: the XR waits for the Usage, the Usage waits for the XR (boarding-api
+  # dev board-mq, 2026-10-19, stuck with only its Usage left). The User gets a plain, non-blocking ownerRef from the
+  # Usage controller, so it is deleted first, the operator removes the user from the broker the Usage still
+  # protects, and then the Usage lets go.
   by:
-    apiVersion: <<$xr.apiVersion>>
-    kind: RabbitMQ
+    apiVersion: rabbitmq.com/v1beta1
+    kind: User
     resourceRef:
       name: <<$xr.metadata.name>>
   reason: <<printf "RabbitMQ %s/%s attaches to this broker via spec.brokerRef - delete the attachers first" $xr.metadata.namespace $xr.metadata.name | toJson>>

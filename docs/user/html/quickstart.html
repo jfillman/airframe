@@ -583,11 +583,6 @@ rollout:
     - { name: dev, tier: ground }
     - { name: staging, tier: flight, cluster: prod }
 
-governance:
-  allowedCommitSigners:
-    - you@example.com   # with no signers every release fails the
-                        # commit-signature gate
-
 pipelines:
   ci:
     trigger: { source: git, event: push, branch: main }
@@ -667,9 +662,12 @@ boarding-api-&lt;prod-cluster&gt;-staging   True     True    applicationenvironm
         <p class="prose">Push to <code>main</code>. After <code>build</code>, <code>test</code>
           and <code>deploy</code> to dev, the <code>release</code> stage opens a PR against
           <code>gitops-boarding-api</code> setting <code>rollout.image</code> for
-          <code>staging</code>. Merge it as a <b>signed</b> commit — GitHub's merge button
-          produces an unsigned one (see Glidepath's <code>docs/admin/commit-signing.md</code>,
-          "Merge strategy matters"). The prod cluster's ArgoCD syncs it, and the
+          <code>staging</code>. Its <code>provenance</code> check verifies the <b>app</b> commit you pushed:
+          it must be gitsign-signed by an address in the cluster's release-signing policy (a platform
+          admin keeps it, not <code>cicd.yaml</code>), or - where an admin has turned the GitHub-merge path
+          on for the app - merged on GitHub by an allowed login (see Glidepath's
+          <code>docs/admin/commit-signing.md</code>, "Merge strategy"). Merge the release PR once its
+          checks pass. The prod cluster's ArgoCD syncs it, and the
           Rollout comes up on the target cluster (<code>kubectl get rollout</code>, or Tower).</p>
       </div>
     </div>

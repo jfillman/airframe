@@ -363,10 +363,6 @@ deploy:
     - { name: dev, tier: ground }
     - { name: staging, tier: flight, cluster: <prod-cluster> }
 
-governance:
-  allowedCommitSigners:
-    - you@example.com
-
 pipelines:
   ci:
     trigger: { source: git, event: push, branch: main }

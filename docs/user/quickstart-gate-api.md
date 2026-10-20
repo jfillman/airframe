@@ -117,10 +117,6 @@ deploy:
     - { name: dev,     tier: ground }
     - { name: staging, tier: flight, cluster: <prod-cluster> }
 
-governance:
-  allowedCommitSigners:
-    - you@example.com          # the address gitsign signs with; empty fails every release
-
 pipelines:
   ci:
     trigger: { source: git, event: push, branch: main }

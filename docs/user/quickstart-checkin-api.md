@@ -87,8 +87,6 @@ governance:
   imageScan: true
   policyCheck: true
   sbom: true
-  allowedCommitSigners:
-    - you@example.com
 pipelines:
   ci:
     trigger: { source: git, event: push, branch: main }

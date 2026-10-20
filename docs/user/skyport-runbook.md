@@ -115,9 +115,11 @@ done
   cluster they come from **Apron's prod profile** (Dex's XRD, composition and function). Part 5 needs
   both; `ghcr.io/jfillman/function-dex` must be a public package.
 - **gitsign** on the machine you commit from: `git config gpg.x509.program gitsign`,
-  `git config gpg.format x509`, `git config commit.gpgsign true`, and your signing address in each app's
-  `governance.allowedCommitSigners`
-  ([commit-signing.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/commit-signing.md)).
+  `git config gpg.format x509`, `git config commit.gpgsign true`, and your signing address in the cluster's
+  release-signing policy (`releaseSigning.defaults.allowedCommitSigners` in the cluster repo's
+  `50-glidepath/glidepath-catalog` values, or `releaseSigning.signers` in its `cluster.yaml` for Apron) - an admin
+  setting since 2026-10-20, no longer each app's `cicd.yaml`
+  ([commit-signing.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/commit-signing.md#who-sets-the-policy)).
 
 ### The gotchas every part shares
 

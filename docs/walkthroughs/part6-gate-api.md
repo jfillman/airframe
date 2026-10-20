@@ -20,13 +20,13 @@ gh api repos/<github-owner>/gate-api/contents/.tekton --jq '.[].name'
 
 **Expected:** flow-ci.yaml and onboarding-resync.yaml are present
 
-## cicd.yaml declares dev (ground) and staging (flight, on the prod cluster), with a signer
+## cicd.yaml declares dev (ground) and staging (flight, on the prod cluster)
 
 ```bash
 gh api repos/<github-owner>/gate-api/contents/cicd.yaml --jq .content | base64 -d
 ```
 
-**Expected:** deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; allowedCommitSigners not empty; no removed keys
+**Expected:** deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; no removed keys (signers are the cluster's release-signing policy, not cicd.yaml)
 
 ## The staging ApplicationEnvironment passes its verify contract
 

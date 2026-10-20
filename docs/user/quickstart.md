@@ -303,18 +303,13 @@ To change ground settings (replicas, ports, probes, resources), edit
 
 Add the flight env and a `release` stage. The `release` stage is what supplies
 the image to a flight env, and Tower's App Configuration tab builds its
-environment list from the `tier: flight` entries here:
+environment list from the `tier: flight` entries here. Who may sign a released commit is not in `cicd.yaml`: it is the platform's release-signing policy (`releaseSigning` in the cluster repo's `50-glidepath/glidepath-catalog` values), which a platform admin keeps. Ask them to list the address gitsign signs your commits with; with no signers every release fails the commit-signature gate ([commit-signing.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/commit-signing.md#who-sets-the-policy)).
 
 ```yaml
 deploy:
   environments:             # promotion order (ADR-0019)
     - { name: dev, tier: ground }
     - { name: staging, tier: flight, cluster: <prod-cluster> }
-
-governance:
-  allowedCommitSigners:
-    - you@example.com       # release gates are enforced; with no signers every
-                            # release fails the commit-signature gate
 
 pipelines:
   ci:
@@ -394,13 +389,14 @@ step, so until it runs the Rollout has no image to start.
 
 Push to `main`. After `build`, `test` and `deploy` to dev, the `release` stage
 opens a PR against `gitops-boarding-api` writing the image into
-`<prod-cluster>/staging/release.yaml`. Merge it **without GitHub's merge button**:
-all three button strategies (merge, squash, rebase) create a new, unsigned commit and
-the `provenance` gate fails. Fast-forward the signed commit instead
-(`git merge --ff-only <branch> && git push`); see Glidepath's
+`<prod-cluster>/staging/release.yaml`. Its `provenance` check verifies the **app** commit you pushed
+to `main`, not this PR: that commit passes when it is `gitsign`-signed by an address in the
+cluster's release-signing policy, so push or fast-forward a signed commit
+(`git merge --ff-only <branch> && git push`). GitHub's merge button on the **app** PR makes a new
+commit GitHub signs, not you, and fails the gate - unless a platform admin has turned the
+GitHub-merge path on for the app and a login on its allowed-mergers list pressed it. See Glidepath's
 [commit-signing.md](https://github.com/jfillman/glidepath/blob/main/docs/admin/commit-signing.md)
-("Merge strategy matters"). Your commits must be `gitsign`-signed by an address in
-`governance.allowedCommitSigners`. The prod cluster's
+("Merge strategy"). Once the checks pass, merge the release PR; the prod cluster's
 ArgoCD syncs it and the Rollout comes up on the target cluster (`kubectl get rollout`, or Tower).
 
 ## 08 — Add a Redis cache

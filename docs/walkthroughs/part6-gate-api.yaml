@@ -23,10 +23,10 @@ steps:
       grep -q "onboarding-resync.yaml" <<<"$files"
 
   - id: "04-cicd-environments"
-    title: "cicd.yaml declares dev (ground) and staging (flight, on the prod cluster), with a signer"
+    title: "cicd.yaml declares dev (ground) and staging (flight, on the prod cluster)"
     command: |
       gh api repos/${GITHUB_OWNER}/gate-api/contents/cicd.yaml --jq .content | base64 -d
-    expected: "deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; allowedCommitSigners not empty; no removed keys"
+    expected: "deploy.environments: dev/ground and staging/flight with cluster = the prod cluster's name; no removed keys (signers are the cluster's release-signing policy, not cicd.yaml)"
     verify: |
       set -euo pipefail
       gh api "repos/${GITHUB_OWNER}/gate-api/contents/cicd.yaml" --jq .content | base64 -d > /tmp/wt-gate-cicd.yaml
@@ -39,7 +39,6 @@ steps:
       assert envs["dev"]["tier"] == "ground", envs
       assert envs["staging"]["tier"] == "flight", envs
       assert envs["staging"].get("cluster") == os.environ["PROD_CLUSTER"], envs["staging"]
-      assert (doc.get("governance") or {}).get("allowedCommitSigners"), "no allowedCommitSigners: every release fails provenance"
       print("ok", sorted(envs))
       PY
 

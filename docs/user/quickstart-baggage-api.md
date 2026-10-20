@@ -191,8 +191,6 @@ governance:
   imageScan: true          # the Trivy gate the Containerfile is written for
   policyCheck: true
   sbom: true
-  allowedCommitSigners:
-    - you@example.com       # the address gitsign signs your commits with
 
 pipelines:
   ci:

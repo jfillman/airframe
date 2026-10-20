@@ -329,18 +329,17 @@ spec:
             # migrates (same failure class 00-app-kind-gate.yaml's header documents for the
             # hardcoded-kind version of this bug).
             #
-            # $xrNamespace comes from this XR's own metadata (Crossplane v2, scope: Namespaced) -
-            # NodeJSApplication and ApplicationEnvironment are always onboarded into the same
-            # namespace by this catalog's convention (see both XRDs' own headers), not otherwise
-            # derivable from spec.appName alone. Declared locally here rather than added to
-            # 00-cluster-gate.yaml's shared var block - doesn't touch that file's existing
-            # cluster-registry gate declarations at all.
-            #
-            # spec.by has no namespace field (by design - "by" is implicitly the same namespace as
-            # the Usage object itself, which is this ApplicationEnvironment XR's own namespace,
-            # since a namespaced XR's composed namespaced resources land in its own namespace
-            # automatically - same implicit placement every RepositoryFile composed elsewhere in
-            # this template already relies on, no explicit metadata.namespace needed anywhere).
+            # spec.of.resourceRef carries NO namespace (2026-10-20): NodeJSApplication and
+            # ApplicationEnvironment are always onboarded into the same namespace by this catalog's
+            # convention (see both XRDs' own headers), and this Usage lands in the XR's namespace like
+            # every other namespaced composed resource here, so the app is implicitly in the Usage's own
+            # namespace. An explicit `of.resourceRef.namespace` is NOT harmless: Crossplane's Usage CRD
+            # (protection.crossplane.io/v1beta1, CEL) treats any explicit `of` namespace as cross-namespace
+            # and refuses it without `spec.by` - "cross-namespace "spec.of" is not allowed without "spec.by"
+            # resource". Once `by` was dropped (v0.3.157, below) every ApplicationEnvironment on hangar-dev
+            # went Synced: False / "Unsynced resources: app-usage" with that event (the pre-existing Usages,
+            # created with `by`, kept protecting; only the re-apply failed). Verified with a server dry run:
+            # the same Usage without the namespace is accepted, with it refused.
             #
             # Deliberately NOT wrapped in the $clusterOk gate every other resource in this directory
             # is (see 00-cluster-gate.yaml). "This env references this app" (spec.appName) is true
@@ -364,7 +363,6 @@ spec:
             # nodejsapplication` somehow lands in that narrow window before the label is set, this
             # replays the deletion attempt automatically once the last blocking Usage is actually
             # gone, instead of leaving it needing a manual re-delete.
-            <<- $xrNamespace := .observed.composite.resource.metadata.namespace >>
             <<- if $renderUsage >>
             apiVersion: protection.crossplane.io/v1beta1
             kind: Usage
@@ -378,7 +376,6 @@ spec:
                 kind: <<$appKind>>
                 resourceRef:
                   name: <<$appName>>
-                  namespace: <<$xrNamespace>>
               # No `by` (airframe#111's finding, 2026-10-19): `by` used to be this ApplicationEnvironment itself. Crossplane's
               # Usage controller holds a composed Usage until its `by` is gone, and this Usage carries the XR's controller ownerRef
               # with blockOwnerDeletion, so any foreground delete of the XR (Argo CD's default prune) deadlocked: the XR waited

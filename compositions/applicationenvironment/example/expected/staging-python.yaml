@@ -12,7 +12,6 @@ resources:
       kind: PythonApplication
       resourceRef:
         name: widget-service
-        namespace: demo-apps
     reason: "ApplicationEnvironment widget-service-example-prod-staging references PythonApplication widget-service via spec.appName\
       \ - blocks app deletion until every referencing env is gone (idp/docs/service-catalog-design.md \xA70)"
     replayDeletion: true

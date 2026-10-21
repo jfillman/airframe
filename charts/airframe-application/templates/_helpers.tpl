@@ -9,6 +9,8 @@ so every file calls the same thing.
 {{/*
 airframe-application.labels - the Kubernetes recommended labels plus hangar.io/app, env and cluster, on
 every resource this chart renders. These labels are reserved: userMeta refuses to let values override them.
+part-of is the app (Kubernetes' "higher-level application"), not the platform: tools that group by it (Radar)
+put every app under one "hangar" group.
 */}}
 {{- define "airframe-application.labels" -}}
 app.kubernetes.io/name: {{ .Values.appName }}
@@ -19,7 +21,7 @@ app.kubernetes.io/version: {{ (include "airframe-application.image" . | fromYaml
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
-app.kubernetes.io/part-of: hangar
+app.kubernetes.io/part-of: {{ .Values.appName }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
 hangar.io/component: application
 hangar.io/app: {{ .Values.appName }}

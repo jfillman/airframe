@@ -231,6 +231,12 @@ spec:
             # The operator copies the CR's labels onto the StatefulSet, Services and Secrets, and the
             # override below adds them to the pod template, so `kubectl get all,secret -l
             # hangar.io/app=<app>` finds the broker.
+            #
+            # app.kubernetes.io/part-of: the operator stamps `rabbitmq` on everything it creates (its own
+            # pods too) and never copies an app.kubernetes.io/* label from the CR, so tools that group by
+            # part-of (Radar) filed every broker under "rabbitmq" next to the operator. The override sets it
+            # to the owning app (hangar.io/app, else the XR's name) on the StatefulSet, its pods and the
+            # client Service. No selector reads part-of, so changing it only relabels.
             <<- $xr := .observed.composite.resource >>
             <<- $spec := $xr.spec >>
             <<- if eq $spec.mode "broker" >>
@@ -258,6 +264,7 @@ spec:
                 <<- $_ := set $hangarLabels $k $v >>
               <<- end >>
             <<- end >>
+            <<- $partOf := get $hangarLabels "hangar.io/app" | default $xrName >>
             <<- $allowed := $spec.allowedNamespaces | default list >>
             <<- /* Readiness (AllReplicasReady, no Ready condition on a RabbitmqCluster) is a CEL rule in
                    compositions/_shared/readiness-context.yaml, read by the detect-ready step.
@@ -294,13 +301,21 @@ spec:
                   memory: <<$memLim>>
               override:
                 statefulSet:
+                  metadata:
+                    labels:
+                      app.kubernetes.io/part-of: <<$partOf | quote>>
                   spec:
                     template:
                       metadata:
                         labels:
+                          app.kubernetes.io/part-of: <<$partOf | quote>>
                           <<- range $k, $v := $hangarLabels >>
                           <<$k>>: <<$v | quote>>
                           <<- end >>
+                service:
+                  metadata:
+                    labels:
+                      app.kubernetes.io/part-of: <<$partOf | quote>>
             ---
             <<- range $v := ($spec.vhosts | default list) >>
             apiVersion: rabbitmq.com/v1beta1

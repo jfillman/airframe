@@ -11,19 +11,11 @@ resources:
   spec:
     image: rabbitmq:4.2.9-management
     override:
-      service:
-        metadata:
-          labels:
-            app.kubernetes.io/part-of: skyport-broker
       statefulSet:
-        metadata:
-          labels:
-            app.kubernetes.io/part-of: skyport-broker
         spec:
           template:
             metadata:
-              labels:
-                app.kubernetes.io/part-of: skyport-broker
+              labels: null
     persistence:
       storage: 1Gi
     replicas: 1

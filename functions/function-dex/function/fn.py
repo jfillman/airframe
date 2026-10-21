@@ -326,14 +326,20 @@ async def get_dex_client(grpc_address, client_id):
 def server_usage(xr, server_ref):
     """A Crossplane Usage that blocks deleting the Dex server XR while this attacher exists (review
     C13). Without it, deleting a server stranded every attacher: its credentials Secret points at an
-    issuer that is gone. Declared on every attach reconcile, before any server call, so a Dex
-    outage never prunes it. Cross-namespace via of.resourceRef.namespace.
+    issuer that is gone. Cross-namespace via of.resourceRef.namespace.
 
-    No `by`: it would have to be this XR (nothing composed here needs the server while it is deleted;
-    the client registration is not a composed resource), and a composed Usage whose `by` is its own
-    composite deadlocks a foreground delete - the Usage controller waits for `by` to be gone, while the
-    XR waits for the Usage, which carries its blockOwnerDeletion controller ref (boarding-api dev
-    board-oauth, 2026-10-19). Without `by` the Usage is released as soon as the XR's delete reaches it."""
+    `by` is this XR's own composed credentials Secret, the thing that actually needs the server.
+    Crossplane refuses a cross-namespace `of` without a `by` ("cross-namespace spec.of is not allowed
+    without spec.by", hangar-dev 2026-10-21: every attacher of skyport-auth was Synced=False). It must
+    not be the XR itself: a composed Usage whose `by` is its own composite deadlocks a foreground delete
+    (the Usage controller waits for `by` to be gone while the XR waits for the Usage, which carries its
+    blockOwnerDeletion controller ref; boarding-api dev board-oauth, 2026-10-19). A sibling has no such
+    ref, and a Secret has no finalizer, so the XR's delete removes it and the Usage is released - the
+    same shape as the RabbitMQ attach Usage's composed User.
+
+    So it is declared exactly when the Secret is: on success, and on a failed reconcile that re-declares
+    an observed Secret (a Dex outage never prunes either). Before the first registration there are no
+    credentials to protect, and nothing for `by` to name."""
     xr_name = safe_get(xr, "metadata", "name")
     xr_namespace = safe_get(xr, "metadata", "namespace")
     api_version = safe_get(xr, "apiVersion") or "catalog.hangar.io/v1alpha1"
@@ -342,6 +348,11 @@ def server_usage(xr, server_ref):
         "kind": "Usage",
         "metadata": {"name": f"{xr_name}-server-usage", "namespace": xr_namespace},
         "spec": {
+            "by": {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "resourceRef": {"name": f"{xr_name}-oauth-credentials"},
+            },
             "of": {
                 "apiVersion": api_version,
                 "kind": "Dex",
@@ -424,8 +435,10 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             observed_secret = observed_client_secret(observed)
             client_secret = observed_secret or pysecrets.token_urlsafe(32)
             outcome = "created"
-            if safe_get(server_ref, "name"):
-                rsp.desired.resources["server-usage"].resource.update(server_usage(xr, server_ref))
+
+            def declare_usage():
+                if safe_get(server_ref, "name"):
+                    rsp.desired.resources["server-usage"].resource.update(server_usage(xr, server_ref))
 
             def fail(reason, message):
                 # Fail closed on the CONDITION, but never prune a Secret an app is already
@@ -442,6 +455,7 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                         credentials_secret(xr_name, xr_namespace, labels, data=observed),
                     )
                     rsp.desired.resources["oauth-credentials"].ready = fnv1.READY_TRUE
+                    declare_usage()
                 log.info("dex attach not ready", xr=xr_name, reason=reason, message=message)
                 return rsp
 
@@ -487,6 +501,7 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             # default readiness auto-detection - same gotcha function-rollout-watcher's own
             # ServiceAccount hit (see that file's build_diagnosis_service_account docstring).
             rsp.desired.resources["oauth-credentials"].ready = fnv1.READY_TRUE
+            declare_usage()
             if outcome == "created":
                 message = f"Registered client {client_id} on the Dex server with a newly generated secret."
             elif outcome == "confirmed":

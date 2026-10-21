@@ -207,21 +207,35 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
             self.assertIn("my-dex", server.servicer.created)
             self.assertFalse(server.servicer.created["my-dex"].public)
 
-    async def test_attach_declares_a_server_usage_even_when_the_server_is_down(self):
-        # C13: deleting the server must be blocked while an attacher exists; the Usage is declared
-        # before any gRPC call, so an unreachable server never prunes it.
-        for reachable in (True, False):
-            if reachable:
-                async with FakeDexServer() as server:
-                    rsp = await run_attach(server)
-            else:
-                rsp = await run_attach(None, address="127.0.0.1:1")
-            usage = resource.struct_to_dict(rsp.desired.resources["server-usage"].resource)
-            self.assertEqual(usage["kind"], "Usage")
-            self.assertEqual(usage["spec"]["of"]["resourceRef"], {"name": "srv", "namespace": "srv-ns"})
-            # No `by`: the XR itself as `by` deadlocks a foreground delete (see server_usage).
-            self.assertNotIn("by", usage["spec"])
-            self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
+    async def test_attach_usage_is_declared_with_the_secret_and_names_it_as_by(self):
+        # C13: deleting the server must be blocked while an attacher holds credentials. Crossplane refuses a
+        # cross-namespace `of` without a `by` (hangar-dev, 2026-10-21), and `by` must not be the XR itself (a
+        # foreground delete deadlocks, 2026-10-19): it is the composed credentials Secret, declared together.
+        observed = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "my-dex-oauth-credentials"},
+                    **secret_data({"client-id": "my-dex", "client-secret": "s3cret"})}
+        cases = {"reachable": None, "down with credentials": observed}
+        for label, obs in cases.items():
+            with self.subTest(label):
+                if label == "reachable":
+                    async with FakeDexServer() as server:
+                        rsp = await run_attach(server)
+                else:
+                    rsp = await run_attach(None, observed=obs, address="127.0.0.1:1")
+                self.assertIn("oauth-credentials", rsp.desired.resources)
+                usage = resource.struct_to_dict(rsp.desired.resources["server-usage"].resource)
+                self.assertEqual(usage["kind"], "Usage")
+                self.assertEqual(usage["spec"]["of"]["resourceRef"], {"name": "srv", "namespace": "srv-ns"})
+                self.assertEqual(
+                    usage["spec"]["by"],
+                    {"apiVersion": "v1", "kind": "Secret", "resourceRef": {"name": "my-dex-oauth-credentials"}},
+                )
+                self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
+
+    async def test_attach_declares_no_usage_before_any_credentials_exist(self):
+        # Server down on the very first reconcile: no Secret, so nothing to protect and nothing for `by` to name.
+        rsp = await run_attach(None, address="127.0.0.1:1")
+        self.assertNotIn("oauth-credentials", rsp.desired.resources)
+        self.assertNotIn("server-usage", rsp.desired.resources)
 
     async def test_sidecar_secret_and_service_match_the_function(self):
         # xrds/dex.meta.yaml is what the chart's fromComponent, the contract bundle and airframe-verify

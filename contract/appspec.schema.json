@@ -2954,7 +2954,7 @@
                         "environmentSlug": {
                           "type": "string",
                           "default": "shared",
-                          "description": "\"shared\" (the default) creates the project, its \"shared\" environment, the identity and a ClusterSecretStore open to every app-<appRef.name>-* namespace. Any other value adds that environment to the existing project and a ClusterSecretStore limited to the namespace app-<appRef.name>-<environmentSlug>, and creates no project."
+                          "description": "\"shared\" (the default) creates the project, its \"shared\" environment, the identity and a ClusterSecretStore open to every app-<appRef.name>-* (or infra-<appRef.name>-*) namespace. Any other value adds that environment to the existing project and a ClusterSecretStore limited to the namespace app-<appRef.name>-<environmentSlug>, and creates no project."
                         }
                       },
                       "additionalProperties": false

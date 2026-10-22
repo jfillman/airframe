@@ -1,0 +1,9 @@
+# --required-resources fixture: an InfraService named skyport-broker in the XR's namespace, what
+# 00-app-kind-gate.yaml's ExtraResources lookup finds for an infra tenant.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: InfraService
+metadata:
+  name: skyport-broker
+  namespace: demo-apps
+spec:
+  devCluster: example-dev

@@ -16,7 +16,7 @@ resources:
         spec:
           conditions:
           - namespaceRegexes:
-            - ^app-checkout-api-.*$
+            - ^(app|infra)-checkout-api-.*$
           provider:
             infisical:
               auth:

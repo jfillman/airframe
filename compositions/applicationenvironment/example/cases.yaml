@@ -109,3 +109,11 @@ cases:
         done:
         - configmap-kustomization
         - values-yaml
+- name: staging-infraservice
+  xr: xr-infra-staging.yaml
+  required:
+  - cluster-registry-ready.yaml
+  - infraservice-exists.yaml
+  expect:
+    conditions:
+      AppResolved: AppResolved

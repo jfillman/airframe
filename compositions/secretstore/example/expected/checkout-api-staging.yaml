@@ -38,7 +38,7 @@ resources:
         spec:
           conditions:
           - namespaceRegexes:
-            - ^app-checkout-api-staging$
+            - ^(app|infra)-checkout-api-staging$
           provider:
             infisical:
               auth:

@@ -177,7 +177,9 @@ spec:
                   spec:
                     conditions:
                       - namespaceRegexes:
-                          - <<printf "^app-%s-.*$" $appName | toJson>>
+                          # app-<app>-* for an app, infra-<app>-* for an InfraService (its CI and environment namespaces).
+                          # Names are unique across both kinds (one tenants/<name>/ directory), so either prefix is this app's.
+                          - <<printf "^(app|infra)-%s-.*$" $appName | toJson>>
                     provider:
                       infisical:
                         hostAPI: <<$hostAPI | toJson>>
@@ -567,7 +569,7 @@ spec:
                       # Exactly one namespace: an ExternalSecret anywhere else can't use this store,
                       # whatever its remoteRef says.
                       - namespaceRegexes:
-                          - <<printf "^app-%s-%s$" $appName $envSlug | toJson>>
+                          - <<printf "^(app|infra)-%s-%s$" $appName $envSlug | toJson>>
                     provider:
                       infisical:
                         hostAPI: <<$hostAPI | toJson>>

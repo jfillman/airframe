@@ -1,0 +1,13 @@
+# An InfraService's Flight environment (spec.appType: infra): gitops-infra-<name>, and the per-env tenants
+# identity.yaml carries `type: infra` so the target cluster's tenant-onboarding ApplicationSet deploys it into
+# infra-<name>-<env> (2026-10-21). Paired with cluster-registry-ready.yaml + infraservice-exists.yaml.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ApplicationEnvironment
+metadata:
+  name: skyport-broker-example-prod-staging
+  namespace: demo-apps
+spec:
+  appName: skyport-broker
+  appType: infra
+  cluster: example-prod
+  env: staging

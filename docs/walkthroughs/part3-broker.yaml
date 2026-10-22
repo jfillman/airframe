@@ -6,7 +6,7 @@ steps:
     title: "skyport-broker is a synced, ready InfraService with a real RabbitMQ cluster behind it"
     command: |
       kubectl --context "${DEV_CONTEXT}" get infraservice skyport-broker -n infra-skyport-broker-cicd
-      kubectl --context "${DEV_CONTEXT}" get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
+      kubectl --context "${DEV_CONTEXT}" get rabbitmqcluster skyport-broker -n infra-skyport-broker-dev
     expected: "the InfraService XR is Synced/Ready; the RabbitmqCluster reports AllReplicasReady=True"
     verify: |
       set -euo pipefail
@@ -14,7 +14,7 @@ steps:
         -o jsonpath='{range .status.conditions[*]}{.type}={.status} {end}')"
       grep -q "Synced=True" <<<"$c"
       grep -q "Ready=True" <<<"$c"
-      ready="$(kubectl --context "${DEV_CONTEXT}" get rabbitmqcluster skyport-broker -n app-skyport-broker-dev \
+      ready="$(kubectl --context "${DEV_CONTEXT}" get rabbitmqcluster skyport-broker -n infra-skyport-broker-dev \
         -o jsonpath='{.status.conditions[?(@.type=="AllReplicasReady")].status}')"
       [ "$ready" = "True" ]
 

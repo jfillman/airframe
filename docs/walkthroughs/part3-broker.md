@@ -8,7 +8,7 @@ Placeholders: `<dev-context>` are the names chosen when the clusters were built 
 
 ```bash
 kubectl --context "<dev-context>" get infraservice skyport-broker -n infra-skyport-broker-cicd
-kubectl --context "<dev-context>" get rabbitmqcluster skyport-broker -n app-skyport-broker-dev
+kubectl --context "<dev-context>" get rabbitmqcluster skyport-broker -n infra-skyport-broker-dev
 ```
 
 **Expected:** the InfraService XR is Synced/Ready; the RabbitmqCluster reports AllReplicasReady=True

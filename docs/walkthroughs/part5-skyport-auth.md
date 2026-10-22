@@ -18,7 +18,7 @@ kubectl --context "<prod-context>" get xrd dexes.catalog.hangar.io
 ## skyport-auth is a synced, ready InfraService
 
 ```bash
-tools/airframe-verify infraservice app-skyport-auth-cicd/skyport-auth --context "<dev-context>"
+tools/airframe-verify infraservice infra-skyport-auth-cicd/skyport-auth --context "<dev-context>"
 ```
 
 **Expected:** xr-synced, dev-cluster-ready, cicd-onboarded and gitops-repo pass
@@ -26,7 +26,7 @@ tools/airframe-verify infraservice app-skyport-auth-cicd/skyport-auth --context 
 ## Ground: the Dex server passes its verify contract (DexServerReady, OIDC discovery answers)
 
 ```bash
-tools/airframe-verify dex app-skyport-auth-dev/skyport-auth --context "<dev-context>"
+tools/airframe-verify dex infra-skyport-auth-dev/skyport-auth --context "<dev-context>"
 ```
 
 **Expected:** COMPONENT DexServerReady; server-discovery gets 200 from /dex/.well-known/openid-configuration on 5556
@@ -34,7 +34,7 @@ tools/airframe-verify dex app-skyport-auth-dev/skyport-auth --context "<dev-cont
 ## Ground: the server's NetworkPolicy opens 5556 to all three apps' dev namespaces, 5557 only to crossplane-system
 
 ```bash
-kubectl --context "<dev-context>" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o yaml
+kubectl --context "<dev-context>" get networkpolicy skyport-auth-dex-access -n infra-skyport-auth-dev -o yaml
 ```
 
 **Expected:** an ingress rule on 5556 from app-flight-api-dev, app-baggage-api-dev and app-boarding-api-dev; 5557 from crossplane-system only
@@ -89,8 +89,8 @@ curl -s localhost:8080/api/boarding/AC123
 ## Flight: the staging Dex server on the prod cluster passes its verify contract
 
 ```bash
-kubectl --context "<dev-context>" get applicationenvironment skyport-auth-<prod-cluster>-staging -n app-skyport-auth-cicd
-tools/airframe-verify dex app-skyport-auth-staging/skyport-auth --context "<prod-context>"
+kubectl --context "<dev-context>" get applicationenvironment skyport-auth-<prod-cluster>-staging -n infra-skyport-auth-cicd
+tools/airframe-verify dex infra-skyport-auth-staging/skyport-auth --context "<prod-context>"
 ```
 
 **Expected:** the ApplicationEnvironment is Synced/Ready; DexServerReady and discovery 200 on the prod cluster

@@ -688,6 +688,11 @@ spec:
                   gitopsRepoUrl: <<$gitopsRepoUrl>>
                   githubOwner: <<$platformOwner>>
                   env: <<$env>>
+                  <<- /* An InfraService's environment namespace is infra-<name>-<env>: the target cluster's tenant-onboarding
+                       ApplicationSet reads this (default app, so an app's file is unchanged). */>>
+                  <<- if eq $appType "infra" >>
+                  type: infra
+                  <<- end >>
                   <<- if $configMapGenerator >>
                   configMapGenerator: true
                   <<- end >>

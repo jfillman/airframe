@@ -24,29 +24,29 @@ steps:
   - id: "03-infraservice"
     title: "skyport-auth is a synced, ready InfraService"
     command: |
-      tools/airframe-verify infraservice app-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
+      tools/airframe-verify infraservice infra-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
     expected: "xr-synced, dev-cluster-ready, cicd-onboarded and gitops-repo pass"
     verify: |
       set -euo pipefail
-      "$AIRFRAME_ROOT/tools/airframe-verify" infraservice app-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
+      "$AIRFRAME_ROOT/tools/airframe-verify" infraservice infra-skyport-auth-cicd/skyport-auth --context "${DEV_CONTEXT}"
 
   - id: "03-dex-server-dev"
     title: "Ground: the Dex server passes its verify contract (DexServerReady, OIDC discovery answers)"
     command: |
-      tools/airframe-verify dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+      tools/airframe-verify dex infra-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
     expected: "COMPONENT DexServerReady; server-discovery gets 200 from /dex/.well-known/openid-configuration on 5556"
     verify: |
       set -euo pipefail
-      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex infra-skyport-auth-dev/skyport-auth --context "${DEV_CONTEXT}"
 
   - id: "03-server-allows-apps-dev"
     title: "Ground: the server's NetworkPolicy opens 5556 to all three apps' dev namespaces, 5557 only to crossplane-system"
     command: |
-      kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o yaml
+      kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n infra-skyport-auth-dev -o yaml
     expected: "an ingress rule on 5556 from app-flight-api-dev, app-baggage-api-dev and app-boarding-api-dev; 5557 from crossplane-system only"
     verify: |
       set -euo pipefail
-      np="$(kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n app-skyport-auth-dev -o json)"
+      np="$(kubectl --context "${DEV_CONTEXT}" get networkpolicy skyport-auth-dex-access -n infra-skyport-auth-dev -o json)"
       NP="$np" ENV=dev python3 -c '
       import json, os
       np = json.loads(os.environ["NP"]); env = os.environ["ENV"]
@@ -141,13 +141,13 @@ steps:
   - id: "07-dex-server-prod"
     title: "Flight: the staging Dex server on the prod cluster passes its verify contract"
     command: |
-      kubectl --context "${DEV_CONTEXT}" get applicationenvironment skyport-auth-${PROD_CLUSTER}-staging -n app-skyport-auth-cicd
-      tools/airframe-verify dex app-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
+      kubectl --context "${DEV_CONTEXT}" get applicationenvironment skyport-auth-${PROD_CLUSTER}-staging -n infra-skyport-auth-cicd
+      tools/airframe-verify dex infra-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
     expected: "the ApplicationEnvironment is Synced/Ready; DexServerReady and discovery 200 on the prod cluster"
     verify: |
       set -euo pipefail
-      "$AIRFRAME_ROOT/tools/airframe-verify" applicationenvironment "app-skyport-auth-cicd/skyport-auth-${PROD_CLUSTER}-staging" --context "${DEV_CONTEXT}"
-      "$AIRFRAME_ROOT/tools/airframe-verify" dex app-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
+      "$AIRFRAME_ROOT/tools/airframe-verify" applicationenvironment "infra-skyport-auth-cicd/skyport-auth-${PROD_CLUSTER}-staging" --context "${DEV_CONTEXT}"
+      "$AIRFRAME_ROOT/tools/airframe-verify" dex infra-skyport-auth-staging/skyport-auth --context "${PROD_CONTEXT}"
 
   - id: "07-clients-prod"
     title: "Flight: each app's staging attach client is registered and mints a verifiable token"

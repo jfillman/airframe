@@ -37,11 +37,12 @@ the composition graph, the plumbing — see [../admin/architecture.md](../admin/
 - **Flight** — a governed environment on a real upper cluster, created as an
   `ApplicationEnvironment` XR, promoted through a reviewed pull request.
 
-See [quickstart.md](quickstart.md#01--ground--flight) for the full comparison.
+[Quickstart part 1](quickstart.md) walks through both.
 
 ## Illustrated version
 
-This guide also exists as a fully illustrated, interactive walkthrough with worked
-diagrams — same content, richer format:
-**[Airframe Quickstart](html/quickstart.html)**
+Each quickstart also exists as an illustrated page, generated from the Markdown by
+`tools/build-quickstart-docs`: start at **[Airframe Quickstart, part 1](html/quickstart.html)**.
+Edit the Markdown, then rerun the tool; `--check` fails when a page is out of date.
+
 - [Cloud targets](cloud-targets.md): stand up the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs, on demand.

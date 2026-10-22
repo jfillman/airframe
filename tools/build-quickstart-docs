@@ -1,0 +1,654 @@
+#!/usr/bin/env python3
+"""Build the illustrated quickstarts from the Markdown ones.
+
+The Markdown guides in docs/user/quickstart*.md are the source. This writes:
+
+    docs/user/diagrams/quickstart-<n>-<slug>.svg   one diagram per part, referenced by the Markdown
+    docs/user/html/<guide>.html                    each guide as a Hangar-styled page, diagram inlined
+
+    tools/build-quickstart-docs            # write both
+    tools/build-quickstart-docs --check    # exit 1 if a committed file is out of date
+
+Standard library only. Diagrams follow the diagram-design skill's Hangar profile (amber for the one
+focal element, sky for PRs and requests, warm bone and instrument black, Instrument Serif and Geist),
+and every page and SVG follows prefers-color-scheme; an embedder can force a theme with
+<html data-theme="light|dark">.
+"""
+import html
+import math
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+USER = ROOT / "docs" / "user"
+REPO_BLOB = "https://github.com/jfillman/airframe/blob/main/docs/user/"
+
+GUIDES = [  # (markdown file, diagram slug, short title for navigation)
+    ("quickstart.md", "quickstart-1-boarding-api", "boarding-api"),
+    ("quickstart-flight-api.md", "quickstart-2-flight-api", "flight-api and a database"),
+    ("quickstart-broker.md", "quickstart-3-broker", "A shared message broker"),
+    ("quickstart-baggage-api.md", "quickstart-4-baggage-api", "baggage-api and MongoDB"),
+    ("quickstart-skyport-auth.md", "quickstart-5-skyport-auth", "A shared token issuer"),
+    ("quickstart-gate-api.md", "quickstart-6-gate-api", "gate-api from the terminal"),
+    ("quickstart-checkin-api.md", "quickstart-7-checkin-api", "checkin-api through Tower"),
+]
+
+# --- diagram primitives ------------------------------------------------------------------------
+
+PAPER = "#f2efe9"; INK = "#1b1f24"; MUTED = "#5b6570"; SOFT = "#838b93"; ACC = "#b9791f"; LINK = "#2e7ba6"
+SANS = "'Geist', system-ui, sans-serif"; MONO = "'Geist Mono', ui-monospace, monospace"
+SERIF = "'Instrument Serif', Georgia, serif"
+
+KINDS = {  # fill, stroke, dash
+    "backend": ("#ffffff", INK, None),
+    "focal": ("rgba(185,121,31,0.08)", ACC, None),
+    "store": ("rgba(27,31,36,0.05)", MUTED, None),
+    "input": ("rgba(91,101,112,0.10)", SOFT, None),
+    "request": ("rgba(46,123,166,0.10)", LINK, None),
+    "faded": ("rgba(27,31,36,0.02)", "rgba(27,31,36,0.25)", "4,3"),
+}
+ARROWS = {"muted": (MUTED, "qd-arrow"), "accent": (ACC, "qd-arrow-accent"), "link": (LINK, "qd-arrow-link")}
+
+DARK = {PAPER: "#131619", "#ffffff": "#1c2127", INK: "#e8e4dc", MUTED: "#a1aab3", SOFT: "#7f8891",
+        ACC: "#e8a33d", LINK: "#6fb2d9"}
+RGBA_DARK = {(27, 31, 36): ((232, 228, 220), 1.0), (185, 121, 31): ((232, 163, 61), 1.3),
+             (91, 101, 112): ((161, 170, 179), 1.0), (46, 123, 166): ((111, 178, 217), 1.3)}
+
+
+def esc(s):
+    return html.escape(s, quote=False)
+
+
+def up4(v):
+    return int(math.ceil(v / 4.0) * 4)
+
+
+def text(x, y, s, size=12, weight=400, fill=INK, anchor="start", font=SANS, ls=None, italic=False):
+    extra = (f' letter-spacing="{ls}"' if ls else "") + (' font-style="italic"' if italic else "")
+    return (f'<text x="{x:g}" y="{y:g}" fill="{fill}" font-size="{size}" font-weight="{weight}" '
+            f'font-family="{font}" text-anchor="{anchor}"{extra}>{esc(s)}</text>')
+
+
+def node(x, y, w, h, name, sub=None, kind="backend", tag=None):
+    fill, stroke, dash = KINDS[kind]
+    assert len(name) * 6.9 <= w - 16, f"name too wide for its box: {name}"
+    if sub:
+        assert len(sub) * 5.2 <= w - 12, f"sub too wide for its box: {sub}"
+    d = f' stroke-dasharray="{dash}"' if dash else ""
+    s = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="{PAPER}"/>'
+    s += f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="6" fill="{fill}" stroke="{stroke}" stroke-width="1"{d}/>'
+    cx = x + w / 2
+    if tag:
+        tw = up4(len(tag) * 5.6 + 10)
+        s += (f'<rect x="{x + 8}" y="{y + 7}" width="{tw}" height="13" rx="2" fill="none" stroke="{stroke}" '
+              f'stroke-width="0.8"/>' + text(x + 8 + tw / 2, y + 16.5, tag.upper(), 7.5, 500, stroke, "middle", MONO, "0.08em"))
+        ny = y + h / 2 + (6 if sub else 10)
+    else:
+        ny = y + h / 2 + (-3 if sub else 4)
+    s += text(cx, ny, name, 12.5, 600, INK, "middle")
+    if sub:
+        s += text(cx, ny + 16, sub, 8.5, 400, MUTED, "middle", MONO)
+    return s
+
+
+def zone(x, y, w, h, label):
+    lw = up4(len(label) * 5.4 + 14)
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="rgba(27,31,36,0.02)" '
+            f'stroke="rgba(27,31,36,0.18)" stroke-width="0.8" stroke-dasharray="3,3"/>'
+            f'<rect x="{x + 12}" y="{y - 6}" width="{lw}" height="12" rx="2" fill="{PAPER}"/>'
+            + text(x + 12 + lw / 2, y + 3, label, 7.5, 500, MUTED, "middle", MONO, "0.12em"))
+
+
+def rounded(points, r=8):
+    d = f"M{points[0][0]},{points[0][1]}"
+    for i in range(1, len(points) - 1):
+        (x0, y0), (x1, y1), (x2, y2) = points[i - 1], points[i], points[i + 1]
+        rr = min(r, (abs(x1 - x0) + abs(y1 - y0)) / 2, (abs(x2 - x1) + abs(y2 - y1)) / 2)
+        sx1, sy1 = (x1 > x0) - (x1 < x0), (y1 > y0) - (y1 < y0)
+        sx2, sy2 = (x2 > x1) - (x2 < x1), (y2 > y1) - (y2 < y1)
+        d += f" L{x1 - sx1 * rr:g},{y1 - sy1 * rr:g} Q{x1},{y1} {x1 + sx2 * rr:g},{y1 + sy2 * rr:g}"
+    for (ax, ay), (bx, by) in zip(points, points[1:]):
+        assert ax == bx or ay == by, f"diagonal segment {ax},{ay} -> {bx},{by}"
+    return d + f" L{points[-1][0]},{points[-1][1]}"
+
+
+def path(points, color="muted", dashed=False):
+    c, m = ARROWS[color]
+    da = ' stroke-dasharray="5,4"' if dashed else ""
+    return f'<path d="{rounded(points)}" fill="none" stroke="{c}" stroke-width="1.2"{da} marker-end="url(#{m})"/>'
+
+
+def label(cx, top, s, color=SOFT):
+    w = up4(len(s) * 5.5 + 10)
+    return (f'<rect x="{cx - w / 2:g}" y="{top}" width="{w}" height="13" rx="2" fill="{PAPER}"/>'
+            + text(cx, top + 9.5, s.upper(), 7.5, 500, color, "middle", MONO, "0.06em"))
+
+
+def dark_colour(c):
+    if c in DARK:
+        return DARK[c]
+    m = re.fullmatch(r"rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)", c)
+    if m:
+        rgb = tuple(int(v) for v in m.groups()[:3])
+        if rgb in RGBA_DARK:
+            (r, g, b), k = RGBA_DARK[rgb]
+            return f"rgba({r},{g},{b},{min(1.0, float(m.group(4)) * k):.3g})"
+    return None
+
+
+def svg(slug, title, desc, w, h, body):
+    """A standalone SVG. Its <style> maps each colour it uses to the dark palette, scoped to this
+    diagram's id so several can share one HTML page."""
+    defs = "".join(
+        f'<marker id="{m}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">'
+        f'<polygon points="0 0, 8 3, 0 6" fill="{c}"/></marker>' for c, m in ARROWS.values())
+    content = f'<rect width="{w}" height="{h}" fill="{PAPER}"/>' + body
+    rules = []
+    for attr, val in sorted(set(re.findall(r'\b(fill|stroke)="([^"]+)"', defs + content))):
+        d = dark_colour(val)
+        if d:
+            rules.append(f'[{attr}="{val}"]{{{attr}:{d}}}')
+    sel = f"#{slug}"
+    style = (f"@media (prefers-color-scheme:dark){{"
+             + " ".join(f":root:not([data-theme=light]) {sel} {r.split('{')[0]},svg{sel}:root {r}" for r in rules) + "}"
+             + " ".join(f"[data-theme=dark] {sel} {r}" for r in rules))
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" id="{slug}" class="qd" viewBox="0 0 {w} {h}" '
+            f'role="img" aria-labelledby="{slug}-t {slug}-d">'
+            f'<title id="{slug}-t">{esc(title)}</title><desc id="{slug}-d">{esc(desc)}</desc>'
+            f"<style>{style}</style><defs>{defs}</defs>{content}</svg>\n")
+
+
+# --- the seven diagrams ------------------------------------------------------------------------
+
+def d_path(app, rows, labels, prefix_note):
+    """Parts 1 and 6: a request, the dev cluster, the pipeline, the flight environment."""
+    a, b, c, d, e, f, g, hh = rows
+    W, H = 1000, 440
+    s = zone(470, 172, 510, 112, "DEV CLUSTER") + zone(470, 326, 250, 104, "PROD CLUSTER")
+    s += node(30, 52, 170, 64, *a, kind="input")
+    s += node(250, 52, 180, 64, *b, kind="request")
+    s += node(490, 52, 210, 64, *c)
+    s += node(760, 52, 210, 64, *d, kind="store")
+    s += node(760, 196, 210, 64, *e)
+    s += node(490, 196, 210, 64, *f, tag="ground")
+    s += node(760, 350, 210, 64, *g, kind="store")
+    s += node(490, 350, 210, 64, *hh, kind="focal", tag="flight")
+    l1, l2, l3, l4, l5, l6, l7 = labels
+    s += path([(200, 84), (246, 84)]) + label(223, 62, l1)
+    s += path([(430, 84), (486, 84)], "link") + label(458, 62, l2, LINK)
+    s += path([(700, 84), (756, 84)]) + label(728, 62, l3)
+    s += path([(865, 116), (865, 192)]) + label(865, 147, l4)
+    s += path([(760, 228), (704, 228)]) + label(732, 206, l5)
+    s += path([(865, 260), (865, 346)], "link") + label(865, 296, l6, LINK)
+    s += path([(760, 382), (704, 382)], "accent") + label(732, 360, l7, ACC)
+    s += text(30, 200, prefix_note[0], 20, 400, MUTED, font=SERIF, italic=True)
+    for i, line in enumerate(prefix_note[1:]):
+        s += text(30, 226 + i * 18, line, 11, 400, MUTED)
+    return W, H, s
+
+
+def d1():
+    return d_path("boarding-api", [
+        ("Tower form", "Create → NodeJS"), ("tenants repo", "request PR"),
+        ("NodeJSApplication", "app-boarding-api-cicd"), ("boarding-api repo", "code · cicd.yaml · envs/"),
+        ("Glidepath pipeline", "build → deploy → release"), ("app-boarding-api-dev", "Rollout · Redis"),
+        ("gitops-boarding-api", "values · release.yaml"), ("staging", "app-boarding-api-staging")],
+        ["submit", "merge", "creates", "push", "deploy", "release PR", "argo cd"],
+        ["Ground, then flight.", "Ground: your source repo, deployed", "on every push to main.",
+         "Flight: a governed environment,", "changed only through PRs."])
+
+
+def d6():
+    return d_path("gate-api", [
+        ("Your terminal", "git · gh · kubectl"), ("tenants repo", "2 request files"),
+        ("Two XRs", "app + ApplicationEnvironment"), ("gate-api repo", "code · cicd.yaml"),
+        ("Glidepath pipeline", "build → deploy → release"), ("app-gate-api-dev", "Rollout"),
+        ("gitops-gate-api", "values PR · release PR"), ("staging", "4 pods · canary")],
+        ["pr", "merge", "creates", "signed push", "deploy", "release PR", "argo cd"],
+        ["No Tower.", "Every step is a file in git,", "checked with airframe-validate", "and airframe-verify."])
+
+
+def d2():
+    W, H = 1000, 300
+    s = zone(230, 40, 220, 230, "APP-BOARDING-API-DEV") + zone(520, 40, 460, 130, "APP-FLIGHT-API-DEV")
+    s += node(30, 72, 150, 64, "Gate board", "your browser", kind="input")
+    s += node(250, 72, 180, 64, "boarding-api", "part 1")
+    s += node(250, 190, 180, 60, "cache", "Redis", kind="store")
+    s += node(545, 72, 180, 64, "flight-api", "Spring Boot")
+    s += node(780, 72, 180, 64, "flight-db", "PostgreSQL", kind="focal")
+    s += path([(180, 104), (246, 104)]) + label(213, 82, "lookup")
+    s += path([(430, 104), (541, 104)], "link") + label(486, 82, "GET /api/flights", LINK)
+    s += path([(725, 104), (776, 104)], "accent") + label(751, 82, "sql", ACC)
+    s += path([(340, 136), (340, 186)]) + label(374, 154, "3 min")
+    s += text(545, 206, "One database per environment.", 20, 400, MUTED, font=SERIF, italic=True)
+    s += text(545, 232, "Deleting the environment deletes its data.", 11, 400, MUTED)
+    s += text(545, 250, "networkPolicy.allowIngressFrom lets boarding-api in.", 11, 400, MUTED)
+    return W, H, s
+
+
+def d3():
+    W, H = 1000, 320
+    s = zone(20, 40, 220, 130, "APP-FLIGHT-API-DEV") + zone(330, 40, 340, 130, "INFRA-SKYPORT-BROKER-DEV")
+    s += zone(760, 40, 220, 250, "APP-BOARDING-API-DEV")
+    s += node(40, 72, 180, 64, "flight-api", "publisher")
+    s += node(360, 72, 280, 64, "skyport-broker", "RabbitMQ · vhost flights", kind="focal")
+    s += node(780, 72, 180, 64, "boarding-api", "consumer")
+    s += node(780, 210, 180, 60, "cache", "Redis", kind="store")
+    s += path([(220, 104), (356, 104)], "accent") + label(288, 82, "publish", ACC)
+    s += path([(640, 104), (776, 104)], "accent") + label(708, 82, "deliver", ACC)
+    s += path([(870, 136), (870, 206)]) + label(906, 164, "evict")
+    s += text(40, 222, "Every gate change, at once.", 20, 400, MUTED, font=SERIF, italic=True)
+    s += text(40, 248, "exchange flights.events · key flight.AC123.gate_changed", 11, 400, MUTED, font=MONO)
+    s += text(40, 268, "Each app attaches with its own user and permissions.", 11, 400, MUTED)
+    return W, H, s
+
+
+def d4():
+    W, H = 1000, 330
+    s = zone(20, 40, 200, 130, "APP-FLIGHT-API-DEV") + zone(280, 40, 240, 130, "INFRA-SKYPORT-BROKER-DEV")
+    s += zone(580, 40, 400, 130, "APP-BAGGAGE-API-DEV")
+    s += node(40, 72, 160, 64, "flight-api", "publisher")
+    s += node(300, 72, 200, 64, "skyport-broker", "flights.events", kind="store")
+    s += node(600, 72, 170, 64, "baggage-api", "Python · 1 replica")
+    s += node(800, 72, 160, 64, "bag-db", "MongoDB", kind="focal")
+    s += node(300, 236, 200, 60, "boarding-api", "part 3 consumer", kind="faded")
+    s += path([(200, 104), (296, 104)]) + label(248, 82, "publish")
+    s += path([(500, 104), (596, 104)], "accent") + label(548, 82, "baggage.*", ACC)
+    s += path([(770, 104), (796, 104)])
+    s += path([(400, 136), (400, 232)]) + label(440, 176, "boarding.*")
+    s += text(600, 236, "Same events, another consumer.", 20, 400, MUTED, font=SERIF, italic=True)
+    s += text(600, 262, "Gate C4 moves AC123's bags to carousel 3.", 11, 400, MUTED)
+    s += text(600, 280, "State survives restarts, in its own MongoDB.", 11, 400, MUTED)
+    return W, H, s
+
+
+def d5():
+    W, H = 1000, 350
+    s = zone(20, 40, 260, 110, "CROSSPLANE-SYSTEM") + zone(370, 40, 280, 110, "INFRA-SKYPORT-AUTH-DEV")
+    s += node(40, 66, 220, 64, "function-dex", "registers each client")
+    s += node(390, 66, 240, 64, "skyport-auth", "Dex · client_credentials", kind="focal")
+    s += node(40, 246, 220, 64, "boarding-api", "caller · board-oauth")
+    s += node(390, 246, 240, 64, "flight-api", "checks JWT · flight-oauth")
+    s += node(760, 246, 220, 64, "baggage-api", "checks JWT · bag-oauth")
+    s += path([(260, 98), (386, 98)]) + label(323, 76, "admin api 5557")
+    s += path([(150, 246), (150, 180), (460, 180), (460, 134)], "accent") + label(305, 158, "token 5556", ACC)
+    s += path([(560, 246), (560, 134)]) + label(600, 196, "jwks")
+    s += path([(870, 246), (870, 180), (600, 180), (600, 134)]) + label(735, 158, "jwks")
+    s += path([(260, 278), (386, 278)], "link") + label(323, 256, "bearer jwt", LINK)
+    s += text(760, 92, "One issuer per cluster.", 20, 400, MUTED, font=SERIF, italic=True)
+    s += text(760, 118, "No token: 401. Probes stay open.", 11, 400, MUTED)
+    return W, H, s
+
+
+def d7():
+    W, H = 1000, 230
+    steps = [("Create", "request PR"), ("Provisioning", "onboarding PRs"), ("Add env", "request + cicd PRs"),
+             ("App Config", "values PR"), ("Pull Requests", "release PR"), ("Environments", "healthy")]
+    s = ""
+    x = 14
+    for i, (name, sub) in enumerate(steps):
+        kind = "focal" if i == len(steps) - 1 else ("request" if i else "input")
+        s += node(x, 70, 140, 64, name, sub, kind=kind)
+        s += text(x + 70, 58, f"{i + 1:02d}", 8, 500, ACC if i == len(steps) - 1 else SOFT, "middle", MONO, "0.14em")
+        if i < len(steps) - 1:
+            s += path([(x + 140, 102), (x + 164, 102)])
+        x += 164
+    s += text(20, 182, "Every screen opens a pull request.", 20, 400, MUTED, font=SERIF, italic=True)
+    s += text(20, 206, "Merge each one; Tower shows the next step when it lands.", 11, 400, MUTED)
+    return W, H, s
+
+
+DIAGRAMS = {
+    "quickstart-1-boarding-api": (d1, "boarding-api: from a Tower form to a canary",
+                                  "A Tower form opens a request PR; the dev cluster creates the app and its repos; each push runs the pipeline, which deploys to the ground environment and opens a release PR for the flight environment on the prod cluster."),
+    "quickstart-2-flight-api": (d2, "flight-api and its database",
+                                "The gate board calls boarding-api, which caches in Redis and calls flight-api in another namespace; flight-api owns a dedicated PostgreSQL database."),
+    "quickstart-3-broker": (d3, "A shared message broker",
+                            "flight-api publishes each change to skyport-broker in infra-skyport-broker-dev; the broker delivers it to boarding-api, which evicts the flight from its Redis cache."),
+    "quickstart-4-baggage-api": (d4, "baggage-api, a second consumer",
+                                 "The broker delivers flight events to baggage-api's own queue as well as boarding-api's; baggage-api keeps its state in a dedicated MongoDB."),
+    "quickstart-5-skyport-auth": (d5, "A shared token issuer",
+                                  "function-dex registers a client per app with the Dex server in infra-skyport-auth-dev; boarding-api gets a token and calls flight-api with it; flight-api and baggage-api check tokens against Dex's keys."),
+    "quickstart-6-gate-api": (d6, "gate-api from the terminal",
+                              "Two request files in the tenants repo create the app and its staging environment; each signed push runs the pipeline, which deploys to dev and opens a release PR for staging."),
+    "quickstart-7-checkin-api": (d7, "checkin-api through Tower",
+                                 "Six Tower screens, each opening a pull request: Create, Provisioning, Add environment, App Configuration, Pull Requests, Environments."),
+}
+
+
+def build_svg(slug):
+    fn, title, desc = DIAGRAMS[slug]
+    w, h, body = fn()
+    return svg(slug, title, desc, w, h, body)
+
+
+# --- Markdown to HTML (the subset the guides use) ------------------------------------------------
+
+def link_target(url, html_names):
+    if re.match(r"[a-z]+:", url) or url.startswith("#"):
+        return url
+    base, _, anchor = url.partition("#")
+    if base in html_names:
+        return base[:-3] + ".html" + (f"#{anchor}" if anchor else "")
+    if base.endswith(".md") or base.startswith("../"):
+        return REPO_BLOB + base + (f"#{anchor}" if anchor else "")
+    return url
+
+
+def inline(s, html_names):
+    codes = []
+
+    def keep(m):
+        codes.append(f"<code>{esc(m.group(1))}</code>")
+        return f"\x00{len(codes) - 1}\x00"
+
+    s = re.sub(r"`([^`]+)`", keep, s)
+    s = esc(s)
+    s = re.sub(r"&lt;(https?://[^&\s]+)&gt;", r'<a href="\1">\1</a>', s)
+    s = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)",
+               lambda m: f'<a href="{link_target(html.unescape(m.group(2)), html_names)}">{m.group(1)}</a>', s)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+    s = re.sub(r"(?<![\w*])\*([^*\s][^*]*?)\*(?![\w*])", r"<em>\1</em>", s)
+    s = s.replace("→", '<span class="arr">→</span>')
+    return re.sub(r"\x00(\d+)\x00", lambda m: codes[int(m.group(1))], s)
+
+
+def highlight(code, lang):
+    out = []
+    for line in code.split("\n"):
+        line = esc(line)
+        if lang in ("yaml", "bash"):
+            m = re.search(r"(^|\s)(#.*)$", line)
+            if m:
+                line = line[:m.start(2)] + f'<span class="c">{m.group(2)}</span>'
+        out.append(line)
+    return "\n".join(out)
+
+
+def blocks(lines, ctx):
+    """Parse a list of Markdown lines into HTML."""
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip():
+            i += 1
+            continue
+        if line.startswith("```"):
+            info = line[3:].strip()
+            lang = info.split()[0] if info else ""
+            t = re.search(r'title="([^"]+)"', info)
+            j = i + 1
+            while not lines[j].startswith("```"):
+                j += 1
+            code = "\n".join(lines[i + 1:j])
+            head = f'<span class="filepath">{esc(t.group(1))}</span>' if t else ""
+            out.append(f'<div class="code">{head}<pre>{highlight(code, lang)}</pre></div>')
+            i = j + 1
+            continue
+        if line.startswith("#"):
+            level = len(line) - len(line.lstrip("#"))
+            out.append(f"<h{level + 1}>{inline(line[level:].strip(), ctx)}</h{level + 1}>")
+            i += 1
+            continue
+        if line.startswith(">"):
+            j = i
+            inner = []
+            while j < len(lines) and lines[j].startswith(">"):
+                inner.append(re.sub(r"^> ?", "", lines[j]))
+                j += 1
+            out.append(callout(inner, ctx))
+            i = j
+            continue
+        if line.startswith("|") and i + 1 < len(lines) and re.match(r"^\|[-| :]+\|$", lines[i + 1]):
+            j = i
+            rows = []
+            while j < len(lines) and lines[j].startswith("|"):
+                rows.append([c.strip() for c in lines[j].strip().strip("|").split("|")])
+                j += 1
+            head = "".join(f"<th>{inline(c, ctx)}</th>" for c in rows[0])
+            body = "".join("<tr>" + "".join(
+                f'<td{" class=name" if k == 0 else ""}>{inline(c, ctx)}</td>' for k, c in enumerate(r)) + "</tr>"
+                for r in rows[2:])
+            out.append(f'<div class="table-scroll"><table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div>')
+            i = j
+            continue
+        m = re.match(r"^!\[([^\]]*)\]\(([^)]+)\)$", line.strip())
+        if m:
+            src = m.group(2)
+            slug = pathlib.Path(src).stem
+            if slug in DIAGRAMS:
+                out.append(f'<figure class="diagram">{build_svg(slug)}</figure>')
+            else:
+                out.append(f'<figure><img src="{esc(src)}" alt="{esc(m.group(1))}"></figure>')
+            i += 1
+            continue
+        lm = re.match(r"^(\s*)(-|\d+\.) ", line)
+        if lm:
+            ordered = lm.group(2) != "-"
+            items, j = [], i
+            while j < len(lines):
+                im = re.match(r"^(-|\d+\.) (.*)$", lines[j])
+                if im and (im.group(1) == "-") != ordered:
+                    item = [im.group(2)]
+                    j += 1
+                    while j < len(lines) and (lines[j].startswith("   ") or lines[j].startswith("  ") or
+                                              (not lines[j].strip() and j + 1 < len(lines) and lines[j + 1].startswith("  "))):
+                        item.append(re.sub(r"^ {2,3}", "", lines[j]))
+                        j += 1
+                    items.append(item)
+                else:
+                    break
+            tag = "ol" if ordered else "ul"
+            lis = []
+            for item in items:
+                if len(item) == 1:
+                    lis.append(f"<li>{inline(item[0], ctx)}</li>")
+                else:
+                    first, rest = item[0], item[1:]
+                    lis.append(f"<li><p>{inline(first, ctx)}</p>{blocks(rest, ctx)}</li>")
+            out.append(f"<{tag}>{''.join(lis)}</{tag}>")
+            i = j
+            continue
+        j = i
+        para = []
+        while j < len(lines) and lines[j].strip() and not re.match(r"^(```|#|>|\||- |\d+\. |!\[)", lines[j]):
+            para.append(lines[j].strip())
+            j += 1
+        out.append(f"<p>{inline(' '.join(para), ctx)}</p>")
+        i = j
+    return "".join(out)
+
+
+CALLOUTS = {"Check": "check", "Note": "note", "Tip": "tip", "Before you start": "before"}
+
+
+def callout(lines, ctx):
+    kind, title = "note", None
+    m = re.match(r"^\*\*([^*]+)\*\*\s*$", lines[0]) if lines else None
+    if m and m.group(1) in CALLOUTS:
+        title, kind = m.group(1), CALLOUTS[m.group(1)]
+        lines = lines[1:]
+    head = f'<div class="label">{esc(title)}</div>' if title else ""
+    return f'<div class="callout {kind}">{head}{blocks(lines, ctx)}</div>'
+
+
+# --- page ------------------------------------------------------------------------------------------
+
+CSS = """
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--paper:#f2efe9;--paper-2:#e8e3da;--surface:#fbfaf7;--ink:#1b1f24;--muted:#5b6570;--soft:#838b93;
+--rule:rgba(27,31,36,0.12);--rule-solid:#c7c2b8;--accent:#b9791f;--accent-tint:rgba(185,121,31,0.08);
+--link:#2e7ba6;--link-tint:rgba(46,123,166,0.08);
+--font-sans:'Geist',system-ui,sans-serif;--font-serif:'Instrument Serif','Times New Roman',serif;
+--font-mono:'Geist Mono',ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){DARK}}
+:root[data-theme=dark]{DARK}
+body{font-family:var(--font-sans);background:var(--paper);color:var(--ink);padding:3.5rem 0 2.5rem}
+.wrap{max-width:960px;margin:0 auto;padding-inline:1rem}
+@media (min-width:640px){.wrap{padding-inline:1.5rem}}
+a{color:var(--link);text-decoration:none}a:hover{text-decoration:underline}
+.masthead{margin-bottom:2.25rem;max-width:72ch}
+.eyebrow{font-family:var(--font-mono);font-size:.68rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-bottom:.9rem}
+h1{font-family:var(--font-serif);font-weight:400;font-size:clamp(2.1rem,4vw + 1rem,3.1rem);letter-spacing:-.01em;line-height:1.05;text-wrap:balance;margin-bottom:.9rem}
+.dek{font-size:1.05rem;line-height:1.6;color:var(--muted)}
+.dek code{font-size:.85em}
+figure.diagram{margin:0 0 2.5rem;background:var(--paper);border:1px solid var(--rule);border-radius:8px;padding:.75rem;overflow-x:auto}
+figure.diagram svg{width:100%;min-width:760px;display:block;height:auto}
+section{margin-bottom:2.75rem}
+h2{font-family:var(--font-serif);font-weight:400;font-size:1.65rem;line-height:1.2;text-wrap:balance;margin-bottom:.8rem}
+h3{font-size:.95rem;font-weight:600;margin:1.2rem 0 .5rem}
+p,li{font-size:.95rem;line-height:1.65;color:var(--muted)}
+p b,li b,td b{color:var(--ink);font-weight:600}
+p+p,p+.code,.code+p,p+ul,p+ol,ul+p,ol+p{margin-top:.75rem}
+ul,ol{margin:.6rem 0 .6rem 1.2rem}
+li{margin-bottom:.35rem}li>p{margin:0}
+code{font-family:var(--font-mono);font-size:.84em;color:var(--ink);background:var(--paper-2);padding:.05em .35em;border-radius:3px}
+.arr{color:var(--soft)}
+.code{margin:.9rem 0}
+.filepath{display:inline-block;font-family:var(--font-mono);font-size:.7rem;color:var(--muted);background:var(--paper-2);border:1px solid var(--rule);border-bottom:none;border-radius:6px 6px 0 0;padding:.3rem .7rem}
+.filepath+pre{border-top-left-radius:0}
+pre{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:.9rem 1rem;overflow-x:auto;font-family:var(--font-mono);font-size:.78rem;line-height:1.6;color:var(--ink)}
+pre .c{color:var(--soft);font-style:italic}
+.step{position:relative;padding-left:3rem}
+.step::before{content:"";position:absolute;left:.95rem;top:2.4rem;bottom:-2.75rem;border-left:1px solid var(--rule)}
+.step:last-of-type::before{display:none}
+.step .num{position:absolute;left:0;top:.1rem;width:1.9rem;height:1.9rem;border-radius:50%;background:var(--surface);border:1.5px solid var(--accent);color:var(--accent);font-family:var(--font-mono);font-size:.78rem;font-weight:600;display:flex;align-items:center;justify-content:center}
+.tag{display:inline-block;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;border:1px solid;border-radius:3px;padding:.1em .45em;margin-right:.55rem;vertical-align:.35em}
+.tag.ground{color:var(--muted);border-color:var(--rule-solid)}
+.tag.flight{color:var(--accent);border-color:var(--accent)}
+.callout{border-left:2px solid var(--link);background:var(--link-tint);border-radius:0 6px 6px 0;padding:.85rem 1.1rem;margin:1rem 0}
+.callout.note{border-left-color:var(--accent);background:var(--accent-tint)}
+.callout.before{border:1px solid var(--rule);background:var(--surface);border-radius:6px;margin-bottom:2.5rem}
+.callout .label{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--link);margin-bottom:.35rem}
+.callout.note .label{color:var(--accent)}.callout.before .label{color:var(--muted)}
+.callout p,.callout li{color:var(--ink);font-size:.9rem}
+.callout ul{margin-bottom:0}
+.callout .code{margin:.6rem 0 .2rem}
+.table-scroll{overflow-x:auto;margin:1rem 0;border:1px solid var(--rule);border-radius:8px}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+th{text-align:left;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);background:var(--paper-2);padding:.6rem .85rem;border-bottom:1px solid var(--rule);white-space:nowrap}
+td{padding:.6rem .85rem;border-bottom:1px solid var(--rule);color:var(--muted);line-height:1.55;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.name{color:var(--ink);font-weight:600;white-space:nowrap}
+section.remember{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:1.3rem 1.5rem}
+section.remember h2{font-size:1.3rem}
+section.remember ul{list-style:none;margin-left:0}
+section.remember li{padding-left:1rem;position:relative}
+section.remember li::before{content:"—";position:absolute;left:0;color:var(--accent)}
+nav.parts{display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap;border-top:1px solid var(--rule);margin-top:2.5rem;padding-top:1rem;font-size:.85rem}
+nav.parts .k{display:block;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;color:var(--soft)}
+nav.parts .next{text-align:right;margin-left:auto}
+footer{font-family:var(--font-mono);font-size:.62rem;letter-spacing:.06em;color:var(--soft);margin-top:1.5rem;display:flex;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+"""
+DARK_VARS = ("--paper:#0b0d10;--paper-2:#171b21;--surface:#1c2127;--ink:#e9ecef;--muted:#96a2ac;--soft:#6e7981;"
+             "--rule:rgba(233,236,239,0.12);--rule-solid:rgba(150,162,172,0.25);--accent:#e8a33d;"
+             "--accent-tint:rgba(232,163,61,0.10);--link:#6fb2d9;--link-tint:rgba(111,178,217,0.10)")
+
+
+def page(index, md):
+    names = {g[0] for g in GUIDES}
+    lines = md.split("\n")
+    title_line = lines[0].lstrip("# ").strip()
+    title = title_line.split(":", 1)[1].strip() if ":" in title_line else title_line
+    if "-" not in title.split()[0]:  # an app name such as boarding-api stays as written
+        title = title[0].upper() + title[1:]
+    body = lines[1:]
+    # The first paragraph is the dek.
+    k = 0
+    while not body[k].strip():
+        k += 1
+    j = k
+    while j < len(body) and body[j].strip():
+        j += 1
+    dek = inline(" ".join(l.strip() for l in body[k:j]), names)
+    rest = body[j:]
+    # Split at level-2 headings. Inside fenced code a '## ' line is code, never a heading.
+    pre, sections, cur, fence = [], [], None, False
+    for line in rest:
+        if line.startswith("```"):
+            fence = not fence
+        if not fence and line.startswith("## "):
+            cur = [line[3:].strip(), []]
+            sections.append(cur)
+        elif cur is None:
+            pre.append(line)
+        else:
+            cur[1].append(line)
+    parts = [blocks(pre, names)]
+    for head, content in sections:
+        m = re.match(r"^(\d+)\. (.*)$", head)
+        if m:
+            num, text_ = m.groups()
+            tag = ""
+            tm = re.match(r"^(Ground|Flight): (.*)$", text_)
+            if tm:
+                tag = f'<span class="tag {tm.group(1).lower()}">{tm.group(1)}</span>'
+                text_ = tm.group(2)[:1].upper() + tm.group(2)[1:]
+            parts.append(f'<section class="step"><span class="num">{int(num):02d}</span>'
+                         f"<h2>{tag}{inline(text_, names)}</h2>{blocks(content, names)}</section>")
+        else:
+            cls = ' class="remember"' if head == "Remember" else ""
+            keep = [l for l in content if not l.startswith("Next: ")]
+            parts.append(f"<section{cls}><h2>{inline(head, names)}</h2>{blocks(keep, names)}</section>")
+    prev_ = GUIDES[index - 1] if index > 0 else None
+    next_ = GUIDES[index + 1] if index + 1 < len(GUIDES) else None
+    nav = '<nav class="parts">'
+    if prev_:
+        nav += f'<a href="{prev_[0][:-3]}.html"><span class="k">← Part {index}</span>{esc(prev_[2])}</a>'
+    if next_:
+        nav += f'<a class="next" href="{next_[0][:-3]}.html"><span class="k">Part {index + 2} →</span>{esc(next_[2])}</a>'
+    nav += "</nav>"
+    src = GUIDES[index][0]
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Airframe Quickstart {index + 1}</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>{CSS.replace("{DARK}", "{" + DARK_VARS + "}")}</style>
+</head>
+<body>
+<div class="wrap">
+<header class="masthead">
+<p class="eyebrow">Airframe quickstart · part {index + 1} of {len(GUIDES)}</p>
+<h1>{esc(title)}</h1>
+<p class="dek">{dek}</p>
+</header>
+{"".join(parts)}
+{nav}
+<footer><span>Hangar · Airframe · developer guide</span><span>Generated from <a href="../{src}">{src}</a> by tools/build-quickstart-docs</span></footer>
+</div>
+</body>
+</html>
+"""
+
+
+def outputs():
+    files = {}
+    for i, (md, slug, _) in enumerate(GUIDES):
+        files[USER / "diagrams" / f"{slug}.svg"] = build_svg(slug)
+        files[USER / "html" / (md[:-3] + ".html")] = page(i, (USER / md).read_text())
+    return files
+
+
+def main(argv):
+    check = "--check" in argv
+    stale = []
+    for p, content in outputs().items():
+        if check:
+            if not p.exists() or p.read_text() != content:
+                stale.append(p.relative_to(ROOT))
+        else:
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text(content)
+            print(f"wrote {p.relative_to(ROOT)}")
+    if stale:
+        print("out of date (run tools/build-quickstart-docs):", *stale, sep="\n  ")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

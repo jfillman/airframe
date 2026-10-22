@@ -5,13 +5,13 @@ nav:
   - Home: index.md
   - User guide:
       - Overview: user/README.md
-      - Quickstart: user/quickstart.md
-      - 'Quickstart part 2: a database': user/quickstart-flight-api.md
-      - 'Quickstart part 3: a message broker': user/quickstart-broker.md
-      - 'Quickstart part 4: MongoDB and a consumer': user/quickstart-baggage-api.md
-      - 'Quickstart part 5: an OIDC provider (Dex)': user/quickstart-skyport-auth.md
-      - 'Quickstart part 6: gate-api from the terminal': user/quickstart-gate-api.md
-      - 'Quickstart part 7: checkin-api through Tower': user/quickstart-checkin-api.md
+      - 'Quickstart 1: boarding-api': user/quickstart.md
+      - 'Quickstart 2: flight-api and a database': user/quickstart-flight-api.md
+      - 'Quickstart 3: a shared message broker': user/quickstart-broker.md
+      - 'Quickstart 4: baggage-api and MongoDB': user/quickstart-baggage-api.md
+      - 'Quickstart 5: a shared token issuer': user/quickstart-skyport-auth.md
+      - 'Quickstart 6: gate-api from the terminal': user/quickstart-gate-api.md
+      - 'Quickstart 7: checkin-api through Tower': user/quickstart-checkin-api.md
       - Skyport runbook: user/skyport-runbook.md
       - Skyport demo system: user/skyport-demo.md
       - Decommissioning an app: user/decommission-app.md

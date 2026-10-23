@@ -767,6 +767,9 @@ spec:
               <<- end >>
               appRepoUrl: <<$childAppRepoUrl>>
               devCluster: <<$devCluster>>
+              <<- with get (dict "NodeJSApplication" "nodejs" "SpringBootApplication" "java" "PythonApplication" "python" "GoApplication" "go") .observed.composite.resource.kind >>
+              runtime: <<.>>
+              <<- end >>
               <<- if $spec.extraGitopsRepos >>
               extraGitopsRepos:
               <<- range $spec.extraGitopsRepos >>

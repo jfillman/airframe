@@ -123,6 +123,16 @@ spec:
                     InfraService's appRepoUrl has no real source to register PaC
                     against or bootstrap a resync hook for.
                   default: true
+                runtime:
+                  type: string
+                  description: >-
+                    platformIdentity.runtime in the rendered identity.yaml: the
+                    parent app's runtime, from its kind (NodeJSApplication nodejs,
+                    SpringBootApplication java, PythonApplication python,
+                    GoApplication go). Glidepath passes it to the chart as
+                    observability.runtime for OpenTelemetry auto-instrumentation.
+                    Omitted (no runtime line) for anything else.
+                  enum: [nodejs, java, python, go]
                 gitopsRepoUrl:
                   type: string
                   description: >-

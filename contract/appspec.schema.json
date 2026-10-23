@@ -3202,6 +3202,16 @@
                           "description": "platformIdentity.registerPipelinesAsCode in the rendered identity.yaml - an existing, already-designed-for glidepath-app chart override (charts/glidepath-app/templates/ pipelines-as-code/repository.yaml and hooks/ onboarding-resync-bootstrap.yaml are both already gated on this exact value, \"overridable per-app to deregister a repo\" per that chart's own header) - not new chart behavior, just the first XRD-level caller to actually set it to false. An InfraService's appRepoUrl has no real source to register PaC against or bootstrap a resync hook for.",
                           "default": true
                         },
+                        "runtime": {
+                          "type": "string",
+                          "description": "platformIdentity.runtime in the rendered identity.yaml: the parent app's runtime, from its kind (NodeJSApplication nodejs, SpringBootApplication java, PythonApplication python, GoApplication go). Glidepath passes it to the chart as observability.runtime for OpenTelemetry auto-instrumentation. Omitted (no runtime line) for anything else.",
+                          "enum": [
+                            "nodejs",
+                            "java",
+                            "python",
+                            "go"
+                          ]
+                        },
                         "gitopsRepoUrl": {
                           "type": "string",
                           "description": "Full URL of the app's gitops-<appName> repo, computed by the parent XR the same way its own gitops-repo.yaml template does. Passed in rather than recomputed here so this XRD stays agnostic to repo-naming convention. Omit it for a service that has no gitops repo (a LambdaFunction or AzureFunction deploys straight to its cloud, with no release stage): the identity file then carries an empty value and Glidepath skips gitops delivery and registration.",

@@ -68,6 +68,9 @@ spec:
         githubOwner: <<$scmOwner>>
         catalogNamespace: platform-catalog
         registerPipelinesAsCode: <<$spec.registerPipelinesAsCode>>
+      <<- with $spec.runtime >>
+        runtime: <<.>>
+      <<- end >>
       <<- if $spec.extraGitopsRepos >>
         extraGitopsRepos:
         <<- range $spec.extraGitopsRepos >>

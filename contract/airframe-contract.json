@@ -2798,8 +2798,8 @@
     "TektonCICD": {
       "agentSummary": "Wires a new app repo into the shared Tekton/PaC CI/CD pipeline and tenant onboarding.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
-      "fieldsDescribed": 9,
-      "fieldsTotal": 9,
+      "fieldsDescribed": 10,
+      "fieldsTotal": 10,
       "file": "tektoncicd.yaml",
       "group": "catalog.hangar.io",
       "plural": "tektoncicds"

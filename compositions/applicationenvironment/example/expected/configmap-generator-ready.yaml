@@ -132,6 +132,8 @@ resources:
 
         env: staging
 
+        runtime: java
+
         configMapGenerator: true
 
         '

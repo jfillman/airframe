@@ -1,6 +1,7 @@
 {{/*
-Ingress from this namespace only, plus the Gateway's namespace when httpRoute or ingress is enabled, plus one
-rule per allowIngressFrom entry and any extraIngressRules. Egress stays open: Egress joins policyTypes only
+Ingress from this namespace only, plus the Gateway's namespace when httpRoute or ingress is enabled, plus the
+observability namespace on the scrape port when the ServiceMonitor renders, plus one rule per allowIngressFrom
+entry and any extraIngressRules. Egress stays open: Egress joins policyTypes only
 when allowEgressTo or extraEgressRules adds a rule, because an empty Egress policy would deny everything.
 */}}
 {{- if .Values.networkPolicy.enabled }}
@@ -26,6 +27,17 @@ spec:
         - namespaceSelector:
             {{- toYaml .Values.networkPolicy.ingressControllerNamespaceSelector | nindent 12 }}
         {{- end }}
+    {{- /* Prometheus scrapes from another namespace; without this the ServiceMonitor times out. */}}
+    {{- $obsNs := (.Values.observability | default dict).namespace }}
+    {{- if and $obsNs .Values.serviceMonitor.enabled (eq (include "airframe-application.hasRollout" .) "true") }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $obsNs }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.serviceMonitor.port | default (index .Values.rollout.ports 0).name }}
+    {{- end }}
     {{- range .Values.networkPolicy.allowIngressFrom }}
     - from:
         - {{- include "airframe-application.networkPolicyPeer" . | nindent 10 }}
@@ -39,6 +51,19 @@ spec:
     {{- end }}
   {{- if or .Values.networkPolicy.allowEgressTo .Values.networkPolicy.extraEgressRules }}
   egress:
+    {{- /* Only when Egress is already restricted (an egress rule of its own would deny everything else): the
+    auto-instrumentation agent's OTLP export to the collector. */}}
+    {{- if and $obsNs (include "airframe-application.otelInjectRuntime" .) }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $obsNs }}
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+    {{- end }}
     {{- range .Values.networkPolicy.allowEgressTo }}
     - to:
         - {{- include "airframe-application.networkPolicyPeer" . | nindent 10 }}

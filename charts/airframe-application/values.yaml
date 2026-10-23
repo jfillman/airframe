@@ -211,6 +211,11 @@ httpRoute: {annotations: {}, enabled: false, hostnames: [], parentRefs: [], path
 # Prometheus scraping of the main workload's first rollout.ports entry, via kube-prometheus-stack.
 serviceMonitor: {additionalLabels: {}, enabled: true, interval: 30s, path: /metrics, port: ''}
 
+# The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it (from Apron's
+# cluster config and the app's kind). Empty fields turn each part off, so a cluster without the stack,
+# or a Ground environment, renders exactly as before.
+observability: {instrumentation: '', namespace: '', runtime: ''}
+
 # Traffic policy for the main workload's namespace.
 networkPolicy: {allowEgressTo: [], allowIngressFrom: [], allowIngressFromIngressController: true, enabled: true, extraEgressRules: [], extraIngressRules: [], ingressControllerNamespaceSelector: {matchLabels: {kubernetes.io/metadata.name: hangar-gateway}}}
 

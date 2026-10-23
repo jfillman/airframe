@@ -147,6 +147,15 @@
         "description": "AI-triage diagnosis notifications, threaded into the RolloutWatch XR this chart renders unconditionally.",
         "type": "object"
       },
+      "observability": {
+        "default": {
+          "instrumentation": "",
+          "namespace": "",
+          "runtime": ""
+        },
+        "description": "The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it (from Apron's cluster config and the app's kind). Empty fields turn each part off, so a cluster without the stack, or a Ground environment, renders exactly as before.",
+        "type": "object"
+      },
       "platformSecretStore": {
         "default": {
           "kind": "ClusterSecretStore",

@@ -1462,6 +1462,44 @@
       "x-hangar-owner": "human",
       "x-hangar-risk": "low"
     },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it (from Apron's cluster config and the app's kind). Empty fields turn each part off, so a cluster without the stack, or a Ground environment, renders exactly as before.",
+      "default": {
+        "namespace": "",
+        "instrumentation": "",
+        "runtime": ""
+      },
+      "properties": {
+        "namespace": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "Namespace Prometheus scrapes from. When set and the ServiceMonitor renders, the NetworkPolicy admits that namespace on the scrape port; without it the baseline policy drops every scrape."
+        },
+        "instrumentation": {
+          "type": "string",
+          "default": "",
+          "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?/[a-z0-9]([-a-z0-9]*[a-z0-9])?$",
+          "description": "<namespace>/<name> of the cluster's OpenTelemetry Operator Instrumentation. With runtime set, the pods carry the operator's inject annotation for that runtime, so the app sends traces and metrics without code changes."
+        },
+        "runtime": {
+          "type": "string",
+          "default": "",
+          "enum": [
+            "",
+            "nodejs",
+            "java",
+            "python",
+            "go"
+          ],
+          "description": "The app's runtime, from its kind (NodeJSApplication, SpringBootApplication, PythonApplication, GoApplication). go is accepted but not injected: the operator's Go agent needs a privileged eBPF sidecar."
+        }
+      },
+      "x-hangar-owner": "platform",
+      "x-hangar-risk": "low"
+    },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": false,

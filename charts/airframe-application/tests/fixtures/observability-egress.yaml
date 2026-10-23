@@ -1,0 +1,12 @@
+# The app restricts egress, so the injected agent needs its own rule to reach the collector.
+appName: guard-test
+envName: dev
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+networkPolicy:
+  allowEgressTo:
+    - {namespace: app-other-dev, ports: [8080]}
+observability: {namespace: observability, instrumentation: observability/hangar, runtime: nodejs}

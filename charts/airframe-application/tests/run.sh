@@ -211,4 +211,16 @@ out=$($V --no-render tests/validate/bad-projected-token.yaml 2>&1)
 for p in /serviceAccount/projectedTokens/0/mountPath /serviceAccount/projectedTokens/0/expirationSeconds /rollout/maxSurge; do
   echo "$out" | grep -q "$p" || { echo "FAIL: validate did not reject $p"; fail=1; }
 done
+# observability: Prometheus admitted on the scrape port, OTel inject annotation for nodejs/java/python only, the
+# OTLP egress rule only when egress is already restricted, and nothing at all when the keys are empty.
+np() { helm template t . -f "tests/fixtures/$1.yaml" --show-only templates/networking/networkpolicy.yaml 2>&1; }
+np observability | grep -B3 -A4 'kubernetes.io/metadata.name: observability' | grep -q 'port: http' || { echo "FAIL: observability.namespace did not admit Prometheus on the scrape port"; fail=1; }
+np release-image | grep -q 'observability' && { echo "FAIL: observability rule rendered with no observability.namespace"; fail=1; }
+ro observability | grep -q 'instrumentation.opentelemetry.io/inject-python: "observability/hangar"' || { echo "FAIL: inject-python annotation missing"; fail=1; }
+ro observability | grep -q 'resource.opentelemetry.io/deployment.environment.name: "dev"' || { echo "FAIL: deployment.environment.name annotation missing"; fail=1; }
+ro release-image | grep -q 'instrumentation.opentelemetry.io' && { echo "FAIL: inject annotation rendered with no observability keys"; fail=1; }
+ro observability-go-egress | grep -q 'instrumentation.opentelemetry.io' && { echo "FAIL: go must not be injected"; fail=1; }
+np observability | grep -q 'port: 4317' && { echo "FAIL: OTLP egress rule rendered while egress is open"; fail=1; }
+np observability-egress | grep -q 'port: 4317' || { echo "FAIL: OTLP egress rule missing while egress is restricted"; fail=1; }
+np observability-go-egress | grep -q 'port: 4317' && { echo "FAIL: OTLP egress rule rendered with nothing injected"; fail=1; }
 [ $fail -eq 0 ] && echo "ok" || exit 1

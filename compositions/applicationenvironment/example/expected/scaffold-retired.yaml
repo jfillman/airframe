@@ -106,6 +106,8 @@ resources:
 
         env: staging
 
+        runtime: java
+
         '
       file: tenants/widget-service/staging/identity.yaml
       overwriteOnCreate: true

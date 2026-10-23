@@ -1,0 +1,10 @@
+# The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it: the NetworkPolicy admits
+# Prometheus on the scrape port and the pods carry the OTel Operator's inject annotation for the app's runtime.
+appName: guard-test
+envName: dev
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+observability: {namespace: observability, instrumentation: observability/hangar, runtime: python}

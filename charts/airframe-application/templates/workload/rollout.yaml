@@ -93,8 +93,16 @@ spec:
         {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.podLabels" "map" .Values.rollout.podLabels) }}
         {{- . | nindent 8 }}
         {{- end }}
-      {{- if or .Values.configMaps .Values.secrets .Values.rollout.podAnnotations }}
+      {{- $otelRuntime := include "airframe-application.otelInjectRuntime" . }}
+      {{- if or .Values.configMaps .Values.secrets .Values.rollout.podAnnotations $otelRuntime }}
       annotations:
+        {{- /* OpenTelemetry Operator auto-instrumentation: the operator's pod webhook adds the agent at admission
+        (fail-open, so pods still start if the operator is down). service.name and service.version come from
+        app.kubernetes.io/name and /version (the Instrumentation sets useLabelsForResourceAttributes). */}}
+        {{- if $otelRuntime }}
+        instrumentation.opentelemetry.io/inject-{{ $otelRuntime }}: {{ .Values.observability.instrumentation | quote }}
+        resource.opentelemetry.io/deployment.environment.name: {{ .Values.envName | quote }}
+        {{- end }}
         {{- /* A new Rollout revision when config changes without changing the pod spec.
         checksum/configmaps hashes the rendered ConfigMaps (existingConfigMap content is
         out of sight). checksum/secrets hashes the ExternalSecret declaration only: a

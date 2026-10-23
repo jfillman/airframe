@@ -121,6 +121,20 @@ environment with no Rollout fails the render (`templates/release-tracking-guard.
   `hangar-gateway`, which Apron installs. Its `pathType` is `PathPrefix | Exact | RegularExpression`,
   unlike `ingress.pathType`.
 
+## Observability
+
+`observability` is platform-owned: the tenant-onboarding ApplicationSet sets it from Apron's cluster config and
+the app's kind, and an env file may not. Every field empty (the default) renders exactly as before.
+
+- `observability.namespace` (where Prometheus runs): the NetworkPolicy admits it on the ServiceMonitor's port.
+  Without it the baseline policy drops every scrape.
+- `observability.instrumentation` (`<namespace>/<name>` of the cluster's OpenTelemetry Operator
+  `Instrumentation`) and `observability.runtime` (`nodejs`, `java`, `python` or `go`, from the app's kind): the
+  pods carry `instrumentation.opentelemetry.io/inject-<runtime>` and `deployment.environment.name`, so the app
+  sends traces and metrics to the collector with no code change. `go` is not injected (the operator's Go agent is a
+  privileged eBPF sidecar). If the app restricts egress, the NetworkPolicy also allows OTLP (4317/4318) to that
+  namespace.
+
 ## Attached XRs
 
 `components:` entries become XRs of the kind `componentKinds` maps their `type` to, with `spec:` passed

@@ -1,0 +1,13 @@
+# go has no injectable agent here (the operator's Go agent is a privileged eBPF sidecar): no annotation. Egress
+# restricted by the app, but no OTLP rule either, since nothing is injected.
+appName: guard-test
+envName: dev
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+networkPolicy:
+  allowEgressTo:
+    - {namespace: app-other-dev, ports: [8080]}
+observability: {namespace: observability, instrumentation: observability/hangar, runtime: go}

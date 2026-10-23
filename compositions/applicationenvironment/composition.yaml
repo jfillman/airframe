@@ -693,6 +693,12 @@ spec:
                   <<- if eq $appType "infra" >>
                   type: infra
                   <<- end >>
+                  <<- /* The app's runtime, from its kind (00-app-kind-gate.yaml, which keeps the observed kind through a
+                       transient empty lookup, so this line never flaps): the ApplicationSet passes it to the chart as
+                       observability.runtime for OpenTelemetry auto-instrumentation. None for an InfraService. */>>
+                  <<- with get (dict "NodeJSApplication" "nodejs" "SpringBootApplication" "java" "PythonApplication" "python" "GoApplication" "go") $appKind >>
+                  runtime: <<.>>
+                  <<- end >>
                   <<- if $configMapGenerator >>
                   configMapGenerator: true
                   <<- end >>

@@ -326,6 +326,7 @@ resources:
     appRepoUrl: https://github.com/example-org/widget-service
     devCluster: example-dev
     gitopsRepoUrl: https://github.com/example-org/gitops-widget-service
+    runtime: go
 xr:
   conditions:
   - message: Waiting on the composed TektonCICD child (widget-service-tektoncicd) to report its own CicdOnboarded condition

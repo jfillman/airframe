@@ -55,6 +55,15 @@ Tower shows them differently; only the first is configuration.
 {{- end -}}
 
 {{/*
+airframe-application.otelInjectRuntime - the OpenTelemetry Operator runtime to inject (nodejs, java or python), or
+"" when the cluster names no Instrumentation or the runtime has no injectable agent here (go: privileged eBPF).
+*/}}
+{{- define "airframe-application.otelInjectRuntime" -}}
+{{- $o := .Values.observability | default dict -}}
+{{- if and $o.instrumentation (has $o.runtime (list "nodejs" "java" "python")) -}}{{ $o.runtime }}{{- end -}}
+{{- end -}}
+
+{{/*
 airframe-application.image - the image this release runs, as YAML {repository, tag}, or empty when none is set.
 The release-owned key `release.image` wins; `rollout.image` is the deprecated location and is used only when
 `release.image` is not fully set. Both need repository AND tag.

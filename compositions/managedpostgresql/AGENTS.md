@@ -49,6 +49,6 @@ Read-only. Steps, after the implicit `xr-synced` check:
 - `python3 tools/test_sidecars.py` fails if a template change breaks a name this sidecar promises.
 - Shared with other compositions (symlinks into `compositions/_shared/`): `01-inputs.yaml`.
 - Reachable only from spec.allowedCidrs; empty admits no one. A Lambda function outside a VPC has no fixed source address, so it needs 0.0.0.0/0, leaving the password and TLS as the only protection.
-- The Secret {name}-credentials is created by the provider, not composed: it survives the XR's deletion. Delete it by hand after the server is gone.
+- The Secret {name}-credentials is created by the provider, not composed. It is deleted with the server (seen live 2026-10-24); check for it if a deletion was interrupted.
 
 Contract: `tools/airframe-capabilities verify managedpostgresql`; schema: `xrds/managedpostgresql.yaml`.

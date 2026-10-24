@@ -1,0 +1,8 @@
+# The instance before its subnet group exists, as the provider reports it.
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: Instance
+metadata: {name: smoke-db-instance, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: instance}}
+status:
+  conditions:
+  - {type: Ready, status: "False", reason: Creating}
+  - {type: Synced, status: "False", reason: ReconcileError, message: "cannot resolve references: mg.Spec.ForProvider.DBSubnetGroupName: referenced field was empty (referenced resource may not yet be ready)"}

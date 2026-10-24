@@ -25,7 +25,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
   database on AWS or Azure (`spec.cloud`), requested like a cloud target, as a stand-alone XR in the app's xr-requests
   (docs/user/cloud-dependencies.md). Each writes ConfigMap `<name>-connection` and, where there is a secret, the
   provider writes Secret `<name>-credentials`; `DependencyReady` has a closed reason set. On AWS, `consumers[]` grants
-  AwsLambdaTargets IAM access (and a queue trigger). Azure is render-tested only.
+  AwsLambdaTargets IAM access (and a queue trigger). AWS is live-verified (2026-10-24); Azure is render-tested only.
 - **Ground** environment: `glidepath/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.

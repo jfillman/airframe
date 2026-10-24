@@ -13,10 +13,12 @@
 <<- $status := "False" >>
 <<- $message := printf "Waiting for %s to be ready (a new server takes 5 to 15 minutes; or the %s provider has no credentials yet)." (join ", " $pending) $cloud >>
 <<- /* A server the provider can't create (a taken Azure name, a quota, a refused instance class) is not
-       "provisioning": its Synced=False message is the reason, so it is surfaced here. */ ->>
+       "provisioning": its Synced=False message is the reason, so it is surfaced here. Waiting for a reference (the
+       subnet group or security group not created yet) is also Synced=False, and is provisioning: on 2026-10-24 a
+       healthy first create reported ManagedPostgreSQLFailing for its first minute. */ ->>
 <<- if and (has $serverKey $pending) (index $obs $serverKey) >>
   <<- range (dig "resource" "status" "conditions" list (index $obs $serverKey)) >>
-    <<- if and (eq .type "Synced") (eq .status "False") >>
+    <<- if and (eq .type "Synced") (eq .status "False") (not (regexMatch "(?i)resolve references|referenced field|reference.*not.*(ready|found)" (.message | default ""))) >>
       <<- $reason = "ManagedPostgreSQLFailing" >>
       <<- $message = printf "The %s provider can't create or update the server: %s" $cloud (.message | default "no message") >>
     <<- end >>

@@ -41,3 +41,11 @@ cases:
   expect:
     conditions:
       DependencyReady: ManagedPostgreSQLReady
+# The instance waits for its subnet group to exist: Synced=False on a reference is still provisioning.
+- name: aws-instance-waiting-for-reference
+  xr: xr-aws.yaml
+  observed:
+  - observed-aws-reference-wait.yaml
+  expect:
+    conditions:
+      DependencyReady: ManagedPostgreSQLProvisioning

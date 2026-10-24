@@ -149,7 +149,7 @@ Delete the manifest from the tenants repo. Everything the XR created goes with i
 - A database with `protect: false` (the default) is deleted with no final snapshot. With `protect: true`, the
   deletion fails until you set it back to `false`.
 
-The database password Secret is created by the provider, not composed, so it survives. Delete it by hand.
+The database password Secret is created by the provider, not composed. It is deleted with the server.
 
 ## Azure
 
@@ -167,5 +167,26 @@ not modelled yet.
 Offline (CI): every composition branch is render-tested (`example/cases.yaml`), and every rendered managed
 resource was checked against its provider's CRD schema with unknown fields rejected.
 
-Live: not yet. The AWS run needs the IAM policy additions in
-[cloud-credentials.md](../admin/cloud-credentials.md#cloud-dependencies-2026-10-24) published first.
+Live on AWS, 2026-10-24, on the dev cluster against the Hangar account (airframe v0.3.164). A throwaway
+`AwsLambdaTarget` plus one of each kind, requested through the tenants repo and removed the same way:
+
+- **All four XRs reached Ready** in about 4 minutes, and the database in about 7. `tools/airframe-verify` passed
+  every step for each kind.
+- **Grants.** The function's execution role carried `HangarCloudTargetBoundary` and the two inline policies.
+  The IAM policy simulator, which applies the boundary too, allowed send, receive and delete on this queue and
+  get and put on this bucket, and denied the same actions on any other queue or bucket.
+- **Trigger.** One message sent to the queue invoked the function twice. Both runs failed, as expected, because
+  the placeholder image has no handler, and after `maxReceiveCount: 2` the message was in `deps-smoke-jobs-dlq`.
+- **Bucket.** All four Block Public Access settings were on, ownership was BucketOwnerEnforced, and an object
+  written and read back came back with SSE `AES256`.
+- **Database.** PostgreSQL 17.9, `db.t4g.micro`, encrypted. Its security group admitted only the one listed
+  `/32`. `psql` with `sslmode=require` connected over TLSv1.3. With `sslmode=disable` it was refused
+  (`no pg_hba.conf entry ... no encryption`).
+- **Teardown.** Removing the file deleted everything: queues, bucket and object (`emptyOnDelete`), instance,
+  subnet group, VPC, function, ECR repository, roles, and the password Secret. One trigger's managed resource
+  stuck in `Deleting` until the `GetEventSourceMapping` grant moved to `*`
+  ([cloud-credentials.md](../admin/cloud-credentials.md#cloud-dependencies-2026-10-24)).
+
+Two ordering races showed up in the first minute and fixed themselves on retry: the queue was created before
+its dead-letter queue existed (`Dead letter target does not exist`), and the trigger before the function
+(`Function does not exist`).

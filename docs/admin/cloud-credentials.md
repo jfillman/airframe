@@ -415,7 +415,10 @@ carries the boundary, which `ComposedRolesGrantOnlyInsideTheBoundary` already al
 The boundary's statements are appended to its live document and published as a new default version. The
 Crossplane statements go into a policy of their own, because `HangarCrossplaneCloudTargets` plus these is over
 IAM's 6,144-character limit for a managed policy (`LimitExceeded ... PolicySize`, found on the first publish,
-2026-10-24). A role can hold ten managed policies. Run this as an administrator of the Hangar account:
+2026-10-24). A role can hold ten managed policies. Run this as an administrator of the Hangar account. If the policy already
+exists, publish the document as a new version instead (`aws iam create-policy-version --set-as-default
+--policy-arn arn:aws:iam::${ACCOUNT}:policy/HangarCrossplaneCloudDependencies --policy-document
+file://hangar-crossplane-cloud-dependencies.json`):
 
 ```bash
 export AWS_PAGER="" AWS_PROFILE=hangar-admin
@@ -472,11 +475,11 @@ jq -n --arg r "$REGION" --arg a "$ACCOUNT" '{"Version": "2012-10-17", "Statement
     "Resource": "arn:aws:iam::\($a):role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
     "Condition": { "StringEquals": { "iam:AWSServiceName": "rds.amazonaws.com" } } },
   { "Sid": "DependencyLambdaTriggers", "Effect": "Allow",
-    "Action": ["lambda:CreateEventSourceMapping", "lambda:GetEventSourceMapping",
-               "lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping",
+    "Action": ["lambda:CreateEventSourceMapping", "lambda:UpdateEventSourceMapping",
                "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"],
     "Resource": "arn:aws:lambda:\($r):\($a):event-source-mapping:*" },
-  { "Sid": "DependencyLambdaTriggersList", "Effect": "Allow", "Action": "lambda:ListEventSourceMappings",
+  { "Sid": "DependencyLambdaTriggersReadAndRemove", "Effect": "Allow",
+    "Action": ["lambda:GetEventSourceMapping", "lambda:DeleteEventSourceMapping", "lambda:ListEventSourceMappings"],
     "Resource": "*", "Condition": { "StringEquals": { "aws:RequestedRegion": $r } } }
 ]' > hangar-crossplane-cloud-dependencies.json
 
@@ -510,6 +513,7 @@ What the new lines allow, and what they don't:
 | `rds:CreateDBSnapshot` | `protect: true` takes a final snapshot when the server is deleted. |
 | `iam:CreateServiceLinkedRole`, for RDS only | The first RDS instance in an account creates `AWSServiceRoleForRDS`, the role RDS uses to manage the instance's network interfaces. |
 | `lambda:*EventSourceMapping` | `trigger: true` connects a queue to a function. That changes neither the function's code nor its configuration. |
+| `lambda:GetEventSourceMapping`, `DeleteEventSourceMapping` on `*` | Once a mapping is gone, Lambda authorizes a read of its id against `*`, not the mapping's ARN, so the provider can't confirm the deletion with an ARN-scoped grant. Found live on 2026-10-24: a deleted trigger's managed resource stayed stuck in `Deleting` with AccessDenied on `resource: *`. |
 
 Still absent: any SQS, S3 or RDS action outside the region or account (except `CreateBucket`, above), any
 change to a bucket policy or ACL (the composition makes buckets private and never public), RDS

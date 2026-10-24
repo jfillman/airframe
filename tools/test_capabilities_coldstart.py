@@ -85,7 +85,7 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 20 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 23 and all(xrds.values())))
 
     # Q11: What cloud targets exist, and does each say how to tell it worked?
     targets = ask("targets")
@@ -105,6 +105,13 @@ def main():
     pg = ask("component", "postgresql")
     checks.append(("Q15 output Secrets name their producer",
                    any(s["object"]["name"] == "{name}-app" and s["createdBy"] == "operator" for s in pg.get("sources", []))))
+
+    # Q16: What managed cloud services can an app depend on, and does each say how to tell it is ready?
+    kinds = ask("kinds")
+    deps = {k: v for k, v in kinds.items() if v["role"] == "dependency"}
+    checks.append(("Q16 cloud dependency list with a closed DependencyReady reason set",
+                   set(deps) == {"messagequeue", "objectstorage", "managedpostgresql"}
+                   and all(ask("kind", k)["conditions"][0]["type"] == "DependencyReady" for k in deps)))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

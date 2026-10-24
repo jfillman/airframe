@@ -1,0 +1,11 @@
+# A FIFO queue with no dead-letter queue.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: MessageQueue
+metadata:
+  name: smoke-orders
+  namespace: app-smoke-fn-cicd
+spec:
+  cloud: aws
+  fifo: true
+  deadLetter:
+    enabled: false

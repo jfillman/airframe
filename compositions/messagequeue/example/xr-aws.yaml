@@ -1,0 +1,10 @@
+# An SQS queue for the smoke-fn app with the defaults: standard queue, 30 s visibility, 4 days retention, a
+# dead-letter queue after 5 deliveries, no consumers.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: MessageQueue
+metadata:
+  name: smoke-jobs
+  namespace: app-smoke-fn-cicd
+spec:
+  cloud: aws
+  region: us-east-1

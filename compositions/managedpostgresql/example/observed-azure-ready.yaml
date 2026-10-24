@@ -1,0 +1,24 @@
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata: {name: smoke-db-rg, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: resource-group}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServer
+metadata: {name: smoke-db-server, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: server}}
+status: {atProvider: {fqdn: hangar-smoke-db.postgres.database.azure.com}, conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServerDatabase
+metadata: {name: smoke-db-database, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: database}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServerFirewallRule
+metadata: {name: smoke-db-allow-0, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: allow-0}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServerFirewallRule
+metadata: {name: smoke-db-allow-1, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: allow-1}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}

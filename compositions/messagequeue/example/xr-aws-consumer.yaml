@@ -1,0 +1,18 @@
+# The same queue consumed by the smoke-fn Lambda target: a receive grant on its execution role and an event
+# source mapping, so each message invokes the function. A second consumer names a target that doesn't exist.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: MessageQueue
+metadata:
+  name: smoke-jobs
+  namespace: app-smoke-fn-cicd
+spec:
+  cloud: aws
+  region: us-east-1
+  lockSeconds: 60
+  consumers:
+    - awsLambdaTarget: smoke-fn
+      access: receive
+      trigger: true
+      batchSize: 5
+    - awsLambdaTarget: no-such-target
+      access: send

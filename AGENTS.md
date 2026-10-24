@@ -21,6 +21,11 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
   to paste into the app's `cicd.yaml`, and a `TargetReady` condition with a closed reason set. `LambdaFunction` and
   `AzureFunction` can compose their target themselves with `spec.target.enabled: true`, and the app stacks do with
   `deployTarget: aws-ecs`.
+- **Cloud dependencies** (`MessageQueue`, `ObjectStorage`, `ManagedPostgreSQL`): a managed queue, bucket or PostgreSQL
+  database on AWS or Azure (`spec.cloud`), requested like a cloud target, as a stand-alone XR in the app's xr-requests
+  (docs/user/cloud-dependencies.md). Each writes ConfigMap `<name>-connection` and, where there is a secret, the
+  provider writes Secret `<name>-credentials`; `DependencyReady` has a closed reason set. On AWS, `consumers[]` grants
+  AwsLambdaTargets IAM access (and a queue trigger). Azure is render-tested only.
 - **Ground** environment: `glidepath/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.

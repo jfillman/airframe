@@ -16,6 +16,7 @@ nav:
       - Skyport demo system: user/skyport-demo.md
       - Decommissioning an app: user/decommission-app.md
       - Cloud targets (Lambda, ECS, Container Apps): user/cloud-targets.md
+      - Cloud dependencies (queues, storage, PostgreSQL): user/cloud-dependencies.md
   - Admin guide:
       - Overview: admin/README.md
       - Architecture: admin/architecture.md

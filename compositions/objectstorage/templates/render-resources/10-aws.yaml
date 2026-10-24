@@ -1,0 +1,129 @@
+# cloud: aws - the bucket and the four settings that make it private, plus per consumer an inline policy on the
+# Lambda target's execution role (see compositions/messagequeue/templates/render-resources/10-aws.yaml for why
+# grants are inline RolePolicies).
+#
+# Private and encrypted, with no field to change it: Block Public Access on all four settings, ownership
+# BucketOwnerEnforced (ACLs off, the bucket owner owns every object) and SSE-S3 (AES256, keys managed by S3, no
+# cost). Each setting is its own resource, as the provider models it, so none is a field on the Bucket that a
+# later provider version could start reverting. The Bucket's external-name is its name (ParameterAsIdentifier).
+#
+# Versioning: once a bucket has been versioned it can only be suspended, never returned to unversioned, so the
+# BucketVersioning resource is composed while versioning is on AND after it is turned off (status Suspended),
+# for as long as it is observed. Dropping it would leave the bucket versioned.
+<<- if eq $cloud "aws" >>
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: Bucket
+metadata:
+  name: <<$xrName>>-bucket
+  annotations:
+    <<setResourceNameAnnotation "bucket">>
+    crossplane.io/external-name: <<$bucketName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    forceDestroy: <<$emptyOnDelete>>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPublicAccessBlock
+metadata:
+  name: <<$xrName>>-public-access-block
+  annotations:
+    <<setResourceNameAnnotation "public-access-block">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    bucketRef:
+      name: <<$xrName>>-bucket
+    blockPublicAcls: true
+    blockPublicPolicy: true
+    ignorePublicAcls: true
+    restrictPublicBuckets: true
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketOwnershipControls
+metadata:
+  name: <<$xrName>>-ownership
+  annotations:
+    <<setResourceNameAnnotation "ownership-controls">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    bucketRef:
+      name: <<$xrName>>-bucket
+    rule:
+      objectOwnership: BucketOwnerEnforced
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketServerSideEncryptionConfiguration
+metadata:
+  name: <<$xrName>>-encryption
+  annotations:
+    <<setResourceNameAnnotation "encryption">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    bucketRef:
+      name: <<$xrName>>-bucket
+    rule:
+      - applyServerSideEncryptionByDefault:
+          sseAlgorithm: AES256
+<<- if or $versioning (index $obs "versioning") >>
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketVersioning
+metadata:
+  name: <<$xrName>>-versioning
+  annotations:
+    <<setResourceNameAnnotation "versioning">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    bucketRef:
+      name: <<$xrName>>-bucket
+    versioningConfiguration:
+      status: <<ternary "Enabled" "Suspended" $versioning>>
+<<- end >>
+<<- range $consumers >>
+<<- if .roleName >>
+<<- $objectActions := list "s3:GetObject" >>
+<<- if eq .access "readWrite" >>
+<<- $objectActions = concat $objectActions (list "s3:PutObject" "s3:DeleteObject" "s3:AbortMultipartUpload" "s3:ListMultipartUploadParts") >>
+<<- end >>
+<<- $policy := dict "Version" "2012-10-17" "Statement" (list (dict "Sid" "HangarObjectStorageBucket" "Effect" "Allow" "Action" (list "s3:ListBucket" "s3:GetBucketLocation") "Resource" $bucketArn) (dict "Sid" "HangarObjectStorageObjects" "Effect" "Allow" "Action" $objectActions "Resource" (printf "%s/*" $bucketArn))) >>
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: <<$xrName>>-grant-<<.name>>
+  annotations:
+    <<setResourceNameAnnotation (printf "grant-%s" .name)>>
+    crossplane.io/external-name: <<printf "hangar-storage-%s-%s" $xrNs $xrName | trunc 128>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    role: <<.roleName>>
+    policy: <<$policy | toJson | quote>>
+<<- end >>
+<<- end >>
+<<- end >>

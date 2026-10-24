@@ -1,0 +1,108 @@
+# cloud: aws - the SQS queue, its dead-letter queue, and per consumer an inline policy on the Lambda target's
+# execution role plus (trigger: true) an event source mapping.
+#
+# Nothing renders until the AWS account is known ($acct): the redrive policy and every grant name a queue ARN,
+# and an ARN without its account is a wrong policy, not a partial one. DependencyReady then says
+# MessageQueueNeedsAwsAccount.
+#
+# Encryption: SSE with SQS-owned keys (no KMS key to manage or pay for). The grants are inline policies
+# (RolePolicy), not managed policies: the Crossplane identity may put an inline policy on an *-exec role that
+# carries HangarCloudTargetBoundary, never create a managed policy, and the boundary caps what any grant can
+# reach (docs/admin/cloud-credentials.md). The external-name is the policy's name on the role.
+<<- if and (eq $cloud "aws") $acct >>
+<<- if $dlEnabled >>
+apiVersion: sqs.aws.m.upbound.io/v1beta1
+kind: Queue
+metadata:
+  name: <<$xrName>>-dlq
+  annotations:
+    <<setResourceNameAnnotation "dead-letter-queue">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    name: <<$dlqName>>
+    fifoQueue: <<$fifo>>
+    messageRetentionSeconds: 1209600
+    sqsManagedSseEnabled: true
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+<<- end >>
+apiVersion: sqs.aws.m.upbound.io/v1beta1
+kind: Queue
+metadata:
+  name: <<$xrName>>-queue
+  annotations:
+    <<setResourceNameAnnotation "queue">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    name: <<$queueName>>
+    fifoQueue: <<$fifo>>
+    visibilityTimeoutSeconds: <<$lockSeconds>>
+    messageRetentionSeconds: <<$retention>>
+    sqsManagedSseEnabled: true
+    <<- if $dlEnabled >>
+    redrivePolicy: <<dict "deadLetterTargetArn" $dlqArn "maxReceiveCount" $maxReceive | toJson | quote>>
+    <<- end >>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- range $consumers >>
+<<- if .roleName >>
+<<- $actions := list "sqs:GetQueueAttributes" "sqs:GetQueueUrl" >>
+<<- if has .access (list "send" "sendReceive") >><<- $actions = append $actions "sqs:SendMessage" >><<- end >>
+<<- if has .access (list "receive" "sendReceive") >>
+<<- $actions = concat $actions (list "sqs:ReceiveMessage" "sqs:DeleteMessage" "sqs:ChangeMessageVisibility") >>
+<<- end >>
+<<- $policy := dict "Version" "2012-10-17" "Statement" (list (dict "Sid" "HangarMessageQueue" "Effect" "Allow" "Action" $actions "Resource" $queueArn)) >>
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: <<$xrName>>-grant-<<.name>>
+  annotations:
+    <<setResourceNameAnnotation (printf "grant-%s" .name)>>
+    crossplane.io/external-name: <<printf "hangar-queue-%s-%s" $xrNs $xrName | trunc 128>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    role: <<.roleName>>
+    policy: <<$policy | toJson | quote>>
+<<- end >>
+<<- if and .trigger .functionName >>
+---
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: EventSourceMapping
+metadata:
+  name: <<$xrName>>-trigger-<<.name>>
+  annotations:
+    <<setResourceNameAnnotation (printf "trigger-%s" .name)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    eventSourceArn: <<$queueArn>>
+    functionName: <<.functionName>>
+    batchSize: <<.batchSize>>
+    enabled: true
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- end >>
+<<- end >>
+<<- end >>

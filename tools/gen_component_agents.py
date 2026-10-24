@@ -21,6 +21,7 @@ from sidecars import ROOT, load_sidecars  # noqa: E402
 HOW = {
     "component": "A `components[]` entry in an app's values file; the airframe-application chart renders the XR in the app's namespace. Wire it into the app with `env[].fromComponent` (never hand-write the derived names).",
     "target": "A stand-alone XR request in the tenants repo (`tenants/<app>/xr-requests/`), or composed by a function app with `spec.target.enabled`. See docs/user/cloud-targets.md.",
+    "dependency": "A stand-alone XR request in the tenants repo (`tenants/<app>/xr-requests/`), in the app's `app-<app>-cicd` namespace on the dev cluster, where the cloud providers run. Not a `components[]` entry. See docs/user/cloud-dependencies.md.",
     "bootstrap": "A Backstage template or an XR request in the dev cluster's tenants repo; it onboards the app onto the dev cluster.",
     "environment": "An XR request in the dev cluster's tenants repo, one per app and Flight environment; it writes the target cluster's tenants files.",
     "platform": "Composed by other kinds; not requested directly.",

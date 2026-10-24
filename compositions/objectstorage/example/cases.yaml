@@ -1,0 +1,53 @@
+# Render cases for tools/test_compositions.py (see compositions/messagequeue/example/cases.yaml). Regenerate
+# expectations with `tools/test_compositions.py --update objectstorage`.
+cases:
+- name: aws-fresh
+  xr: xr-aws.yaml
+  required:
+  - target-smoke-fn.yaml
+  expect:
+    present: [bucket, public-access-block, ownership-controls, encryption, grant-smoke-fn, connection]
+    absent: [versioning, grant-no-such-target]
+    conditions:
+      DependencyReady: ObjectStorageProvisioning
+- name: aws-ready-with-unresolved-consumer
+  xr: xr-aws.yaml
+  required:
+  - target-smoke-fn.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: ObjectStorageConsumerUnresolved
+# The target can't be read for a reconcile: the grant stays, from its observed spec.
+- name: aws-consumer-unreadable-keeps-grant
+  xr: xr-aws.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    present: [grant-smoke-fn]
+- name: aws-versioned
+  xr: xr-aws-versioned.yaml
+  expect:
+    present: [versioning]
+# Turning versioning off suspends it; the resource is never dropped while it exists.
+- name: aws-versioning-suspended
+  xr: xr-aws-versioning-off.yaml
+  observed:
+  - observed-versioning.yaml
+  expect:
+    present: [versioning]
+- name: azure-fresh
+  xr: xr-azure.yaml
+  expect:
+    present: [resource-group, storage-account, container, connection]
+    absent: [bucket]
+    conditions:
+      DependencyReady: ObjectStorageProvisioning
+- name: azure-ready
+  xr: xr-azure.yaml
+  observed:
+  - observed-azure-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: ObjectStorageReady

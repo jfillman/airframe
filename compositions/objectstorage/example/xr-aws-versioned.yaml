@@ -1,0 +1,9 @@
+# Versioning on, emptied on delete, no consumers.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ObjectStorage
+metadata:
+  name: smoke-archive
+  namespace: app-smoke-fn-cicd
+spec:
+  versioning: true
+  emptyOnDelete: true

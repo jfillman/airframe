@@ -1687,6 +1687,304 @@
         }
       ]
     },
+    "managedpostgresql": {
+      "agentNotes": [
+        "Reachable only from spec.allowedCidrs; empty admits no one. A Lambda function outside a VPC has no fixed source address, so it needs 0.0.0.0/0, leaving the password and TLS as the only protection.",
+        "The Secret {name}-credentials is created by the provider, not composed: it survives the XR's deletion. Delete it by hand after the server is gone."
+      ],
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The server, its database and network or firewall rules are Ready; the host is in status.host.",
+              "reason": "ManagedPostgreSQLReady",
+              "status": "True"
+            },
+            {
+              "meaning": "A composed resource is not Ready yet. A new server takes 5 to 15 minutes. The message names what is pending.",
+              "reason": "ManagedPostgreSQLProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "The cloud provider can't create or update the server (a taken Azure name, a quota, an instance class the region lacks, missing permission); the message carries the provider's error.",
+              "reason": "ManagedPostgreSQLFailing",
+              "status": "False"
+            }
+          ],
+          "type": "DependencyReady"
+        }
+      ],
+      "kind": "ManagedPostgreSQL",
+      "outputs": {
+        "database": {
+          "configMap": "{name}-connection",
+          "key": "database",
+          "kind": "configMapKeyRef"
+        },
+        "host": {
+          "configMap": "{name}-connection",
+          "key": "host",
+          "kind": "configMapKeyRef"
+        },
+        "password": {
+          "key": "password",
+          "kind": "secretKeyRef",
+          "secret": "{name}-credentials"
+        },
+        "port": {
+          "configMap": "{name}-connection",
+          "key": "port",
+          "kind": "configMapKeyRef"
+        },
+        "sslmode": {
+          "configMap": "{name}-connection",
+          "description": "Always require; the server refuses plaintext.",
+          "key": "sslmode",
+          "kind": "configMapKeyRef"
+        },
+        "username": {
+          "configMap": "{name}-connection",
+          "key": "username",
+          "kind": "configMapKeyRef"
+        }
+      },
+      "owner": "human",
+      "role": "dependency",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "ConfigMap",
+            "name": "{name}-connection"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "equals": "{name}-credentials",
+            "field": "spec.forProvider.passwordSecretRef.name",
+            "kind": "Instance",
+            "name": "{name}-instance"
+          },
+          "note": "provider-aws-rds generates the password (autoGeneratePassword) and creates this Secret when it does not exist.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-credentials"
+          },
+          "when": {
+            "equals": "aws",
+            "field": "spec.cloud"
+          }
+        },
+        {
+          "createdBy": "operator",
+          "from": {
+            "equals": "{name}-credentials",
+            "field": "spec.forProvider.administratorPasswordSecretRef.name",
+            "kind": "FlexibleServer",
+            "name": "{name}-server"
+          },
+          "note": "provider-azure-dbforpostgresql generates the password (autoGeneratePassword) and creates this Secret when it does not exist.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-credentials"
+          },
+          "when": {
+            "equals": "azure",
+            "field": "spec.cloud"
+          }
+        }
+      ],
+      "summary": "A managed PostgreSQL server with one database - Amazon RDS or Azure Flexible Server - reachable only from the CIDRs you list, TLS required. Costs money while it exists.",
+      "verify": [
+        {
+          "check": "The ManagedPostgreSQL XR's DependencyReady condition has reason ManagedPostgreSQLReady.",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "ManagedPostgreSQLReady"
+            ],
+            "type": "DependencyReady"
+          }
+        },
+        {
+          "check": "The ConfigMap {name}-connection has host, port, database and username.",
+          "id": "connection-configmap",
+          "run": {
+            "configMap": "{name}-connection",
+            "keys": [
+              "host",
+              "port",
+              "database",
+              "username"
+            ],
+            "kind": "configMapKeys"
+          }
+        },
+        {
+          "check": "The Secret {name}-credentials has a non-empty password key.",
+          "id": "password-secret",
+          "run": {
+            "keys": [
+              "password"
+            ],
+            "kind": "secretKeys",
+            "secret": "{name}-credentials"
+          }
+        },
+        {
+          "check": "AWS. aws rds describe-db-instances reports the instance available.",
+          "id": "server-available",
+          "run": {
+            "args": [
+              "rds",
+              "describe-db-instances",
+              "--db-instance-identifier",
+              "{status.serverName}",
+              "--region",
+              "{spec.region}"
+            ],
+            "cli": "aws",
+            "expect": {
+              "equals": "available",
+              "path": "DBInstances[0].DBInstanceStatus"
+            },
+            "kind": "cloudCli"
+          }
+        }
+      ]
+    },
+    "messagequeue": {
+      "agentNotes": [
+        "A consumer's grant is an inline policy hangar-queue-<namespace>-<name> on the Lambda target's execution role; the boundary HangarCloudTargetBoundary must allow the sqs actions or the grant is a no-op (docs/admin/cloud-credentials.md).",
+        "lockSeconds must be at least the Lambda function's timeout for a trigger to be accepted: AWS refuses the event source mapping otherwise and the trigger stays not Ready."
+      ],
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The queue, its dead-letter queue and every consumer's grant and trigger are Ready.",
+              "reason": "MessageQueueReady",
+              "status": "True"
+            },
+            {
+              "meaning": "A composed resource is not Ready yet (just created, or the cloud provider has no credentials or permission). The message names which.",
+              "reason": "MessageQueueProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "AWS only. The cluster registry names no AWS account (clusters.yaml aws.accountId), so the queue's ARN is unknown and nothing is created.",
+              "reason": "MessageQueueNeedsAwsAccount",
+              "status": "False"
+            },
+            {
+              "meaning": "The queue is Ready, but a consumers[] entry names no AwsLambdaTarget in this namespace, or one in another region. That consumer has no grant and no trigger.",
+              "reason": "MessageQueueConsumerUnresolved",
+              "status": "False"
+            }
+          ],
+          "type": "DependencyReady"
+        }
+      ],
+      "kind": "MessageQueue",
+      "outputs": {
+        "connectionString": {
+          "description": "Azure only. A listen + send connection string scoped to this queue.",
+          "key": "attribute.primary_connection_string",
+          "kind": "secretKeyRef",
+          "secret": "{name}-credentials"
+        },
+        "endpoint": {
+          "configMap": "{name}-connection",
+          "description": "Where a client connects. AWS: the queue URL SendMessage and ReceiveMessage take. Azure: the Service Bus namespace, sb://<namespace>.servicebus.windows.net/. The ConfigMap also carries cloud-specific keys (queueArn, region, deadLetterQueueUrl on AWS; namespace, resourceGroup on Azure).",
+          "key": "endpoint",
+          "kind": "configMapKeyRef"
+        },
+        "queueName": {
+          "configMap": "{name}-connection",
+          "key": "queueName",
+          "kind": "configMapKeyRef"
+        }
+      },
+      "owner": "human",
+      "role": "dependency",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "ConfigMap",
+            "name": "{name}-connection"
+          }
+        },
+        {
+          "createdBy": "crossplane",
+          "from": {
+            "equals": "{name}-credentials",
+            "field": "spec.writeConnectionSecretToRef.name",
+            "kind": "QueueAuthorizationRule",
+            "name": "{name}-auth"
+          },
+          "note": "The Azure provider writes the authorization rule's sensitive attributes, prefixed attribute., into this Secret.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-credentials"
+          },
+          "when": {
+            "equals": "azure",
+            "field": "spec.cloud"
+          }
+        }
+      ],
+      "summary": "A managed message queue with a dead-letter queue - Amazon SQS or Azure Service Bus - that can trigger an AWS Lambda target. Disposable: delete it to remove the queue and its messages.",
+      "verify": [
+        {
+          "check": "The MessageQueue XR's DependencyReady condition has reason MessageQueueReady.",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "MessageQueueReady"
+            ],
+            "type": "DependencyReady"
+          }
+        },
+        {
+          "check": "The ConfigMap {name}-connection exists with the cloud and queueName keys.",
+          "id": "connection-configmap",
+          "run": {
+            "configMap": "{name}-connection",
+            "keys": [
+              "cloud",
+              "queueName"
+            ],
+            "kind": "configMapKeys"
+          }
+        },
+        {
+          "check": "AWS. aws sqs get-queue-attributes on status.url reports server-side encryption on.",
+          "id": "queue-exists",
+          "run": {
+            "args": [
+              "sqs",
+              "get-queue-attributes",
+              "--queue-url",
+              "{status.url}",
+              "--region",
+              "{spec.region}",
+              "--attribute-names",
+              "SqsManagedSseEnabled"
+            ],
+            "cli": "aws",
+            "expect": {
+              "equals": "true",
+              "path": "Attributes.SqsManagedSseEnabled"
+            },
+            "kind": "cloudCli"
+          }
+        }
+      ]
+    },
     "nodejsapplication": {
       "agentNotes": [
         "Scaffold files (RepositoryFiles whose managementPolicies lack Update) are composed once, recorded in status.scaffold.done and then retired; keep a new scaffold file create-once and wrap it in the ledger gate (compositions/_shared/README.md).",
@@ -1828,6 +2126,129 @@
             "kind": "resource",
             "name": "{name}-gitops",
             "resource": "repositories.repo.github.m.upbound.io"
+          }
+        }
+      ]
+    },
+    "objectstorage": {
+      "agentNotes": [
+        "S3 bucket and Azure storage account names are global: a name another account holds fails at create, shown as ObjectStorageProvisioning with the provider's error on the bucket's Synced condition.",
+        "An S3 bucket that holds objects is not deleted unless spec.emptyOnDelete is true; the XR's deletion waits until it is emptied."
+      ],
+      "conditions": [
+        {
+          "reasons": [
+            {
+              "meaning": "The bucket (or account and container), its privacy and encryption settings and every consumer's grant are Ready.",
+              "reason": "ObjectStorageReady",
+              "status": "True"
+            },
+            {
+              "meaning": "A composed resource is not Ready yet (just created, a taken global name, or the provider has no credentials or permission). The message names which.",
+              "reason": "ObjectStorageProvisioning",
+              "status": "False"
+            },
+            {
+              "meaning": "The storage is Ready, but a consumers[] entry names no AwsLambdaTarget in this namespace; that consumer has no grant.",
+              "reason": "ObjectStorageConsumerUnresolved",
+              "status": "False"
+            }
+          ],
+          "type": "DependencyReady"
+        }
+      ],
+      "kind": "ObjectStorage",
+      "outputs": {
+        "bucketName": {
+          "configMap": "{name}-connection",
+          "description": "The S3 bucket's or the blob container's name.",
+          "key": "bucketName",
+          "kind": "configMapKeyRef"
+        },
+        "connectionString": {
+          "description": "Azure only. The storage account's connection string (account key included).",
+          "key": "attribute.primary_connection_string",
+          "kind": "secretKeyRef",
+          "secret": "{name}-credentials"
+        },
+        "endpoint": {
+          "configMap": "{name}-connection",
+          "description": "The HTTPS endpoint objects are read and written through. The ConfigMap also carries cloud-specific keys (bucketArn, region on AWS; storageAccount, resourceGroup on Azure).",
+          "key": "endpoint",
+          "kind": "configMapKeyRef"
+        }
+      },
+      "owner": "human",
+      "role": "dependency",
+      "sources": [
+        {
+          "createdBy": "composition",
+          "object": {
+            "kind": "ConfigMap",
+            "name": "{name}-connection"
+          }
+        },
+        {
+          "createdBy": "crossplane",
+          "from": {
+            "equals": "{name}-credentials",
+            "field": "spec.writeConnectionSecretToRef.name",
+            "kind": "Account",
+            "name": "{name}-account"
+          },
+          "note": "The Azure provider writes the account's sensitive attributes, prefixed attribute., into this Secret.",
+          "object": {
+            "kind": "Secret",
+            "name": "{name}-credentials"
+          },
+          "when": {
+            "equals": "azure",
+            "field": "spec.cloud"
+          }
+        }
+      ],
+      "summary": "Private, encrypted object storage - an Amazon S3 bucket or an Azure Storage Account blob container - with IAM access for AWS Lambda targets.",
+      "verify": [
+        {
+          "check": "The ObjectStorage XR's DependencyReady condition has reason ObjectStorageReady.",
+          "id": "xr-ready",
+          "run": {
+            "kind": "condition",
+            "reasons": [
+              "ObjectStorageReady"
+            ],
+            "type": "DependencyReady"
+          }
+        },
+        {
+          "check": "The ConfigMap {name}-connection exists with the cloud, bucketName and endpoint keys.",
+          "id": "connection-configmap",
+          "run": {
+            "configMap": "{name}-connection",
+            "keys": [
+              "cloud",
+              "bucketName",
+              "endpoint"
+            ],
+            "kind": "configMapKeys"
+          }
+        },
+        {
+          "check": "AWS. aws s3api get-public-access-block reports BlockPublicPolicy true for the bucket.",
+          "id": "bucket-private",
+          "run": {
+            "args": [
+              "s3api",
+              "get-public-access-block",
+              "--bucket",
+              "{status.bucketName}"
+            ],
+            "cli": "aws",
+            "expect": {
+              "equals": true,
+              "path": "PublicAccessBlockConfiguration.BlockPublicPolicy"
+            },
+            "kind": "cloudCli"
           }
         }
       ]
@@ -2705,6 +3126,24 @@
       "group": "catalog.hangar.io",
       "plural": "lambdafunctions"
     },
+    "ManagedPostgreSQL": {
+      "agentSummary": "A managed PostgreSQL server with one database - Amazon RDS or Azure Flexible Server - reachable only from the CIDRs you list, TLS required. Costs money while it exists.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 14,
+      "fieldsTotal": 15,
+      "file": "managedpostgresql.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "managedpostgresqls"
+    },
+    "MessageQueue": {
+      "agentSummary": "A managed message queue with a dead-letter queue - Amazon SQS or Azure Service Bus - that can trigger an AWS Lambda target. Disposable: delete it to remove the queue and its messages.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 18,
+      "fieldsTotal": 19,
+      "file": "messagequeue.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "messagequeues"
+    },
     "MongoDB": {
       "agentSummary": "A dedicated MongoDB replica set (MongoDB Controllers for Kubernetes' MongoDBCommunity CRD), one per application environment.",
       "apiVersion": "catalog.hangar.io/v1alpha1",
@@ -2722,6 +3161,15 @@
       "file": "nodejsapplication.yaml",
       "group": "catalog.hangar.io",
       "plural": "nodejsapplications"
+    },
+    "ObjectStorage": {
+      "agentSummary": "Private, encrypted object storage - an Amazon S3 bucket or an Azure Storage Account blob container - with IAM access for AWS Lambda targets.",
+      "apiVersion": "catalog.hangar.io/v1alpha1",
+      "fieldsDescribed": 12,
+      "fieldsTotal": 13,
+      "file": "objectstorage.yaml",
+      "group": "catalog.hangar.io",
+      "plural": "objectstorages"
     },
     "PostgreSQL": {
       "agentSummary": "A dedicated PostgreSQL database (CloudNativePG), one per application environment.",

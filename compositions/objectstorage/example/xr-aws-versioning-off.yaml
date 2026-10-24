@@ -1,0 +1,9 @@
+# The same bucket after versioning is turned off again.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ObjectStorage
+metadata:
+  name: smoke-archive
+  namespace: app-smoke-fn-cicd
+spec:
+  versioning: false
+  emptyOnDelete: true

@@ -1,0 +1,76 @@
+# cloud: aws - the DB subnet group and the instance. The provider generates the admin password and writes it
+# into the Secret <name>-credentials, key password (autoGeneratePassword + passwordSecretRef; it creates the
+# Secret when it doesn't exist and never overwrites one that does).
+#
+# TLS: rds.force_ssl is 1 in the default parameter group of every PostgreSQL major from 15, so 16 and 17 refuse
+# a plaintext connection with no parameter group of our own. Storage is encrypted with the account's RDS key.
+# engineVersion is the major alone: RDS picks its default minor and autoMinorVersionUpgrade keeps it current.
+# The instance's external-name is AWS's resource id (IdentifierFromProvider); its identifier is serverName.
+<<- if eq $cloud "aws" >>
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: SubnetGroup
+metadata:
+  name: <<$xrName>>-subnets
+  annotations:
+    <<setResourceNameAnnotation "subnet-group">>
+    crossplane.io/external-name: <<$serverName>>-pg
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    description: <<printf "Subnets of PostgreSQL %s (Airframe ManagedPostgreSQL %s)" $serverName $xrName | toJson>>
+    subnetIdRefs:
+      - name: <<$xrName>>-subnet-a
+      - name: <<$xrName>>-subnet-b
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: Instance
+metadata:
+  name: <<$xrName>>-instance
+  annotations:
+    <<setResourceNameAnnotation "instance">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    identifier: <<$serverName>>
+    engine: postgres
+    engineVersion: <<$version | quote>>
+    autoMinorVersionUpgrade: true
+    instanceClass: <<$instanceClass>>
+    allocatedStorage: <<$storageGiB>>
+    storageType: gp3
+    storageEncrypted: true
+    dbName: <<$databaseName>>
+    username: <<$username>>
+    autoGeneratePassword: true
+    passwordSecretRef:
+      name: <<$xrName>>-credentials
+      key: password
+    port: <<$port>>
+    publiclyAccessible: true
+    dbSubnetGroupNameRef:
+      name: <<$xrName>>-subnets
+    vpcSecurityGroupIdRefs:
+      - name: <<$xrName>>-sg
+    backupRetentionPeriod: <<$backupDays>>
+    copyTagsToSnapshot: true
+    applyImmediately: true
+    deletionProtection: <<$protect>>
+    skipFinalSnapshot: <<not $protect>>
+    <<- if $protect >>
+    finalSnapshotIdentifier: <<$serverName>>-final
+    <<- end >>
+    tags:
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- end >>

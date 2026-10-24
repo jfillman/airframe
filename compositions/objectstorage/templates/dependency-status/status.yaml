@@ -1,0 +1,51 @@
+# DependencyReady (closed reason set, see xrds/objectstorage.meta.yaml) plus the XR's own status. Inputs,
+# including $expected and $consumers, come from 01-inputs.yaml.
+<<- $pending := list >>
+<<- range $expected >>
+  <<- $ready := false >>
+  <<- range (dig "resource" "status" "conditions" list (index $obs . | default dict)) >>
+    <<- if and (eq .type "Ready") (eq .status "True") >><<- $ready = true >><<- end >>
+  <<- end >>
+  <<- if not $ready >><<- $pending = append $pending . >><<- end >>
+<<- end >>
+<<- $problems := list >>
+<<- $granted := list >>
+<<- range $consumers >>
+  <<- if .problem >><<- $problems = append $problems .problem >><<- end >>
+  <<- if .roleName >><<- $granted = append $granted .name >><<- end >>
+<<- end >>
+<<- $reason := "ObjectStorageProvisioning" >>
+<<- $status := "False" >>
+<<- $message := printf "Waiting for %s to be ready (just created, or the %s provider has no credentials yet)." (join ", " $pending) $cloud >>
+<<- if $pending >>
+<<- else if $problems >>
+  <<- $reason = "ObjectStorageConsumerUnresolved" >>
+  <<- $message = printf "Bucket %s is ready, but a consumer has no grant: %s. Fix or remove the consumers[] entry." $bucketName (join "; " $problems) >>
+<<- else >>
+  <<- $reason = "ObjectStorageReady" >>
+  <<- $status = "True" >>
+  <<- $message = printf "Bucket %s is ready at %s; its connection details are in the ConfigMap %s-connection." $bucketName $endpoint $xrName >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: DependencyReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: ObjectStorage
+status:
+  cloud: <<$cloud>>
+  bucketName: <<$bucketName | quote>>
+  endpoint: <<$endpoint | quote>>
+  connectionConfigMap: <<$xrName>>-connection
+  <<- if eq $cloud "aws" >>
+  arn: <<$bucketArn | quote>>
+  consumers: <<$granted | toJson>>
+  <<- else >>
+  storageAccount: <<$accountName | quote>>
+  credentialsSecret: <<$xrName>>-credentials
+  <<- end >>

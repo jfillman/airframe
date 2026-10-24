@@ -10,7 +10,7 @@ charts/airframe-application/files/component-outputs.yaml), the contract bundle
 A sidecar:
 
     kind: PostgreSQL                 # the XRD's kind
-    role: component                  # component | target | bootstrap | environment | platform | observability
+    role: component                  # component | target | dependency | bootstrap | environment | platform | observability
     summary: ...
     outputs:                         # what an XR of this kind produces, by name
       uri: {kind: secretKeyRef, secret: "{name}-app", key: uri}
@@ -49,7 +49,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 XRDS = ROOT / "xrds"
 
-ROLES = {"component", "target", "bootstrap", "environment", "platform", "observability"}
+ROLES = {"component", "target", "dependency", "bootstrap", "environment", "platform", "observability"}
 OUTPUT_KINDS = {"literal", "secretKeyRef", "configMapKeyRef"}
 CREATED_BY = {"composition", "operator", "crossplane", "function"}
 

@@ -1,0 +1,625 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks below. Edit
+# templates/render-resources/*.yaml or templates/dependency-status/*.yaml instead, then run
+# ./build-composition.sh to regenerate this file.
+#
+# MessageQueue: a managed message queue (Amazon SQS or Azure Service Bus) with a dead-letter queue and Lambda consumers - see xrds/messagequeue.yaml's header. Both clouds in one Composition, branched on spec.cloud
+# (one Composition per kind keeps the choice deterministic, review C13). Two function-go-templating
+# steps around function-auto-ready, the same shape as the cloud-target Compositions.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: messagequeues.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: MessageQueue
+  mode: Pipeline
+  pipeline:
+    - step: render-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # SHARED PARTIAL (compositions/_shared/render-target-resources/00-cloud-identity.yaml): the cloud-target compositions'
+            # templates/render-target-resources/00-cloud-identity.yaml are symlinks to this file. Edit here, run
+            # tools/build-compositions, then tools/test_compositions.py and review every affected composition's expected/ diff.
+            #
+            # Reads the fleet's AWS facts from the cluster registry (charts/cluster-registry, the hub's clusters.yaml): the
+            # record of the control-plane cluster (type: dev), which is where these XRs, their Crossplane providers and the
+            # Glidepath pipelines that deploy into them run. A cloud-target XR does not know its cluster's name, hence a label
+            # selector and a filter rather than matchName.
+            #
+            #   $awsBoundaryArn  aws.permissionsBoundaryPolicy as an ARN. Every IAM role these compositions create carries it,
+            #                    because the Crossplane identity's policy (HangarCrossplaneCloudTargets) refuses to create a role,
+            #                    or grant one anything, without it (docs/admin/cloud-credentials.md).
+            #   $awsAccountId    aws.accountId.
+            #   $saIssuer        the control-plane cluster's public ServiceAccount issuer (serviceAccountIssuer), or "".
+            #
+            # All three are "" until the registry carries them, and the templates then render what they did before (no
+            # boundary). The cloud account's policy, not this template, is what enforces the boundary.
+            <<- $registryItems := index (.extraResources | default dict) "cluster-registry" | default dict >>
+            <<- $awsBoundaryArn := "" >>
+            <<- $awsAccountId := "" >>
+            <<- $saIssuer := "" >>
+            <<- range (index $registryItems "items" | default list) >>
+              <<- $data := .resource.data | default dict >>
+              <<- if eq (index $data "type" | default "") "dev" >>
+                <<- $awsBoundaryArn = index $data "awsPermissionsBoundaryArn" | default "" >>
+                <<- $awsAccountId = index $data "awsAccountId" | default "" >>
+                <<- $saIssuer = index $data "serviceAccountIssuer" | default "" >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              cluster-registry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchLabels:
+                  hangar.io/cluster-registry: "true"
+            ---
+            # Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+            # at the unindented scope so they persist across the --- separators for the rest of the step - the catalog's
+            # concatenated-template convention.
+            #
+            # $acct, the AWS account, builds the queue ARNs the redrive policy and the grants name before the queue
+            # exists. It comes from the cluster registry ($awsAccountId, 00-cloud-identity.yaml) and, when the registry
+            # can't be read for a reconcile, from the observed queue's own ARN: an input that can be missing for one
+            # reconcile must never drop a composed resource (incident 2026-10-16, see awslambdatarget).
+            #
+            # Consumers: each spec.consumers[] entry is looked up as an AwsLambdaTarget XR of that name in this
+            # namespace (the ExtraResources below). Its function and execution role names follow that target's own
+            # convention (functionName defaults to its XR name; the role is <functionName cut to 59>-exec). A target that
+            # can't be read keeps the grant and trigger it already has, from their observed spec; one that was never
+            # seen gets nothing and DependencyReady says MessageQueueConsumerUnresolved.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $xrNs := $xr.metadata.namespace >>
+            <<- $spec := $xr.spec >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $cloud := $spec.cloud | default "aws" >>
+            <<- $fifo := $spec.fifo | default false >>
+            <<- $baseName := $spec.queueName | default $xrName >>
+            <<- $queueName := $baseName >>
+            <<- $dlqName := printf "%s-dlq" $baseName >>
+            <<- if $fifo >>
+              <<- $queueName = printf "%s.fifo" $baseName >>
+              <<- $dlqName = printf "%s-dlq.fifo" $baseName >>
+            <<- end >>
+            <<- $lockSeconds := $spec.lockSeconds | default 30 >>
+            <<- $retention := $spec.retentionSeconds | default 345600 >>
+            <<- $dl := $spec.deadLetter | default dict >>
+            <<- $dlEnabled := true >>
+            <<- if hasKey $dl "enabled" >><<- $dlEnabled = $dl.enabled >><<- end >>
+            <<- $maxReceive := $dl.maxReceiveCount | default 5 >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $baseName) >>
+            <<- $nsName := $spec.namespaceName | default (printf "hangar-%s" $baseName | trunc 50 | trimSuffix "-") >>
+            <<- $acct := $awsAccountId >>
+            <<- if not $acct >>
+              <<- $observedArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "queue" | default dict) >>
+              <<- if $observedArn >><<- $acct = index (splitList ":" $observedArn) 4 >><<- end >>
+            <<- end >>
+            <<- $queueArn := printf "arn:aws:sqs:%s:%s:%s" $region $acct $queueName >>
+            <<- $dlqArn := printf "arn:aws:sqs:%s:%s:%s" $region $acct $dlqName >>
+            <<- $queueUrl := dig "resource" "status" "atProvider" "url" (printf "https://sqs.%s.amazonaws.com/%s/%s" $region $acct $queueName) (index $obs "queue" | default dict) >>
+            <<- $dlqUrl := dig "resource" "status" "atProvider" "url" (printf "https://sqs.%s.amazonaws.com/%s/%s" $region $acct $dlqName) (index $obs "dead-letter-queue" | default dict) >>
+            <<- $extra := .extraResources | default dict >>
+            <<- $consumers := list >>
+            <<- if eq $cloud "aws" >>
+            <<- range ($spec.consumers | default list) >>
+              <<- $tName := .awsLambdaTarget >>
+              <<- $items := index (index $extra (printf "consumer-%s" $tName) | default dict) "items" | default list >>
+              <<- $grantObs := index $obs (printf "grant-%s" $tName) | default dict >>
+              <<- $triggerObs := index $obs (printf "trigger-%s" $tName) | default dict >>
+              <<- $functionName := "" >>
+              <<- $roleName := "" >>
+              <<- $problem := "" >>
+              <<- if $items >>
+                <<- $t := (first $items).resource >>
+                <<- $functionName = dig "spec" "functionName" $t.metadata.name $t >>
+                <<- $roleName = printf "%s-exec" (trunc 59 $functionName) >>
+                <<- $tRegion := dig "spec" "region" "us-east-1" $t >>
+                <<- if ne $tRegion $region >>
+                  <<- $problem = printf "AwsLambdaTarget %s is in %s and this queue in %s; a Lambda function can't be triggered by a queue in another region" $tName $tRegion $region >>
+                  <<- $functionName = "" >>
+                  <<- $roleName = "" >>
+                <<- end >>
+              <<- else >>
+                <<- $problem = printf "no AwsLambdaTarget %s in namespace %s" $tName $xrNs >>
+                <<- $roleName = dig "resource" "spec" "forProvider" "role" "" $grantObs >>
+                <<- $functionName = dig "resource" "spec" "forProvider" "functionName" "" $triggerObs >>
+              <<- end >>
+              <<- $consumers = append $consumers (dict "name" $tName "access" (.access | default "sendReceive") "trigger" (.trigger | default false) "batchSize" (.batchSize | default 10) "functionName" $functionName "roleName" $roleName "problem" $problem) >>
+            <<- end >>
+            <<- end >>
+            <<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+            <<- $expected := list >>
+            <<- if eq $cloud "aws" >>
+              <<- $expected = append $expected "queue" >>
+              <<- if $dlEnabled >><<- $expected = append $expected "dead-letter-queue" >><<- end >>
+              <<- range $consumers >>
+                <<- if .roleName >><<- $expected = append $expected (printf "grant-%s" .name) >><<- end >>
+                <<- if and .trigger .functionName >><<- $expected = append $expected (printf "trigger-%s" .name) >><<- end >>
+              <<- end >>
+            <<- else >>
+              <<- $expected = list "resource-group" "namespace" "queue" "authorization-rule" >>
+            <<- end >>
+            <<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "message-queue" >>
+            <<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "message-queue" >>
+            <<- if and (eq $cloud "aws") ($spec.consumers | default list) >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              <<- range $spec.consumers >>
+              consumer-<<.awsLambdaTarget>>:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: AwsLambdaTarget
+                namespace: <<$xrNs>>
+                matchName: <<.awsLambdaTarget>>
+              <<- end >>
+            <<- end >>
+            ---
+            # cloud: aws - the SQS queue, its dead-letter queue, and per consumer an inline policy on the Lambda target's
+            # execution role plus (trigger: true) an event source mapping.
+            #
+            # Nothing renders until the AWS account is known ($acct): the redrive policy and every grant name a queue ARN,
+            # and an ARN without its account is a wrong policy, not a partial one. DependencyReady then says
+            # MessageQueueNeedsAwsAccount.
+            #
+            # Encryption: SSE with SQS-owned keys (no KMS key to manage or pay for). The grants are inline policies
+            # (RolePolicy), not managed policies: the Crossplane identity may put an inline policy on an *-exec role that
+            # carries HangarCloudTargetBoundary, never create a managed policy, and the boundary caps what any grant can
+            # reach (docs/admin/cloud-credentials.md). The external-name is the policy's name on the role.
+            <<- if and (eq $cloud "aws") $acct >>
+            <<- if $dlEnabled >>
+            apiVersion: sqs.aws.m.upbound.io/v1beta1
+            kind: Queue
+            metadata:
+              name: <<$xrName>>-dlq
+              annotations:
+                <<setResourceNameAnnotation "dead-letter-queue">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                name: <<$dlqName>>
+                fifoQueue: <<$fifo>>
+                messageRetentionSeconds: 1209600
+                sqsManagedSseEnabled: true
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            <<- end >>
+            apiVersion: sqs.aws.m.upbound.io/v1beta1
+            kind: Queue
+            metadata:
+              name: <<$xrName>>-queue
+              annotations:
+                <<setResourceNameAnnotation "queue">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                name: <<$queueName>>
+                fifoQueue: <<$fifo>>
+                visibilityTimeoutSeconds: <<$lockSeconds>>
+                messageRetentionSeconds: <<$retention>>
+                sqsManagedSseEnabled: true
+                <<- if $dlEnabled >>
+                redrivePolicy: <<dict "deadLetterTargetArn" $dlqArn "maxReceiveCount" $maxReceive | toJson | quote>>
+                <<- end >>
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            <<- range $consumers >>
+            <<- if .roleName >>
+            <<- $actions := list "sqs:GetQueueAttributes" "sqs:GetQueueUrl" >>
+            <<- if has .access (list "send" "sendReceive") >><<- $actions = append $actions "sqs:SendMessage" >><<- end >>
+            <<- if has .access (list "receive" "sendReceive") >>
+            <<- $actions = concat $actions (list "sqs:ReceiveMessage" "sqs:DeleteMessage" "sqs:ChangeMessageVisibility") >>
+            <<- end >>
+            <<- $policy := dict "Version" "2012-10-17" "Statement" (list (dict "Sid" "HangarMessageQueue" "Effect" "Allow" "Action" $actions "Resource" $queueArn)) >>
+            ---
+            apiVersion: iam.aws.m.upbound.io/v1beta1
+            kind: RolePolicy
+            metadata:
+              name: <<$xrName>>-grant-<<.name>>
+              annotations:
+                <<setResourceNameAnnotation (printf "grant-%s" .name)>>
+                crossplane.io/external-name: <<printf "hangar-queue-%s-%s" $xrNs $xrName | trunc 128>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                role: <<.roleName>>
+                policy: <<$policy | toJson | quote>>
+            <<- end >>
+            <<- if and .trigger .functionName >>
+            ---
+            apiVersion: lambda.aws.m.upbound.io/v1beta1
+            kind: EventSourceMapping
+            metadata:
+              name: <<$xrName>>-trigger-<<.name>>
+              annotations:
+                <<setResourceNameAnnotation (printf "trigger-%s" .name)>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                eventSourceArn: <<$queueArn>>
+                functionName: <<.functionName>>
+                batchSize: <<.batchSize>>
+                enabled: true
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            <<- end >>
+            <<- end >>
+            <<- end >>
+            ---
+            # cloud: azure - a resource group this XR owns, a Basic-tier Service Bus namespace for this queue alone, the
+            # queue, and a queue-scoped Shared Access policy (listen + send, not manage) whose connection string the
+            # provider writes into the Secret <name>-credentials (upjet's key attribute.primary_connection_string).
+            #
+            # Basic tier: queues only, no topics, 256 KB messages, about $0.05 per million operations. The dead-letter
+            # sub-queue always exists on Service Bus; maxReceiveCount is its maxDeliveryCount. Every name here is the
+            # resource's external-name (each is TemplatedStringAsIdentifier("name") in the provider). Azure tag names may
+            # not contain / (see azurecontainerapptarget), hence $azureTags.
+            <<- if eq $cloud "azure" >>
+            apiVersion: azure.m.upbound.io/v1beta1
+            kind: ResourceGroup
+            metadata:
+              name: <<$xrName>>-rg
+              annotations:
+                <<setResourceNameAnnotation "resource-group">>
+                crossplane.io/external-name: <<$resourceGroup>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                tags:
+                  <<- range $k, $v := $azureTags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            apiVersion: servicebus.azure.m.upbound.io/v1beta1
+            kind: ServiceBusNamespace
+            metadata:
+              name: <<$xrName>>-sb
+              annotations:
+                <<setResourceNameAnnotation "namespace">>
+                crossplane.io/external-name: <<$nsName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                resourceGroupNameRef:
+                  name: <<$xrName>>-rg
+                sku: Basic
+                localAuthEnabled: true
+                minimumTlsVersion: "1.2"
+                tags:
+                  <<- range $k, $v := $azureTags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            apiVersion: servicebus.azure.m.upbound.io/v1beta1
+            kind: Queue
+            metadata:
+              name: <<$xrName>>-queue
+              annotations:
+                <<setResourceNameAnnotation "queue">>
+                crossplane.io/external-name: <<$queueName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                namespaceIdRef:
+                  name: <<$xrName>>-sb
+                lockDuration: <<printf "PT%dS" (int $lockSeconds) | quote>>
+                defaultMessageTtl: <<printf "PT%dS" (int $retention) | quote>>
+                maxDeliveryCount: <<$maxReceive>>
+                deadLetteringOnMessageExpiration: <<$dlEnabled>>
+            ---
+            apiVersion: servicebus.azure.m.upbound.io/v1beta1
+            kind: QueueAuthorizationRule
+            metadata:
+              name: <<$xrName>>-auth
+              annotations:
+                <<setResourceNameAnnotation "authorization-rule">>
+                crossplane.io/external-name: app
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                queueIdRef:
+                  name: <<$xrName>>-queue
+                listen: true
+                send: true
+                manage: false
+              writeConnectionSecretToRef:
+                name: <<$xrName>>-credentials
+            <<- end >>
+            ---
+            # The ConfigMap <name>-connection: the queue's non-secret connection details, in this XR's namespace, for an
+            # app or an agent to read without cloud credentials. Secrets never go here (Azure's connection string is in
+            # the Secret <name>-credentials, written by the provider).
+            <<- if or (eq $cloud "azure") $acct >>
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: <<$xrName>>-connection
+              annotations:
+                <<setResourceNameAnnotation "connection">>
+              labels:
+                hangar.io/dependency: <<$xrName>>
+                hangar.io/component: message-queue
+            data:
+              cloud: <<$cloud>>
+              queueName: <<$queueName | quote>>
+              endpoint: <<ternary $queueUrl (printf "sb://%s.servicebus.windows.net/" $nsName) (eq $cloud "aws") | quote>>
+              <<- if eq $cloud "aws" >>
+              region: <<$region>>
+              queueUrl: <<$queueUrl | quote>>
+              queueArn: <<$queueArn | quote>>
+              <<- if $dlEnabled >>
+              deadLetterQueueUrl: <<$dlqUrl | quote>>
+              deadLetterQueueArn: <<$dlqArn | quote>>
+              <<- end >>
+              <<- else >>
+              location: <<$location>>
+              resourceGroup: <<$resourceGroup | quote>>
+              namespace: <<printf "%s.servicebus.windows.net" $nsName | quote>>
+              credentialsSecret: <<printf "%s-credentials" $xrName | quote>>
+              credentialsKey: attribute.primary_connection_string
+              <<- end >>
+            <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: dependency-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # SHARED PARTIAL (compositions/_shared/render-target-resources/00-cloud-identity.yaml): the cloud-target compositions'
+            # templates/render-target-resources/00-cloud-identity.yaml are symlinks to this file. Edit here, run
+            # tools/build-compositions, then tools/test_compositions.py and review every affected composition's expected/ diff.
+            #
+            # Reads the fleet's AWS facts from the cluster registry (charts/cluster-registry, the hub's clusters.yaml): the
+            # record of the control-plane cluster (type: dev), which is where these XRs, their Crossplane providers and the
+            # Glidepath pipelines that deploy into them run. A cloud-target XR does not know its cluster's name, hence a label
+            # selector and a filter rather than matchName.
+            #
+            #   $awsBoundaryArn  aws.permissionsBoundaryPolicy as an ARN. Every IAM role these compositions create carries it,
+            #                    because the Crossplane identity's policy (HangarCrossplaneCloudTargets) refuses to create a role,
+            #                    or grant one anything, without it (docs/admin/cloud-credentials.md).
+            #   $awsAccountId    aws.accountId.
+            #   $saIssuer        the control-plane cluster's public ServiceAccount issuer (serviceAccountIssuer), or "".
+            #
+            # All three are "" until the registry carries them, and the templates then render what they did before (no
+            # boundary). The cloud account's policy, not this template, is what enforces the boundary.
+            <<- $registryItems := index (.extraResources | default dict) "cluster-registry" | default dict >>
+            <<- $awsBoundaryArn := "" >>
+            <<- $awsAccountId := "" >>
+            <<- $saIssuer := "" >>
+            <<- range (index $registryItems "items" | default list) >>
+              <<- $data := .resource.data | default dict >>
+              <<- if eq (index $data "type" | default "") "dev" >>
+                <<- $awsBoundaryArn = index $data "awsPermissionsBoundaryArn" | default "" >>
+                <<- $awsAccountId = index $data "awsAccountId" | default "" >>
+                <<- $saIssuer = index $data "serviceAccountIssuer" | default "" >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              cluster-registry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchLabels:
+                  hangar.io/cluster-registry: "true"
+            ---
+            # Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+            # at the unindented scope so they persist across the --- separators for the rest of the step - the catalog's
+            # concatenated-template convention.
+            #
+            # $acct, the AWS account, builds the queue ARNs the redrive policy and the grants name before the queue
+            # exists. It comes from the cluster registry ($awsAccountId, 00-cloud-identity.yaml) and, when the registry
+            # can't be read for a reconcile, from the observed queue's own ARN: an input that can be missing for one
+            # reconcile must never drop a composed resource (incident 2026-10-16, see awslambdatarget).
+            #
+            # Consumers: each spec.consumers[] entry is looked up as an AwsLambdaTarget XR of that name in this
+            # namespace (the ExtraResources below). Its function and execution role names follow that target's own
+            # convention (functionName defaults to its XR name; the role is <functionName cut to 59>-exec). A target that
+            # can't be read keeps the grant and trigger it already has, from their observed spec; one that was never
+            # seen gets nothing and DependencyReady says MessageQueueConsumerUnresolved.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $xrNs := $xr.metadata.namespace >>
+            <<- $spec := $xr.spec >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $cloud := $spec.cloud | default "aws" >>
+            <<- $fifo := $spec.fifo | default false >>
+            <<- $baseName := $spec.queueName | default $xrName >>
+            <<- $queueName := $baseName >>
+            <<- $dlqName := printf "%s-dlq" $baseName >>
+            <<- if $fifo >>
+              <<- $queueName = printf "%s.fifo" $baseName >>
+              <<- $dlqName = printf "%s-dlq.fifo" $baseName >>
+            <<- end >>
+            <<- $lockSeconds := $spec.lockSeconds | default 30 >>
+            <<- $retention := $spec.retentionSeconds | default 345600 >>
+            <<- $dl := $spec.deadLetter | default dict >>
+            <<- $dlEnabled := true >>
+            <<- if hasKey $dl "enabled" >><<- $dlEnabled = $dl.enabled >><<- end >>
+            <<- $maxReceive := $dl.maxReceiveCount | default 5 >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $baseName) >>
+            <<- $nsName := $spec.namespaceName | default (printf "hangar-%s" $baseName | trunc 50 | trimSuffix "-") >>
+            <<- $acct := $awsAccountId >>
+            <<- if not $acct >>
+              <<- $observedArn := dig "resource" "status" "atProvider" "arn" "" (index $obs "queue" | default dict) >>
+              <<- if $observedArn >><<- $acct = index (splitList ":" $observedArn) 4 >><<- end >>
+            <<- end >>
+            <<- $queueArn := printf "arn:aws:sqs:%s:%s:%s" $region $acct $queueName >>
+            <<- $dlqArn := printf "arn:aws:sqs:%s:%s:%s" $region $acct $dlqName >>
+            <<- $queueUrl := dig "resource" "status" "atProvider" "url" (printf "https://sqs.%s.amazonaws.com/%s/%s" $region $acct $queueName) (index $obs "queue" | default dict) >>
+            <<- $dlqUrl := dig "resource" "status" "atProvider" "url" (printf "https://sqs.%s.amazonaws.com/%s/%s" $region $acct $dlqName) (index $obs "dead-letter-queue" | default dict) >>
+            <<- $extra := .extraResources | default dict >>
+            <<- $consumers := list >>
+            <<- if eq $cloud "aws" >>
+            <<- range ($spec.consumers | default list) >>
+              <<- $tName := .awsLambdaTarget >>
+              <<- $items := index (index $extra (printf "consumer-%s" $tName) | default dict) "items" | default list >>
+              <<- $grantObs := index $obs (printf "grant-%s" $tName) | default dict >>
+              <<- $triggerObs := index $obs (printf "trigger-%s" $tName) | default dict >>
+              <<- $functionName := "" >>
+              <<- $roleName := "" >>
+              <<- $problem := "" >>
+              <<- if $items >>
+                <<- $t := (first $items).resource >>
+                <<- $functionName = dig "spec" "functionName" $t.metadata.name $t >>
+                <<- $roleName = printf "%s-exec" (trunc 59 $functionName) >>
+                <<- $tRegion := dig "spec" "region" "us-east-1" $t >>
+                <<- if ne $tRegion $region >>
+                  <<- $problem = printf "AwsLambdaTarget %s is in %s and this queue in %s; a Lambda function can't be triggered by a queue in another region" $tName $tRegion $region >>
+                  <<- $functionName = "" >>
+                  <<- $roleName = "" >>
+                <<- end >>
+              <<- else >>
+                <<- $problem = printf "no AwsLambdaTarget %s in namespace %s" $tName $xrNs >>
+                <<- $roleName = dig "resource" "spec" "forProvider" "role" "" $grantObs >>
+                <<- $functionName = dig "resource" "spec" "forProvider" "functionName" "" $triggerObs >>
+              <<- end >>
+              <<- $consumers = append $consumers (dict "name" $tName "access" (.access | default "sendReceive") "trigger" (.trigger | default false) "batchSize" (.batchSize | default 10) "functionName" $functionName "roleName" $roleName "problem" $problem) >>
+            <<- end >>
+            <<- end >>
+            <<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+            <<- $expected := list >>
+            <<- if eq $cloud "aws" >>
+              <<- $expected = append $expected "queue" >>
+              <<- if $dlEnabled >><<- $expected = append $expected "dead-letter-queue" >><<- end >>
+              <<- range $consumers >>
+                <<- if .roleName >><<- $expected = append $expected (printf "grant-%s" .name) >><<- end >>
+                <<- if and .trigger .functionName >><<- $expected = append $expected (printf "trigger-%s" .name) >><<- end >>
+              <<- end >>
+            <<- else >>
+              <<- $expected = list "resource-group" "namespace" "queue" "authorization-rule" >>
+            <<- end >>
+            <<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "message-queue" >>
+            <<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "message-queue" >>
+            <<- if and (eq $cloud "aws") ($spec.consumers | default list) >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              <<- range $spec.consumers >>
+              consumer-<<.awsLambdaTarget>>:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: AwsLambdaTarget
+                namespace: <<$xrNs>>
+                matchName: <<.awsLambdaTarget>>
+              <<- end >>
+            <<- end >>
+            ---
+            # DependencyReady (closed reason set, see xrds/messagequeue.meta.yaml) plus the XR's own status. Inputs,
+            # including $expected (the composed resources to wait for) and $consumers, come from 01-inputs.yaml. The
+            # composite document carries no composition-resource-name annotation, so function-go-templating updates the
+            # composite's status.
+            <<- $pending := list >>
+            <<- range $expected >>
+              <<- $ready := false >>
+              <<- range (dig "resource" "status" "conditions" list (index $obs . | default dict)) >>
+                <<- if and (eq .type "Ready") (eq .status "True") >><<- $ready = true >><<- end >>
+              <<- end >>
+              <<- if not $ready >><<- $pending = append $pending . >><<- end >>
+            <<- end >>
+            <<- $problems := list >>
+            <<- $granted := list >>
+            <<- range $consumers >>
+              <<- if .problem >><<- $problems = append $problems .problem >><<- end >>
+              <<- if .roleName >><<- $granted = append $granted .name >><<- end >>
+            <<- end >>
+            <<- $reason := "MessageQueueProvisioning" >>
+            <<- $status := "False" >>
+            <<- $message := printf "Waiting for %s to be ready (just created, or the %s provider has no credentials yet)." (join ", " $pending) $cloud >>
+            <<- if and (eq $cloud "aws") (not $acct) >>
+              <<- $reason = "MessageQueueNeedsAwsAccount" >>
+              <<- $message = "The cluster registry names no AWS account (clusters.yaml aws.accountId), so the queue's ARN is unknown and nothing is created. Airframe docs/admin/cloud-credentials.md." >>
+            <<- else if $pending >>
+            <<- else if $problems >>
+              <<- $reason = "MessageQueueConsumerUnresolved" >>
+              <<- $message = printf "Queue %s is ready, but a consumer has no grant: %s. Fix or remove the consumers[] entry." $queueName (join "; " $problems) >>
+            <<- else >>
+              <<- $reason = "MessageQueueReady" >>
+              <<- $status = "True" >>
+              <<- $message = printf "Queue %s is ready; its connection details are in the ConfigMap %s-connection." $queueName $xrName >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: DependencyReady
+                status: <<$status | quote>>
+                reason: <<$reason>>
+                message: <<$message | quote>>
+                target: CompositeAndClaim
+            ---
+            apiVersion: <<$xr.apiVersion>>
+            kind: MessageQueue
+            status:
+              cloud: <<$cloud>>
+              queueName: <<$queueName | quote>>
+              connectionConfigMap: <<$xrName>>-connection
+              <<- if eq $cloud "aws" >>
+              <<- if $acct >>
+              url: <<$queueUrl | quote>>
+              arn: <<$queueArn | quote>>
+              <<- if $dlEnabled >>
+              deadLetterArn: <<$dlqArn | quote>>
+              <<- end >>
+              <<- end >>
+              consumers: <<$granted | toJson>>
+              <<- else >>
+              namespace: <<printf "%s.servicebus.windows.net" $nsName | quote>>
+              credentialsSecret: <<$xrName>>-credentials
+              <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

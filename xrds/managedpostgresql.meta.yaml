@@ -1,0 +1,80 @@
+# Sidecar meta for the ManagedPostgreSQL cloud dependency. Requested as its own XR, not a `components:` entry.
+# The password Secret is written by the cloud provider (autoGeneratePassword + a password Secret reference on the
+# server), not composed.
+kind: ManagedPostgreSQL
+role: dependency
+summary: >-
+  A managed PostgreSQL server with one database - Amazon RDS or Azure Flexible Server - reachable only from the
+  CIDRs you list, TLS required. Costs money while it exists.
+outputs:
+  host:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: host
+  port:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: port
+  database:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: database
+  username:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: username
+  sslmode:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: sslmode
+    description: Always require; the server refuses plaintext.
+  password:
+    kind: secretKeyRef
+    secret: "{name}-credentials"
+    key: password
+sources:
+  - object: {kind: ConfigMap, name: "{name}-connection"}
+    createdBy: composition
+  - object: {kind: Secret, name: "{name}-credentials"}
+    createdBy: operator
+    when: {field: spec.cloud, equals: aws}
+    from: {kind: Instance, name: "{name}-instance", field: spec.forProvider.passwordSecretRef.name, equals: "{name}-credentials"}
+    note: provider-aws-rds generates the password (autoGeneratePassword) and creates this Secret when it does not exist.
+  - object: {kind: Secret, name: "{name}-credentials"}
+    createdBy: operator
+    when: {field: spec.cloud, equals: azure}
+    from: {kind: FlexibleServer, name: "{name}-server", field: spec.forProvider.administratorPasswordSecretRef.name, equals: "{name}-credentials"}
+    note: provider-azure-dbforpostgresql generates the password (autoGeneratePassword) and creates this Secret when it does not exist.
+conditions:
+  - type: DependencyReady
+    reasons:
+      - reason: ManagedPostgreSQLReady
+        status: "True"
+        meaning: The server, its database and network or firewall rules are Ready; the host is in status.host.
+      - reason: ManagedPostgreSQLProvisioning
+        status: "False"
+        meaning: A composed resource is not Ready yet. A new server takes 5 to 15 minutes. The message names what is pending.
+      - reason: ManagedPostgreSQLFailing
+        status: "False"
+        meaning: The cloud provider can't create or update the server (a taken Azure name, a quota, an instance class the region lacks, missing permission); the message carries the provider's error.
+verify:
+  - id: xr-ready
+    check: The ManagedPostgreSQL XR's DependencyReady condition has reason ManagedPostgreSQLReady.
+    run: {kind: condition, type: DependencyReady, reasons: [ManagedPostgreSQLReady]}
+  - id: connection-configmap
+    check: The ConfigMap {name}-connection has host, port, database and username.
+    run: {kind: configMapKeys, configMap: "{name}-connection", keys: [host, port, database, username]}
+  - id: password-secret
+    check: The Secret {name}-credentials has a non-empty password key.
+    run: {kind: secretKeys, secret: "{name}-credentials", keys: [password]}
+  - id: server-available
+    check: AWS. aws rds describe-db-instances reports the instance available.
+    run:
+      kind: cloudCli
+      cli: aws
+      args: [rds, describe-db-instances, --db-instance-identifier, "{status.serverName}", --region, "{spec.region}"]
+      expect: {path: "DBInstances[0].DBInstanceStatus", equals: available}
+agentNotes:
+  - "Reachable only from spec.allowedCidrs; empty admits no one. A Lambda function outside a VPC has no fixed source address, so it needs 0.0.0.0/0, leaving the password and TLS as the only protection."
+  - "The Secret {name}-credentials is created by the provider, not composed: it survives the XR's deletion. Delete it by hand after the server is gone."
+owner: human

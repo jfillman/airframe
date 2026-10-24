@@ -1,0 +1,14 @@
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata: {name: smoke-artifacts-rg, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: resource-group}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata: {name: smoke-artifacts-account, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: storage-account}}
+status: {atProvider: {primaryBlobEndpoint: "https://smokeartifacts.blob.core.windows.net/"}, conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata: {name: smoke-artifacts-container, namespace: app-smoke-az-fn-cicd, annotations: {crossplane.io/composition-resource-name: container}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}

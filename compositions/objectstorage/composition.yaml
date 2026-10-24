@@ -1,0 +1,467 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks below. Edit
+# templates/render-resources/*.yaml or templates/dependency-status/*.yaml instead, then run
+# ./build-composition.sh to regenerate this file.
+#
+# ObjectStorage: private object storage (an S3 bucket or an Azure Storage Account blob container) with Lambda consumers - see xrds/objectstorage.yaml's header. Both clouds in one Composition, branched on spec.cloud
+# (one Composition per kind keeps the choice deterministic, review C13). Two function-go-templating
+# steps around function-auto-ready, the same shape as the cloud-target Compositions.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: objectstorages.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: ObjectStorage
+  mode: Pipeline
+  pipeline:
+    - step: render-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+            # at the unindented scope so they persist across the --- separators for the rest of the step.
+            #
+            # An S3 bucket's ARN needs no account (arn:aws:s3:::<bucket>), so unlike MessageQueue nothing here waits for
+            # the cluster registry. Consumers resolve exactly as in compositions/messagequeue/templates/render-resources/
+            # 01-inputs.yaml: an AwsLambdaTarget of that name in this namespace, its role <functionName cut to 59>-exec,
+            # and a target that can't be read for a reconcile keeps the grant it has from the grant's observed spec.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $xrNs := $xr.metadata.namespace >>
+            <<- $spec := $xr.spec >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $cloud := $spec.cloud | default "aws" >>
+            <<- $bucketName := $spec.bucketName | default $xrName >>
+            <<- $versioning := $spec.versioning | default false >>
+            <<- $emptyOnDelete := $spec.emptyOnDelete | default false >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $bucketName) >>
+            <<- $accountName := $spec.storageAccountName | default (regexReplaceAll "[^a-z0-9]" $bucketName "" | trunc 24) >>
+            <<- $bucketArn := printf "arn:aws:s3:::%s" $bucketName >>
+            <<- $endpoint := printf "https://%s.s3.%s.amazonaws.com" $bucketName $region >>
+            <<- if eq $cloud "azure" >>
+              <<- $endpoint = dig "resource" "status" "atProvider" "primaryBlobEndpoint" (printf "https://%s.blob.core.windows.net/" $accountName) (index $obs "storage-account" | default dict) >>
+            <<- end >>
+            <<- $extra := .extraResources | default dict >>
+            <<- $consumers := list >>
+            <<- if eq $cloud "aws" >>
+            <<- range ($spec.consumers | default list) >>
+              <<- $tName := .awsLambdaTarget >>
+              <<- $items := index (index $extra (printf "consumer-%s" $tName) | default dict) "items" | default list >>
+              <<- $roleName := "" >>
+              <<- $problem := "" >>
+              <<- if $items >>
+                <<- $t := (first $items).resource >>
+                <<- $roleName = printf "%s-exec" (trunc 59 (dig "spec" "functionName" $t.metadata.name $t)) >>
+              <<- else >>
+                <<- $problem = printf "no AwsLambdaTarget %s in namespace %s" $tName $xrNs >>
+                <<- $roleName = dig "resource" "spec" "forProvider" "role" "" (index $obs (printf "grant-%s" $tName) | default dict) >>
+              <<- end >>
+              <<- $consumers = append $consumers (dict "name" $tName "access" (.access | default "readWrite") "roleName" $roleName "problem" $problem) >>
+            <<- end >>
+            <<- end >>
+            <<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+            <<- $expected := list >>
+            <<- if eq $cloud "aws" >>
+              <<- $expected = list "bucket" "public-access-block" "ownership-controls" "encryption" >>
+              <<- if or $versioning (index $obs "versioning") >><<- $expected = append $expected "versioning" >><<- end >>
+              <<- range $consumers >>
+                <<- if .roleName >><<- $expected = append $expected (printf "grant-%s" .name) >><<- end >>
+              <<- end >>
+            <<- else >>
+              <<- $expected = list "resource-group" "storage-account" "container" >>
+            <<- end >>
+            <<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "object-storage" >>
+            <<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "object-storage" >>
+            <<- if and (eq $cloud "aws") ($spec.consumers | default list) >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              <<- range $spec.consumers >>
+              consumer-<<.awsLambdaTarget>>:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: AwsLambdaTarget
+                namespace: <<$xrNs>>
+                matchName: <<.awsLambdaTarget>>
+              <<- end >>
+            <<- end >>
+            ---
+            # cloud: aws - the bucket and the four settings that make it private, plus per consumer an inline policy on the
+            # Lambda target's execution role (see compositions/messagequeue/templates/render-resources/10-aws.yaml for why
+            # grants are inline RolePolicies).
+            #
+            # Private and encrypted, with no field to change it: Block Public Access on all four settings, ownership
+            # BucketOwnerEnforced (ACLs off, the bucket owner owns every object) and SSE-S3 (AES256, keys managed by S3, no
+            # cost). Each setting is its own resource, as the provider models it, so none is a field on the Bucket that a
+            # later provider version could start reverting. The Bucket's external-name is its name (ParameterAsIdentifier).
+            #
+            # Versioning: once a bucket has been versioned it can only be suspended, never returned to unversioned, so the
+            # BucketVersioning resource is composed while versioning is on AND after it is turned off (status Suspended),
+            # for as long as it is observed. Dropping it would leave the bucket versioned.
+            <<- if eq $cloud "aws" >>
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: Bucket
+            metadata:
+              name: <<$xrName>>-bucket
+              annotations:
+                <<setResourceNameAnnotation "bucket">>
+                crossplane.io/external-name: <<$bucketName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                forceDestroy: <<$emptyOnDelete>>
+                tags:
+                  <<- range $k, $v := $tags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: BucketPublicAccessBlock
+            metadata:
+              name: <<$xrName>>-public-access-block
+              annotations:
+                <<setResourceNameAnnotation "public-access-block">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                bucketRef:
+                  name: <<$xrName>>-bucket
+                blockPublicAcls: true
+                blockPublicPolicy: true
+                ignorePublicAcls: true
+                restrictPublicBuckets: true
+            ---
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: BucketOwnershipControls
+            metadata:
+              name: <<$xrName>>-ownership
+              annotations:
+                <<setResourceNameAnnotation "ownership-controls">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                bucketRef:
+                  name: <<$xrName>>-bucket
+                rule:
+                  objectOwnership: BucketOwnerEnforced
+            ---
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: BucketServerSideEncryptionConfiguration
+            metadata:
+              name: <<$xrName>>-encryption
+              annotations:
+                <<setResourceNameAnnotation "encryption">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                bucketRef:
+                  name: <<$xrName>>-bucket
+                rule:
+                  - applyServerSideEncryptionByDefault:
+                      sseAlgorithm: AES256
+            <<- if or $versioning (index $obs "versioning") >>
+            ---
+            apiVersion: s3.aws.m.upbound.io/v1beta1
+            kind: BucketVersioning
+            metadata:
+              name: <<$xrName>>-versioning
+              annotations:
+                <<setResourceNameAnnotation "versioning">>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                region: <<$region>>
+                bucketRef:
+                  name: <<$xrName>>-bucket
+                versioningConfiguration:
+                  status: <<ternary "Enabled" "Suspended" $versioning>>
+            <<- end >>
+            <<- range $consumers >>
+            <<- if .roleName >>
+            <<- $objectActions := list "s3:GetObject" >>
+            <<- if eq .access "readWrite" >>
+            <<- $objectActions = concat $objectActions (list "s3:PutObject" "s3:DeleteObject" "s3:AbortMultipartUpload" "s3:ListMultipartUploadParts") >>
+            <<- end >>
+            <<- $policy := dict "Version" "2012-10-17" "Statement" (list (dict "Sid" "HangarObjectStorageBucket" "Effect" "Allow" "Action" (list "s3:ListBucket" "s3:GetBucketLocation") "Resource" $bucketArn) (dict "Sid" "HangarObjectStorageObjects" "Effect" "Allow" "Action" $objectActions "Resource" (printf "%s/*" $bucketArn))) >>
+            ---
+            apiVersion: iam.aws.m.upbound.io/v1beta1
+            kind: RolePolicy
+            metadata:
+              name: <<$xrName>>-grant-<<.name>>
+              annotations:
+                <<setResourceNameAnnotation (printf "grant-%s" .name)>>
+                crossplane.io/external-name: <<printf "hangar-storage-%s-%s" $xrNs $xrName | trunc 128>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                role: <<.roleName>>
+                policy: <<$policy | toJson | quote>>
+            <<- end >>
+            <<- end >>
+            <<- end >>
+            ---
+            # cloud: azure - a resource group this XR owns, a StorageV2 account for this container alone (Standard, LRS)
+            # and one private blob container. The provider writes the account's keys and connection string into the
+            # Secret <name>-credentials (upjet keys attribute.primary_connection_string, attribute.primary_access_key).
+            #
+            # Private and encrypted: minimum TLS 1.2, HTTPS only, no blob may ever be made public
+            # (allowNestedItemsToBePublic: false), container access type private. Shared-key access stays on because the
+            # connection string is how an Azure consumer authenticates until Azure consumers get managed identities.
+            # Azure encrypts every account at rest with Microsoft-managed keys; there is nothing to turn on.
+            <<- if eq $cloud "azure" >>
+            apiVersion: azure.m.upbound.io/v1beta1
+            kind: ResourceGroup
+            metadata:
+              name: <<$xrName>>-rg
+              annotations:
+                <<setResourceNameAnnotation "resource-group">>
+                crossplane.io/external-name: <<$resourceGroup>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                tags:
+                  <<- range $k, $v := $azureTags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+            ---
+            apiVersion: storage.azure.m.upbound.io/v1beta1
+            kind: Account
+            metadata:
+              name: <<$xrName>>-account
+              annotations:
+                <<setResourceNameAnnotation "storage-account">>
+                crossplane.io/external-name: <<$accountName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                location: <<$location>>
+                resourceGroupNameRef:
+                  name: <<$xrName>>-rg
+                accountKind: StorageV2
+                accountTier: Standard
+                accountReplicationType: LRS
+                minTlsVersion: TLS1_2
+                httpsTrafficOnlyEnabled: true
+                allowNestedItemsToBePublic: false
+                sharedAccessKeyEnabled: true
+                blobProperties:
+                  versioningEnabled: <<$versioning>>
+                tags:
+                  <<- range $k, $v := $azureTags >>
+                  <<$k>>: <<$v | quote>>
+                  <<- end >>
+              writeConnectionSecretToRef:
+                name: <<$xrName>>-credentials
+            ---
+            apiVersion: storage.azure.m.upbound.io/v1beta1
+            kind: Container
+            metadata:
+              name: <<$xrName>>-container
+              annotations:
+                <<setResourceNameAnnotation "container">>
+                crossplane.io/external-name: <<$bucketName>>
+            spec:
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                storageAccountIdRef:
+                  name: <<$xrName>>-account
+                containerAccessType: private
+            <<- end >>
+            ---
+            # The ConfigMap <name>-connection: the storage's non-secret connection details, in this XR's namespace. Secrets
+            # never go here (Azure's connection string is in the Secret <name>-credentials, written by the provider).
+            apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: <<$xrName>>-connection
+              annotations:
+                <<setResourceNameAnnotation "connection">>
+              labels:
+                hangar.io/dependency: <<$xrName>>
+                hangar.io/component: object-storage
+            data:
+              cloud: <<$cloud>>
+              bucketName: <<$bucketName | quote>>
+              endpoint: <<$endpoint | quote>>
+              <<- if eq $cloud "aws" >>
+              region: <<$region>>
+              bucketArn: <<$bucketArn | quote>>
+              <<- else >>
+              location: <<$location>>
+              resourceGroup: <<$resourceGroup | quote>>
+              storageAccount: <<$accountName | quote>>
+              credentialsSecret: <<printf "%s-credentials" $xrName | quote>>
+              credentialsKey: attribute.primary_connection_string
+              <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: dependency-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+            # at the unindented scope so they persist across the --- separators for the rest of the step.
+            #
+            # An S3 bucket's ARN needs no account (arn:aws:s3:::<bucket>), so unlike MessageQueue nothing here waits for
+            # the cluster registry. Consumers resolve exactly as in compositions/messagequeue/templates/render-resources/
+            # 01-inputs.yaml: an AwsLambdaTarget of that name in this namespace, its role <functionName cut to 59>-exec,
+            # and a target that can't be read for a reconcile keeps the grant it has from the grant's observed spec.
+            <<- $xr := .observed.composite.resource >>
+            <<- $xrName := $xr.metadata.name >>
+            <<- $xrNs := $xr.metadata.namespace >>
+            <<- $spec := $xr.spec >>
+            <<- $obs := .observed.resources | default dict >>
+            <<- $cloud := $spec.cloud | default "aws" >>
+            <<- $bucketName := $spec.bucketName | default $xrName >>
+            <<- $versioning := $spec.versioning | default false >>
+            <<- $emptyOnDelete := $spec.emptyOnDelete | default false >>
+            <<- $region := $spec.region | default "us-east-1" >>
+            <<- $location := $spec.location | default "eastus" >>
+            <<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $bucketName) >>
+            <<- $accountName := $spec.storageAccountName | default (regexReplaceAll "[^a-z0-9]" $bucketName "" | trunc 24) >>
+            <<- $bucketArn := printf "arn:aws:s3:::%s" $bucketName >>
+            <<- $endpoint := printf "https://%s.s3.%s.amazonaws.com" $bucketName $region >>
+            <<- if eq $cloud "azure" >>
+              <<- $endpoint = dig "resource" "status" "atProvider" "primaryBlobEndpoint" (printf "https://%s.blob.core.windows.net/" $accountName) (index $obs "storage-account" | default dict) >>
+            <<- end >>
+            <<- $extra := .extraResources | default dict >>
+            <<- $consumers := list >>
+            <<- if eq $cloud "aws" >>
+            <<- range ($spec.consumers | default list) >>
+              <<- $tName := .awsLambdaTarget >>
+              <<- $items := index (index $extra (printf "consumer-%s" $tName) | default dict) "items" | default list >>
+              <<- $roleName := "" >>
+              <<- $problem := "" >>
+              <<- if $items >>
+                <<- $t := (first $items).resource >>
+                <<- $roleName = printf "%s-exec" (trunc 59 (dig "spec" "functionName" $t.metadata.name $t)) >>
+              <<- else >>
+                <<- $problem = printf "no AwsLambdaTarget %s in namespace %s" $tName $xrNs >>
+                <<- $roleName = dig "resource" "spec" "forProvider" "role" "" (index $obs (printf "grant-%s" $tName) | default dict) >>
+              <<- end >>
+              <<- $consumers = append $consumers (dict "name" $tName "access" (.access | default "readWrite") "roleName" $roleName "problem" $problem) >>
+            <<- end >>
+            <<- end >>
+            <<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+            <<- $expected := list >>
+            <<- if eq $cloud "aws" >>
+              <<- $expected = list "bucket" "public-access-block" "ownership-controls" "encryption" >>
+              <<- if or $versioning (index $obs "versioning") >><<- $expected = append $expected "versioning" >><<- end >>
+              <<- range $consumers >>
+                <<- if .roleName >><<- $expected = append $expected (printf "grant-%s" .name) >><<- end >>
+              <<- end >>
+            <<- else >>
+              <<- $expected = list "resource-group" "storage-account" "container" >>
+            <<- end >>
+            <<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "object-storage" >>
+            <<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "object-storage" >>
+            <<- if and (eq $cloud "aws") ($spec.consumers | default list) >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              <<- range $spec.consumers >>
+              consumer-<<.awsLambdaTarget>>:
+                apiVersion: catalog.hangar.io/v1alpha1
+                kind: AwsLambdaTarget
+                namespace: <<$xrNs>>
+                matchName: <<.awsLambdaTarget>>
+              <<- end >>
+            <<- end >>
+            ---
+            # DependencyReady (closed reason set, see xrds/objectstorage.meta.yaml) plus the XR's own status. Inputs,
+            # including $expected and $consumers, come from 01-inputs.yaml.
+            <<- $pending := list >>
+            <<- range $expected >>
+              <<- $ready := false >>
+              <<- range (dig "resource" "status" "conditions" list (index $obs . | default dict)) >>
+                <<- if and (eq .type "Ready") (eq .status "True") >><<- $ready = true >><<- end >>
+              <<- end >>
+              <<- if not $ready >><<- $pending = append $pending . >><<- end >>
+            <<- end >>
+            <<- $problems := list >>
+            <<- $granted := list >>
+            <<- range $consumers >>
+              <<- if .problem >><<- $problems = append $problems .problem >><<- end >>
+              <<- if .roleName >><<- $granted = append $granted .name >><<- end >>
+            <<- end >>
+            <<- $reason := "ObjectStorageProvisioning" >>
+            <<- $status := "False" >>
+            <<- $message := printf "Waiting for %s to be ready (just created, or the %s provider has no credentials yet)." (join ", " $pending) $cloud >>
+            <<- if $pending >>
+            <<- else if $problems >>
+              <<- $reason = "ObjectStorageConsumerUnresolved" >>
+              <<- $message = printf "Bucket %s is ready, but a consumer has no grant: %s. Fix or remove the consumers[] entry." $bucketName (join "; " $problems) >>
+            <<- else >>
+              <<- $reason = "ObjectStorageReady" >>
+              <<- $status = "True" >>
+              <<- $message = printf "Bucket %s is ready at %s; its connection details are in the ConfigMap %s-connection." $bucketName $endpoint $xrName >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: DependencyReady
+                status: <<$status | quote>>
+                reason: <<$reason>>
+                message: <<$message | quote>>
+                target: CompositeAndClaim
+            ---
+            apiVersion: <<$xr.apiVersion>>
+            kind: ObjectStorage
+            status:
+              cloud: <<$cloud>>
+              bucketName: <<$bucketName | quote>>
+              endpoint: <<$endpoint | quote>>
+              connectionConfigMap: <<$xrName>>-connection
+              <<- if eq $cloud "aws" >>
+              arn: <<$bucketArn | quote>>
+              consumers: <<$granted | toJson>>
+              <<- else >>
+              storageAccount: <<$accountName | quote>>
+              credentialsSecret: <<$xrName>>-credentials
+              <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

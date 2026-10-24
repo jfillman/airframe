@@ -1,0 +1,103 @@
+# cloud: azure - a resource group this XR owns, the Flexible Server, its database, and one firewall rule per
+# spec.allowedCidrs entry (no rule, no access). The provider generates the admin password into the Secret
+# <name>-credentials, key password, as on AWS. require_secure_transport is ON by default on Flexible Server, so
+# a plaintext connection is refused with no server parameter of our own.
+#
+# Firewall rules take an address range, not a CIDR, so each CIDR is turned into its first and last address here:
+# the address as a 32-bit number, rounded down to the block size (2^(32-prefix)) for the start, plus the block
+# size minus one for the end.
+<<- if eq $cloud "azure" >>
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: <<$xrName>>-rg
+  annotations:
+    <<setResourceNameAnnotation "resource-group">>
+    crossplane.io/external-name: <<$resourceGroup>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServer
+metadata:
+  name: <<$xrName>>-server
+  annotations:
+    <<setResourceNameAnnotation "server">>
+    crossplane.io/external-name: <<$serverName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    resourceGroupNameRef:
+      name: <<$xrName>>-rg
+    version: <<$version | quote>>
+    skuName: <<$azureSku>>
+    storageMb: <<mul $storageGiB 1024>>
+    administratorLogin: <<$username>>
+    autoGeneratePassword: true
+    administratorPasswordSecretRef:
+      name: <<$xrName>>-credentials
+      key: password
+    authentication:
+      passwordAuthEnabled: true
+      activeDirectoryAuthEnabled: false
+    publicNetworkAccessEnabled: true
+    backupRetentionDays: <<$backupDays>>
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServerDatabase
+metadata:
+  name: <<$xrName>>-database
+  annotations:
+    <<setResourceNameAnnotation "database">>
+    crossplane.io/external-name: <<$databaseName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    serverIdRef:
+      name: <<$xrName>>-server
+    charset: UTF8
+    collation: en_US.utf8
+<<- range $i, $c := $cidrs >>
+<<- $parts := splitList "/" $c >>
+<<- $o := splitList "." (index $parts 0) >>
+<<- $ip := add (mul (atoi (index $o 0)) 16777216) (mul (atoi (index $o 1)) 65536) (mul (atoi (index $o 2)) 256) (atoi (index $o 3)) >>
+<<- $blockSize := 1 >>
+<<- range until (sub 32 (atoi (index $parts 1)) | int) >><<- $blockSize = mul $blockSize 2 >><<- end >>
+<<- $start := sub $ip (mod $ip $blockSize) >>
+<<- $end := add $start (sub $blockSize 1) >>
+---
+apiVersion: dbforpostgresql.azure.m.upbound.io/v1beta1
+kind: FlexibleServerFirewallRule
+metadata:
+  name: <<$xrName>>-allow-<<$i>>
+  annotations:
+    <<setResourceNameAnnotation (printf "allow-%d" $i)>>
+    crossplane.io/external-name: <<printf "hangar-allow-%d" $i>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    serverIdRef:
+      name: <<$xrName>>-server
+    startIpAddress: <<printf "%d.%d.%d.%d" (div $start 16777216) (mod (div $start 65536) 256) (mod (div $start 256) 256) (mod $start 256)>>
+    endIpAddress: <<printf "%d.%d.%d.%d" (div $end 16777216) (mod (div $end 65536) 256) (mod (div $end 256) 256) (mod $end 256)>>
+<<- end >>
+<<- end >>

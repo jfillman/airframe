@@ -1,0 +1,70 @@
+# Every AWS piece observed Ready; the instance with its address.
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: VPC
+metadata: {name: smoke-db-vpc, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: vpc}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Subnet
+metadata: {name: smoke-db-subnet-a, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: subnet-a}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Subnet
+metadata: {name: smoke-db-subnet-b, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: subnet-b}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: InternetGateway
+metadata: {name: smoke-db-igw, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: internet-gateway}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTable
+metadata: {name: smoke-db-rt, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: route-table}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Route
+metadata: {name: smoke-db-default-route, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: route}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTableAssociation
+metadata: {name: smoke-db-rta-a, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: route-table-association-a}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTableAssociation
+metadata: {name: smoke-db-rta-b, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: route-table-association-b}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata: {name: smoke-db-sg, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: security-group}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroupRule
+metadata: {name: smoke-db-allow-0, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: allow-0}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroupRule
+metadata: {name: smoke-db-allow-1, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: allow-1}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: SubnetGroup
+metadata: {name: smoke-db-subnets, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: subnet-group}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+# The instance the provider can't create.
+apiVersion: rds.aws.m.upbound.io/v1beta1
+kind: Instance
+metadata: {name: smoke-db-instance, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: instance}}
+status:
+  conditions:
+  - {type: Ready, status: "False", reason: Creating}
+  - {type: Synced, status: "False", reason: ReconcileError, message: "create failed: InvalidParameterCombination: RDS does not support creating a DB instance with the following combination: DBInstanceClass=db.t4g.micro, Engine=postgres"}

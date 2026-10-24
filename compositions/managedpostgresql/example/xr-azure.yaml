@@ -1,0 +1,13 @@
+# A Flexible Server in eastus, reachable from a /20 that does not start on its own boundary (the range is
+# rounded down to the block) and one host.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ManagedPostgreSQL
+metadata:
+  name: smoke-db
+  namespace: app-smoke-az-fn-cicd
+spec:
+  cloud: azure
+  serverName: hangar-smoke-db
+  allowedCidrs:
+    - 10.20.37.9/20
+    - 198.51.100.7/32

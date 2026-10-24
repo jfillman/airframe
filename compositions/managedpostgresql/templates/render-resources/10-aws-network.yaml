@@ -1,0 +1,173 @@
+# cloud: aws - the server's own network: a VPC, two public subnets in two availability zones (an RDS subnet
+# group must span two), an internet gateway and default route (a publicly accessible instance needs one), and
+# a security group with one ingress rule on 5432 per spec.allowedCidrs entry - no rule, no access. No egress rule:
+# RDS needs none, and the provider revokes AWS's default allow-all egress on create (see awsecstarget's
+# 10-network.yaml). Deleting the XR removes all of it; the VPC's own deletion retries until the instance's network
+# interfaces are gone. EC2 descriptions allow no apostrophes (tools/test_ec2_descriptions.py).
+<<- if eq $cloud "aws" >>
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: VPC
+metadata:
+  name: <<$xrName>>-vpc
+  annotations:
+    <<setResourceNameAnnotation "vpc">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    cidrBlock: <<$vpcCidr>>
+    enableDnsSupport: true
+    enableDnsHostnames: true
+    tags:
+      Name: <<$serverName>>-pg
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- range $z, $cidr := dict "a" $subnetA "b" $subnetB >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Subnet
+metadata:
+  name: <<$xrName>>-subnet-<<$z>>
+  annotations:
+    <<setResourceNameAnnotation (printf "subnet-%s" $z)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    availabilityZone: <<$region>><<$z>>
+    cidrBlock: <<$cidr>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$serverName>>-pg-<<$z>>
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTableAssociation
+metadata:
+  name: <<$xrName>>-rta-<<$z>>
+  annotations:
+    <<setResourceNameAnnotation (printf "route-table-association-%s" $z)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    routeTableIdRef:
+      name: <<$xrName>>-rt
+    subnetIdRef:
+      name: <<$xrName>>-subnet-<<$z>>
+<<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: InternetGateway
+metadata:
+  name: <<$xrName>>-igw
+  annotations:
+    <<setResourceNameAnnotation "internet-gateway">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$serverName>>-pg
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: RouteTable
+metadata:
+  name: <<$xrName>>-rt
+  annotations:
+    <<setResourceNameAnnotation "route-table">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$serverName>>-pg
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: Route
+metadata:
+  name: <<$xrName>>-default-route
+  annotations:
+    <<setResourceNameAnnotation "route">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    destinationCidrBlock: 0.0.0.0/0
+    routeTableIdRef:
+      name: <<$xrName>>-rt
+    gatewayIdRef:
+      name: <<$xrName>>-igw
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata:
+  name: <<$xrName>>-sg
+  annotations:
+    <<setResourceNameAnnotation "security-group">>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    name: <<$serverName>>-pg
+    description: <<printf "PostgreSQL %s - 5432 from the allowed CIDRs only (Airframe ManagedPostgreSQL %s)" $serverName $xrName | toJson>>
+    vpcIdRef:
+      name: <<$xrName>>-vpc
+    tags:
+      Name: <<$serverName>>-pg
+      <<- range $k, $v := $tags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+<<- range $i, $c := $cidrs >>
+---
+apiVersion: ec2.aws.m.upbound.io/v1beta1
+kind: SecurityGroupRule
+metadata:
+  name: <<$xrName>>-allow-<<$i>>
+  annotations:
+    <<setResourceNameAnnotation (printf "allow-%d" $i)>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    region: <<$region>>
+    type: ingress
+    protocol: tcp
+    fromPort: <<$port>>
+    toPort: <<$port>>
+    cidrBlocks:
+      - <<$c>>
+    description: <<printf "PostgreSQL from %s" $c | toJson>>
+    securityGroupIdRef:
+      name: <<$xrName>>-sg
+<<- end >>
+<<- end >>

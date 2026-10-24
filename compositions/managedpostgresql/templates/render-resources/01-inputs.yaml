@@ -1,0 +1,47 @@
+# Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+# at the unindented scope so they persist across the --- separators for the rest of the step.
+#
+# Nothing here is read from outside the XR (no registry, no other XR), so no input can go missing for a
+# reconcile and drop a composed resource. The admin user, hangar_admin, owns the database: azure_superuser,
+# admin, administrator, root, guest and public are reserved on Azure, rdsadmin and postgres-adjacent names on RDS.
+<<- $xr := .observed.composite.resource >>
+<<- $xrName := $xr.metadata.name >>
+<<- $spec := $xr.spec >>
+<<- $obs := .observed.resources | default dict >>
+<<- $cloud := $spec.cloud | default "aws" >>
+<<- $serverName := $spec.serverName | default $xrName >>
+<<- $version := $spec.version | default "17" >>
+<<- $size := $spec.size | default "small" >>
+<<- $storageGiB := $spec.storageGiB | default 32 >>
+<<- $databaseName := $spec.databaseName | default (replace "-" "_" $xrName) >>
+<<- $backupDays := $spec.backupRetentionDays | default 7 >>
+<<- $cidrs := $spec.allowedCidrs | default list >>
+<<- $protect := $spec.protect | default false >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $vpcCidr := $spec.vpcCidr | default "10.43.0.0/16" >>
+<<- $location := $spec.location | default "eastus" >>
+<<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $serverName) >>
+<<- $username := "hangar_admin" >>
+<<- $port := 5432 >>
+<<- $instanceClass := get (dict "small" "db.t4g.micro" "medium" "db.t4g.small" "large" "db.t4g.medium") $size >>
+<<- $azureSku := get (dict "small" "B_Standard_B1ms" "medium" "B_Standard_B2s" "large" "GP_Standard_D2s_v3") $size >>
+<<- $octets := splitList "." $vpcCidr >>
+<<- $subnetA := printf "%s.%s.1.0/24" (index $octets 0) (index $octets 1) >>
+<<- $subnetB := printf "%s.%s.2.0/24" (index $octets 0) (index $octets 1) >>
+<<- $host := "" >>
+<<- if eq $cloud "aws" >>
+  <<- $host = dig "resource" "status" "atProvider" "address" "" (index $obs "instance" | default dict) >>
+<<- else >>
+  <<- $host = dig "resource" "status" "atProvider" "fqdn" "" (index $obs "server" | default dict) >>
+<<- end >>
+<<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+<<- $expected := list >>
+<<- if eq $cloud "aws" >>
+  <<- $expected = list "vpc" "subnet-a" "subnet-b" "internet-gateway" "route-table" "route" "route-table-association-a" "route-table-association-b" "security-group" "subnet-group" "instance" >>
+  <<- range $i, $c := $cidrs >><<- $expected = append $expected (printf "allow-%d" $i) >><<- end >>
+<<- else >>
+  <<- $expected = list "resource-group" "server" "database" >>
+  <<- range $i, $c := $cidrs >><<- $expected = append $expected (printf "allow-%d" $i) >><<- end >>
+<<- end >>
+<<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "managed-postgresql" >>
+<<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "managed-postgresql" >>

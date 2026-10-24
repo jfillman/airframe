@@ -1,0 +1,25 @@
+# The ConfigMap <name>-connection: the storage's non-secret connection details, in this XR's namespace. Secrets
+# never go here (Azure's connection string is in the Secret <name>-credentials, written by the provider).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <<$xrName>>-connection
+  annotations:
+    <<setResourceNameAnnotation "connection">>
+  labels:
+    hangar.io/dependency: <<$xrName>>
+    hangar.io/component: object-storage
+data:
+  cloud: <<$cloud>>
+  bucketName: <<$bucketName | quote>>
+  endpoint: <<$endpoint | quote>>
+  <<- if eq $cloud "aws" >>
+  region: <<$region>>
+  bucketArn: <<$bucketArn | quote>>
+  <<- else >>
+  location: <<$location>>
+  resourceGroup: <<$resourceGroup | quote>>
+  storageAccount: <<$accountName | quote>>
+  credentialsSecret: <<printf "%s-credentials" $xrName | quote>>
+  credentialsKey: attribute.primary_connection_string
+  <<- end >>

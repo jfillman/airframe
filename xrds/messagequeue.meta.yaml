@@ -1,0 +1,66 @@
+# Sidecar meta for the MessageQueue cloud dependency (AF-3/AF-6a conventions). Requested as its own XR, not a
+# `components:` entry, so its outputs feed no fromComponent; they name what an app reads in this XR's namespace.
+kind: MessageQueue
+role: dependency
+summary: >-
+  A managed message queue with a dead-letter queue - Amazon SQS or Azure Service Bus - that can trigger an AWS
+  Lambda target. Disposable: delete it to remove the queue and its messages.
+outputs:
+  queueName:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: queueName
+  endpoint:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: endpoint
+    description: >-
+      Where a client connects. AWS: the queue URL SendMessage and ReceiveMessage take. Azure: the Service Bus
+      namespace, sb://<namespace>.servicebus.windows.net/. The ConfigMap also carries cloud-specific keys
+      (queueArn, region, deadLetterQueueUrl on AWS; namespace, resourceGroup on Azure).
+  connectionString:
+    kind: secretKeyRef
+    secret: "{name}-credentials"
+    key: attribute.primary_connection_string
+    description: Azure only. A listen + send connection string scoped to this queue.
+sources:
+  - object: {kind: ConfigMap, name: "{name}-connection"}
+    createdBy: composition
+  - object: {kind: Secret, name: "{name}-credentials"}
+    createdBy: crossplane
+    when: {field: spec.cloud, equals: azure}
+    from: {kind: QueueAuthorizationRule, name: "{name}-auth", field: spec.writeConnectionSecretToRef.name, equals: "{name}-credentials"}
+    note: The Azure provider writes the authorization rule's sensitive attributes, prefixed attribute., into this Secret.
+conditions:
+  - type: DependencyReady
+    reasons:
+      - reason: MessageQueueReady
+        status: "True"
+        meaning: The queue, its dead-letter queue and every consumer's grant and trigger are Ready.
+      - reason: MessageQueueProvisioning
+        status: "False"
+        meaning: A composed resource is not Ready yet (just created, or the cloud provider has no credentials or permission). The message names which.
+      - reason: MessageQueueNeedsAwsAccount
+        status: "False"
+        meaning: AWS only. The cluster registry names no AWS account (clusters.yaml aws.accountId), so the queue's ARN is unknown and nothing is created.
+      - reason: MessageQueueConsumerUnresolved
+        status: "False"
+        meaning: The queue is Ready, but a consumers[] entry names no AwsLambdaTarget in this namespace, or one in another region. That consumer has no grant and no trigger.
+verify:
+  - id: xr-ready
+    check: The MessageQueue XR's DependencyReady condition has reason MessageQueueReady.
+    run: {kind: condition, type: DependencyReady, reasons: [MessageQueueReady]}
+  - id: connection-configmap
+    check: The ConfigMap {name}-connection exists with the cloud and queueName keys.
+    run: {kind: configMapKeys, configMap: "{name}-connection", keys: [cloud, queueName]}
+  - id: queue-exists
+    check: AWS. aws sqs get-queue-attributes on status.url reports server-side encryption on.
+    run:
+      kind: cloudCli
+      cli: aws
+      args: [sqs, get-queue-attributes, --queue-url, "{status.url}", --region, "{spec.region}", --attribute-names, SqsManagedSseEnabled]
+      expect: {path: Attributes.SqsManagedSseEnabled, equals: "true"}
+agentNotes:
+  - "A consumer's grant is an inline policy hangar-queue-<namespace>-<name> on the Lambda target's execution role; the boundary HangarCloudTargetBoundary must allow the sqs actions or the grant is a no-op (docs/admin/cloud-credentials.md)."
+  - "lockSeconds must be at least the Lambda function's timeout for a trigger to be accepted: AWS refuses the event source mapping otherwise and the trigger stays not Ready."
+owner: human

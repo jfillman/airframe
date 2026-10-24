@@ -1,0 +1,74 @@
+# cloud: azure - a resource group this XR owns, a StorageV2 account for this container alone (Standard, LRS)
+# and one private blob container. The provider writes the account's keys and connection string into the
+# Secret <name>-credentials (upjet keys attribute.primary_connection_string, attribute.primary_access_key).
+#
+# Private and encrypted: minimum TLS 1.2, HTTPS only, no blob may ever be made public
+# (allowNestedItemsToBePublic: false), container access type private. Shared-key access stays on because the
+# connection string is how an Azure consumer authenticates until Azure consumers get managed identities.
+# Azure encrypts every account at rest with Microsoft-managed keys; there is nothing to turn on.
+<<- if eq $cloud "azure" >>
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: <<$xrName>>-rg
+  annotations:
+    <<setResourceNameAnnotation "resource-group">>
+    crossplane.io/external-name: <<$resourceGroup>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata:
+  name: <<$xrName>>-account
+  annotations:
+    <<setResourceNameAnnotation "storage-account">>
+    crossplane.io/external-name: <<$accountName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    resourceGroupNameRef:
+      name: <<$xrName>>-rg
+    accountKind: StorageV2
+    accountTier: Standard
+    accountReplicationType: LRS
+    minTlsVersion: TLS1_2
+    httpsTrafficOnlyEnabled: true
+    allowNestedItemsToBePublic: false
+    sharedAccessKeyEnabled: true
+    blobProperties:
+      versioningEnabled: <<$versioning>>
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+  writeConnectionSecretToRef:
+    name: <<$xrName>>-credentials
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata:
+  name: <<$xrName>>-container
+  annotations:
+    <<setResourceNameAnnotation "container">>
+    crossplane.io/external-name: <<$bucketName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    storageAccountIdRef:
+      name: <<$xrName>>-account
+    containerAccessType: private
+<<- end >>

@@ -1,0 +1,43 @@
+# Render cases for tools/test_compositions.py (see compositions/messagequeue/example/cases.yaml). Regenerate
+# expectations with `tools/test_compositions.py --update managedpostgresql`.
+cases:
+- name: aws-fresh
+  xr: xr-aws.yaml
+  expect:
+    present: [vpc, subnet-a, subnet-b, internet-gateway, route-table, route, route-table-association-a, route-table-association-b, security-group, allow-0, allow-1, subnet-group, instance, connection]
+    conditions:
+      DependencyReady: ManagedPostgreSQLProvisioning
+- name: aws-ready
+  xr: xr-aws.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: ManagedPostgreSQLReady
+- name: aws-instance-failing
+  xr: xr-aws.yaml
+  observed:
+  - observed-aws-network.yaml
+  expect:
+    conditions:
+      DependencyReady: ManagedPostgreSQLFailing
+# No allowed CIDRs: no ingress rule at all; protect turns on deletion protection and the final snapshot.
+- name: aws-protected-no-cidrs
+  xr: xr-aws-protected.yaml
+  expect:
+    present: [instance, security-group]
+    absent: [allow-0]
+- name: azure-fresh
+  xr: xr-azure.yaml
+  expect:
+    present: [resource-group, server, database, allow-0, allow-1, connection]
+    absent: [instance, vpc]
+    conditions:
+      DependencyReady: ManagedPostgreSQLProvisioning
+- name: azure-ready
+  xr: xr-azure.yaml
+  observed:
+  - observed-azure-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: ManagedPostgreSQLReady

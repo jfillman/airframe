@@ -1,0 +1,26 @@
+# The bucket, its settings and the smoke-fn grant observed Ready.
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: Bucket
+metadata: {name: smoke-artifacts-bucket, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: bucket}}
+status: {atProvider: {arn: "arn:aws:s3:::hangar-smoke-artifacts-700017004810"}, conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketPublicAccessBlock
+metadata: {name: smoke-artifacts-public-access-block, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: public-access-block}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketOwnershipControls
+metadata: {name: smoke-artifacts-ownership, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: ownership-controls}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: s3.aws.m.upbound.io/v1beta1
+kind: BucketServerSideEncryptionConfiguration
+metadata: {name: smoke-artifacts-encryption, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: encryption}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata: {name: smoke-artifacts-grant-smoke-fn, namespace: app-smoke-fn-cicd, annotations: {crossplane.io/composition-resource-name: grant-smoke-fn}}
+spec: {forProvider: {role: glidepath-smoke-fn-exec}}
+status: {conditions: [{type: Ready, status: "True", reason: Available}]}

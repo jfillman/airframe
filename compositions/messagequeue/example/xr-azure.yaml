@@ -1,0 +1,12 @@
+# A Service Bus queue in eastus, with its own resource group and namespace.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: MessageQueue
+metadata:
+  name: smoke-jobs
+  namespace: app-smoke-az-fn-cicd
+spec:
+  cloud: azure
+  location: eastus
+  lockSeconds: 45
+  deadLetter:
+    maxReceiveCount: 3

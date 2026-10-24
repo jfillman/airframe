@@ -1,0 +1,20 @@
+# The ConfigMap <name>-connection: everything but the password, in this XR's namespace. The password is the
+# provider-written Secret <name>-credentials, key password. host is empty until the server has been observed.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <<$xrName>>-connection
+  annotations:
+    <<setResourceNameAnnotation "connection">>
+  labels:
+    hangar.io/dependency: <<$xrName>>
+    hangar.io/component: managed-postgresql
+data:
+  cloud: <<$cloud>>
+  host: <<$host | quote>>
+  port: <<$port | quote>>
+  database: <<$databaseName | quote>>
+  username: <<$username | quote>>
+  sslmode: require
+  passwordSecret: <<printf "%s-credentials" $xrName | quote>>
+  passwordKey: password

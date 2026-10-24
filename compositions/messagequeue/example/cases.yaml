@@ -1,0 +1,82 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required
+# (extra) and observed fixtures and is compared with example/expected/<name>.yaml; `expect` adds
+# readable assertions. Regenerate expectations with `tools/test_compositions.py --update messagequeue`.
+cases:
+- name: aws-fresh
+  xr: xr-aws.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  expect:
+    present: [queue, dead-letter-queue, connection]
+    conditions:
+      DependencyReady: MessageQueueProvisioning
+# No AWS account in the registry and nothing observed: no ARN can be built, so nothing renders.
+- name: aws-no-account
+  xr: xr-aws.yaml
+  expect:
+    absent: [queue, dead-letter-queue, connection]
+    conditions:
+      DependencyReady: MessageQueueNeedsAwsAccount
+# The registry can't be read for a reconcile while the queue exists: the account comes back from the observed
+# queue's ARN and nothing is dropped.
+- name: aws-registry-unreadable-keeps-queue
+  xr: xr-aws.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    present: [queue, dead-letter-queue, connection]
+    conditions:
+      DependencyReady: MessageQueueReady
+- name: aws-ready
+  xr: xr-aws.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: MessageQueueReady
+- name: aws-fifo-no-dlq
+  xr: xr-aws-fifo-no-dlq.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  expect:
+    present: [queue, connection]
+    absent: [dead-letter-queue]
+# One consumer resolves (grant + trigger on glidepath-smoke-fn-exec), the other names no target.
+- name: aws-consumers
+  xr: xr-aws-consumer.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  - target-smoke-fn.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    present: [grant-smoke-fn, trigger-smoke-fn]
+    absent: [grant-no-such-target, trigger-no-such-target]
+    conditions:
+      DependencyReady: MessageQueueConsumerUnresolved
+# The target can't be read for a reconcile: its grant and trigger stay, from their observed spec.
+- name: aws-consumer-unreadable-keeps-grant
+  xr: xr-aws-consumer.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  observed:
+  - observed-aws-ready.yaml
+  expect:
+    present: [grant-smoke-fn, trigger-smoke-fn]
+- name: azure-fresh
+  xr: xr-azure.yaml
+  required:
+  - cluster-registry-with-aws.yaml
+  expect:
+    present: [resource-group, namespace, queue, authorization-rule, connection]
+    conditions:
+      DependencyReady: MessageQueueProvisioning
+- name: azure-ready
+  xr: xr-azure.yaml
+  observed:
+  - observed-azure-ready.yaml
+  expect:
+    conditions:
+      DependencyReady: MessageQueueReady

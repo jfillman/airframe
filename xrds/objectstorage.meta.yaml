@@ -1,0 +1,62 @@
+# Sidecar meta for the ObjectStorage cloud dependency. Requested as its own XR, not a `components:` entry.
+kind: ObjectStorage
+role: dependency
+summary: >-
+  Private, encrypted object storage - an Amazon S3 bucket or an Azure Storage Account blob container - with
+  IAM access for AWS Lambda targets.
+outputs:
+  bucketName:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: bucketName
+    description: The S3 bucket's or the blob container's name.
+  endpoint:
+    kind: configMapKeyRef
+    configMap: "{name}-connection"
+    key: endpoint
+    description: >-
+      The HTTPS endpoint objects are read and written through. The ConfigMap also carries cloud-specific keys
+      (bucketArn, region on AWS; storageAccount, resourceGroup on Azure).
+  connectionString:
+    kind: secretKeyRef
+    secret: "{name}-credentials"
+    key: attribute.primary_connection_string
+    description: Azure only. The storage account's connection string (account key included).
+sources:
+  - object: {kind: ConfigMap, name: "{name}-connection"}
+    createdBy: composition
+  - object: {kind: Secret, name: "{name}-credentials"}
+    createdBy: crossplane
+    when: {field: spec.cloud, equals: azure}
+    from: {kind: Account, name: "{name}-account", field: spec.writeConnectionSecretToRef.name, equals: "{name}-credentials"}
+    note: The Azure provider writes the account's sensitive attributes, prefixed attribute., into this Secret.
+conditions:
+  - type: DependencyReady
+    reasons:
+      - reason: ObjectStorageReady
+        status: "True"
+        meaning: The bucket (or account and container), its privacy and encryption settings and every consumer's grant are Ready.
+      - reason: ObjectStorageProvisioning
+        status: "False"
+        meaning: A composed resource is not Ready yet (just created, a taken global name, or the provider has no credentials or permission). The message names which.
+      - reason: ObjectStorageConsumerUnresolved
+        status: "False"
+        meaning: The storage is Ready, but a consumers[] entry names no AwsLambdaTarget in this namespace; that consumer has no grant.
+verify:
+  - id: xr-ready
+    check: The ObjectStorage XR's DependencyReady condition has reason ObjectStorageReady.
+    run: {kind: condition, type: DependencyReady, reasons: [ObjectStorageReady]}
+  - id: connection-configmap
+    check: The ConfigMap {name}-connection exists with the cloud, bucketName and endpoint keys.
+    run: {kind: configMapKeys, configMap: "{name}-connection", keys: [cloud, bucketName, endpoint]}
+  - id: bucket-private
+    check: AWS. aws s3api get-public-access-block reports BlockPublicPolicy true for the bucket.
+    run:
+      kind: cloudCli
+      cli: aws
+      args: [s3api, get-public-access-block, --bucket, "{status.bucketName}"]
+      expect: {path: PublicAccessBlockConfiguration.BlockPublicPolicy, equals: true}
+agentNotes:
+  - "S3 bucket and Azure storage account names are global: a name another account holds fails at create, shown as ObjectStorageProvisioning with the provider's error on the bucket's Synced condition."
+  - "An S3 bucket that holds objects is not deleted unless spec.emptyOnDelete is true; the XR's deletion waits until it is emptied."
+owner: human

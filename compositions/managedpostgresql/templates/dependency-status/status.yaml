@@ -1,0 +1,51 @@
+# DependencyReady (closed reason set, see xrds/managedpostgresql.meta.yaml) plus the XR's own status. Inputs,
+# including $expected and $host, come from 01-inputs.yaml.
+<<- $pending := list >>
+<<- range $expected >>
+  <<- $ready := false >>
+  <<- range (dig "resource" "status" "conditions" list (index $obs . | default dict)) >>
+    <<- if and (eq .type "Ready") (eq .status "True") >><<- $ready = true >><<- end >>
+  <<- end >>
+  <<- if not $ready >><<- $pending = append $pending . >><<- end >>
+<<- end >>
+<<- $serverKey := ternary "instance" "server" (eq $cloud "aws") >>
+<<- $reason := "ManagedPostgreSQLProvisioning" >>
+<<- $status := "False" >>
+<<- $message := printf "Waiting for %s to be ready (a new server takes 5 to 15 minutes; or the %s provider has no credentials yet)." (join ", " $pending) $cloud >>
+<<- /* A server the provider can't create (a taken Azure name, a quota, a refused instance class) is not
+       "provisioning": its Synced=False message is the reason, so it is surfaced here. */ ->>
+<<- if and (has $serverKey $pending) (index $obs $serverKey) >>
+  <<- range (dig "resource" "status" "conditions" list (index $obs $serverKey)) >>
+    <<- if and (eq .type "Synced") (eq .status "False") >>
+      <<- $reason = "ManagedPostgreSQLFailing" >>
+      <<- $message = printf "The %s provider can't create or update the server: %s" $cloud (.message | default "no message") >>
+    <<- end >>
+  <<- end >>
+<<- end >>
+<<- if not $pending >>
+  <<- $reason = "ManagedPostgreSQLReady" >>
+  <<- $status = "True" >>
+  <<- $message = printf "PostgreSQL %s answers at %s:5432 (database %s, TLS required)%s; connection details are in the ConfigMap %s-connection, the password in the Secret %s-credentials." $serverName $host $databaseName (ternary " but admits no one: spec.allowedCidrs is empty" "" (empty $cidrs)) $xrName $xrName >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: DependencyReady
+    status: <<$status | quote>>
+    reason: <<$reason>>
+    message: <<$message | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: ManagedPostgreSQL
+status:
+  cloud: <<$cloud>>
+  serverName: <<$serverName>>
+  <<- if $host >>
+  host: <<$host | quote>>
+  <<- end >>
+  port: <<$port>>
+  database: <<$databaseName | quote>>
+  username: <<$username | quote>>
+  connectionConfigMap: <<$xrName>>-connection
+  credentialsSecret: <<$xrName>>-credentials

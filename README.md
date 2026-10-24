@@ -27,6 +27,7 @@ its `xrds/<kind>.meta.yaml` sidecar.
 | Component | `Redis`, `PostgreSQL`, `RabbitMQ`, `MongoDB`, `Dex` | A backing service for one environment, declared in its `components:` list |
 | Observability | `RolloutWatch`, `SLO` | Rollout watching with AI triage on `Degraded`; SLO rules through Sloth |
 | Cloud target | `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget` | The cloud infrastructure a non-Kubernetes deploy needs |
+| Cloud dependency | `MessageQueue`, `ObjectStorage`, `ManagedPostgreSQL` | A managed queue, bucket or database on AWS or Azure, private by default, with IAM grants to Lambda targets |
 
 How the kinds compose, what each takes and returns, and the tiering rules are in
 [architecture.md](docs/admin/architecture.md). Every kind's outputs, conditions and verify steps

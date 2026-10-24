@@ -1,0 +1,12 @@
+# Protected: deletion protection and a final snapshot; no allowed CIDRs (admits no one).
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ManagedPostgreSQL
+metadata:
+  name: orders-db
+  namespace: app-orders-cicd
+spec:
+  size: medium
+  storageGiB: 64
+  version: "16"
+  protect: true
+  databaseName: orders

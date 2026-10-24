@@ -1,0 +1,33 @@
+# The ConfigMap <name>-connection: the queue's non-secret connection details, in this XR's namespace, for an
+# app or an agent to read without cloud credentials. Secrets never go here (Azure's connection string is in
+# the Secret <name>-credentials, written by the provider).
+<<- if or (eq $cloud "azure") $acct >>
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <<$xrName>>-connection
+  annotations:
+    <<setResourceNameAnnotation "connection">>
+  labels:
+    hangar.io/dependency: <<$xrName>>
+    hangar.io/component: message-queue
+data:
+  cloud: <<$cloud>>
+  queueName: <<$queueName | quote>>
+  endpoint: <<ternary $queueUrl (printf "sb://%s.servicebus.windows.net/" $nsName) (eq $cloud "aws") | quote>>
+  <<- if eq $cloud "aws" >>
+  region: <<$region>>
+  queueUrl: <<$queueUrl | quote>>
+  queueArn: <<$queueArn | quote>>
+  <<- if $dlEnabled >>
+  deadLetterQueueUrl: <<$dlqUrl | quote>>
+  deadLetterQueueArn: <<$dlqArn | quote>>
+  <<- end >>
+  <<- else >>
+  location: <<$location>>
+  resourceGroup: <<$resourceGroup | quote>>
+  namespace: <<printf "%s.servicebus.windows.net" $nsName | quote>>
+  credentialsSecret: <<printf "%s-credentials" $xrName | quote>>
+  credentialsKey: attribute.primary_connection_string
+  <<- end >>
+<<- end >>

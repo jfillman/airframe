@@ -56,7 +56,7 @@ ServiceAccount, with which audience, may assume it.
 
 | Who | Runs as | Assumes | Can do |
 |---|---|---|---|
-| Crossplane AWS providers | `provider-aws-*` in `crossplane-system` | `hangar-crossplane-<cluster>` | create, observe and delete what the compositions describe |
+| Crossplane AWS providers | `provider-aws-*` in `crossplane-system` | `hangar-crossplane-<cluster>` | create, observe and delete what the compositions describe, cloud dependencies included |
 | Glidepath `deploy-aws-lambda` step | `glidepath-cloud-deployer` in `app-<app>-cicd` | `glidepath-deploy-<functionName>` | push to this function's repository, update this function's code |
 | `AwsLambdaTarget` bootstrap Job | `glidepath-cloud-deployer` in `app-<app>-cicd` | `glidepath-deploy-<functionName>` | the same, once, to seed the placeholder image |
 | every other pipeline step | `pipeline-runner` | nothing | no AWS access |
@@ -403,6 +403,114 @@ Deliberately absent: `lambda:UpdateFunctionCode`, `lambda:UpdateFunctionConfigur
 deletion never has to scale it to zero), `iam:CreatePolicy`, any `iam:*` on a role that does not end in
 `-exec`, any ECR push call, `sts:AssumeRole`, anything outside the region, creating or extending a role without
 `HangarCloudTargetBoundary`, and removing any role's boundary.
+
+### Cloud dependencies (2026-10-24)
+
+`MessageQueue`, `ObjectStorage` and `ManagedPostgreSQL` ([cloud-dependencies.md](../user/cloud-dependencies.md))
+need two additions: new statements in the Crossplane policy, so it can create the queues, buckets and servers,
+and new statements in the boundary, so a Lambda target's execution role can be granted access to a queue or
+bucket. The grant itself needs no new IAM permission. It is an inline `RolePolicy` on an `*-exec` role that
+carries the boundary, which `ComposedRolesGrantOnlyInsideTheBoundary` already allows.
+
+Append the statements to the live documents and publish them as new default versions. Don't recreate
+anything. Run this as an administrator of the Hangar account:
+
+```bash
+export AWS_PAGER="" AWS_PROFILE=hangar-admin
+REGION=us-east-1
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+live() {  # the live default version of a policy, as JSON
+  local arn="arn:aws:iam::${ACCOUNT}:policy/$1"
+  aws iam get-policy-version --policy-arn "$arn" \
+    --version-id "$(aws iam get-policy --policy-arn "$arn" --query Policy.DefaultVersionId --output text)" \
+    --query PolicyVersion.Document --output json
+}
+
+# 1. The boundary: what a granted execution role may ever do with a queue or a bucket.
+live HangarCloudTargetBoundary | jq --arg r "$REGION" --arg a "$ACCOUNT" '.Statement += [
+  { "Sid": "DependencyQueues", "Effect": "Allow",
+    "Action": ["sqs:SendMessage", "sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility",
+               "sqs:GetQueueAttributes", "sqs:GetQueueUrl"],
+    "Resource": "arn:aws:sqs:\($r):\($a):*" },
+  { "Sid": "DependencyBuckets", "Effect": "Allow",
+    "Action": ["s3:ListBucket", "s3:GetBucketLocation"], "Resource": "arn:aws:s3:::*",
+    "Condition": { "StringEquals": { "aws:ResourceAccount": $a } } },
+  { "Sid": "DependencyObjects", "Effect": "Allow",
+    "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload",
+               "s3:ListMultipartUploadParts"], "Resource": "arn:aws:s3:::*/*",
+    "Condition": { "StringEquals": { "aws:ResourceAccount": $a } } }
+]' > hangar-cloud-target-boundary.json
+
+# 2. The Crossplane identity: create, observe and delete the three kinds' resources, in the region.
+live HangarCrossplaneCloudTargets | jq --arg r "$REGION" --arg a "$ACCOUNT" '.Statement += [
+  { "Sid": "DependencySqsQueues", "Effect": "Allow",
+    "Action": ["sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:SetQueueAttributes",
+               "sqs:GetQueueUrl", "sqs:ListQueueTags", "sqs:TagQueue", "sqs:UntagQueue"],
+    "Resource": "arn:aws:sqs:\($r):\($a):*" },
+  { "Sid": "DependencyS3BucketsCreate", "Effect": "Allow", "Action": "s3:CreateBucket", "Resource": "arn:aws:s3:::*" },
+  { "Sid": "DependencyS3Buckets", "Effect": "Allow",
+    "Action": ["s3:DeleteBucket", "s3:ListBucket", "s3:ListBucketVersions", "s3:GetBucket*",
+               "s3:GetAccelerateConfiguration", "s3:GetEncryptionConfiguration", "s3:GetLifecycleConfiguration",
+               "s3:GetReplicationConfiguration", "s3:PutBucketTagging", "s3:PutBucketPublicAccessBlock",
+               "s3:PutBucketOwnershipControls", "s3:PutEncryptionConfiguration", "s3:PutBucketVersioning"],
+    "Resource": "arn:aws:s3:::*",
+    "Condition": { "StringEquals": { "aws:ResourceAccount": $a } } },
+  { "Sid": "DependencyS3EmptyOnDelete", "Effect": "Allow",
+    "Action": ["s3:DeleteObject", "s3:DeleteObjectVersion"], "Resource": "arn:aws:s3:::*/*",
+    "Condition": { "StringEquals": { "aws:ResourceAccount": $a } } },
+  { "Sid": "DependencyRdsServers", "Effect": "Allow",
+    "Action": ["rds:CreateDBInstance", "rds:ModifyDBInstance", "rds:DeleteDBInstance", "rds:DescribeDBInstances",
+               "rds:CreateDBSnapshot", "rds:DescribeDBSnapshots",
+               "rds:CreateDBSubnetGroup", "rds:ModifyDBSubnetGroup", "rds:DeleteDBSubnetGroup",
+               "rds:DescribeDBSubnetGroups", "rds:AddTagsToResource", "rds:RemoveTagsFromResource",
+               "rds:ListTagsForResource"],
+    "Resource": "*", "Condition": { "StringEquals": { "aws:RequestedRegion": $r } } },
+  { "Sid": "DependencyRdsServiceLinkedRole", "Effect": "Allow", "Action": "iam:CreateServiceLinkedRole",
+    "Resource": "arn:aws:iam::\($a):role/aws-service-role/rds.amazonaws.com/AWSServiceRoleForRDS",
+    "Condition": { "StringEquals": { "iam:AWSServiceName": "rds.amazonaws.com" } } },
+  { "Sid": "DependencyLambdaTriggers", "Effect": "Allow",
+    "Action": ["lambda:CreateEventSourceMapping", "lambda:GetEventSourceMapping",
+               "lambda:UpdateEventSourceMapping", "lambda:DeleteEventSourceMapping",
+               "lambda:TagResource", "lambda:UntagResource", "lambda:ListTags"],
+    "Resource": "arn:aws:lambda:\($r):\($a):event-source-mapping:*" },
+  { "Sid": "DependencyLambdaTriggersList", "Effect": "Allow", "Action": "lambda:ListEventSourceMappings",
+    "Resource": "*", "Condition": { "StringEquals": { "aws:RequestedRegion": $r } } }
+]' > hangar-crossplane-policy.json
+
+for f in hangar-cloud-target-boundary.json hangar-crossplane-policy.json; do
+  aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY --policy-document "file://$f" \
+    --query 'findings[].[findingType,issueCode]' --output text      # expect: nothing
+done
+
+# Boundary first: a grant the boundary doesn't allow yet lands on the role but does nothing.
+aws iam create-policy-version --set-as-default \
+  --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCloudTargetBoundary" \
+  --policy-document file://hangar-cloud-target-boundary.json
+aws iam create-policy-version --set-as-default \
+  --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCrossplaneCloudTargets" \
+  --policy-document file://hangar-crossplane-policy.json
+```
+
+IAM keeps five versions of a policy. If `create-policy-version` refuses, delete the oldest non-default
+version first.
+
+What the new lines allow, and what they don't:
+
+| Grant | Why |
+|---|---|
+| `s3:CreateBucket` with no condition | A bucket that doesn't exist yet has no owner account to match `aws:ResourceAccount` against. Bucket names are global, so a create can't be scoped to the account. |
+| `s3:GetBucket*` and the four other `Get*Configuration` actions | The provider reads every bucket setting on observe (ACL, CORS, website, logging, lifecycle, replication, object lock, request payment), even the ones the composition never sets. They are read-only. |
+| `s3:Put*` covering deletes | S3 has no separate delete permission for these settings: removing a public access block, ownership controls or encryption setting is authorized as its `Put`. |
+| `s3:DeleteObject*` (Crossplane) | `emptyOnDelete: true` (`forceDestroy`) empties a bucket before deleting it. The composition sets that only when the XR asks. |
+| `rds:CreateDBSnapshot` | `protect: true` takes a final snapshot when the server is deleted. |
+| `iam:CreateServiceLinkedRole`, for RDS only | The first RDS instance in an account creates `AWSServiceRoleForRDS`, the role RDS uses to manage the instance's network interfaces. |
+| `lambda:*EventSourceMapping` | `trigger: true` connects a queue to a function. That changes neither the function's code nor its configuration. |
+
+Still absent: any SQS, S3 or RDS action outside the region or account (except `CreateBucket`, above), any
+change to a bucket policy or ACL (the composition makes buckets private and never public), RDS
+`ModifyDBParameterGroup` and anything that restores, copies or shares a snapshot, and every data-plane action
+for the Crossplane identity beyond emptying a bucket it is deleting. It can create a queue but never read or send
+one of its messages, and never read an object.
 
 ### The trust
 

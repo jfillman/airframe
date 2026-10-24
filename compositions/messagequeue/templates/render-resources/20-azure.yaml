@@ -1,0 +1,89 @@
+# cloud: azure - a resource group this XR owns, a Basic-tier Service Bus namespace for this queue alone, the
+# queue, and a queue-scoped Shared Access policy (listen + send, not manage) whose connection string the
+# provider writes into the Secret <name>-credentials (upjet's key attribute.primary_connection_string).
+#
+# Basic tier: queues only, no topics, 256 KB messages, about $0.05 per million operations. The dead-letter
+# sub-queue always exists on Service Bus; maxReceiveCount is its maxDeliveryCount. Every name here is the
+# resource's external-name (each is TemplatedStringAsIdentifier("name") in the provider). Azure tag names may
+# not contain / (see azurecontainerapptarget), hence $azureTags.
+<<- if eq $cloud "azure" >>
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: <<$xrName>>-rg
+  annotations:
+    <<setResourceNameAnnotation "resource-group">>
+    crossplane.io/external-name: <<$resourceGroup>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: servicebus.azure.m.upbound.io/v1beta1
+kind: ServiceBusNamespace
+metadata:
+  name: <<$xrName>>-sb
+  annotations:
+    <<setResourceNameAnnotation "namespace">>
+    crossplane.io/external-name: <<$nsName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    location: <<$location>>
+    resourceGroupNameRef:
+      name: <<$xrName>>-rg
+    sku: Basic
+    localAuthEnabled: true
+    minimumTlsVersion: "1.2"
+    tags:
+      <<- range $k, $v := $azureTags >>
+      <<$k>>: <<$v | quote>>
+      <<- end >>
+---
+apiVersion: servicebus.azure.m.upbound.io/v1beta1
+kind: Queue
+metadata:
+  name: <<$xrName>>-queue
+  annotations:
+    <<setResourceNameAnnotation "queue">>
+    crossplane.io/external-name: <<$queueName>>
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    namespaceIdRef:
+      name: <<$xrName>>-sb
+    lockDuration: <<printf "PT%dS" (int $lockSeconds) | quote>>
+    defaultMessageTtl: <<printf "PT%dS" (int $retention) | quote>>
+    maxDeliveryCount: <<$maxReceive>>
+    deadLetteringOnMessageExpiration: <<$dlEnabled>>
+---
+apiVersion: servicebus.azure.m.upbound.io/v1beta1
+kind: QueueAuthorizationRule
+metadata:
+  name: <<$xrName>>-auth
+  annotations:
+    <<setResourceNameAnnotation "authorization-rule">>
+    crossplane.io/external-name: app
+spec:
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    queueIdRef:
+      name: <<$xrName>>-queue
+    listen: true
+    send: true
+    manage: false
+  writeConnectionSecretToRef:
+    name: <<$xrName>>-credentials
+<<- end >>

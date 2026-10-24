@@ -52,6 +52,9 @@ listed in its `xrds/<kind>.meta.yaml` sidecar and in the generated
 | `RolloutWatch` | Observability | `environmentRef`\*, `appName`\*, `cluster`\*, `env`\*, `notifications.slack` | `rolloutPhase`, `lastDiagnosis*` | A diagnosis Job on `Degraded`, through `function-rollout-watcher` |
 | `AwsLambdaTarget` | Cloud target | `functionName`, `region`, `architecture`, `runtime`, `memorySize`, `timeout`, `functionUrl` | TargetReady; `functionUrl`, `repositoryUrl`, `roleArn`, `cicd` | ECR repository · execution and deploy roles · Lambda function · Function URL |
 | `AwsEcsTarget` | Cloud target | `appName`, `env`, `region`, `architecture`, `cpu`, `memory`, `containerPort`, `desiredCount`, `network` (create\|existing) | TargetReady; `cluster`, `service`, `subnetIds`, `cicd`, ... | ECR repository · IAM roles · VPC and subnets (create mode) · ECS cluster, task definition and service |
+| `MessageQueue` | Cloud dependency | `cloud` (aws\|azure), `queueName`, `fifo`, `lockSeconds`, `retentionSeconds`, `deadLetter`, `consumers[]` (AwsLambdaTarget, access, trigger) | DependencyReady; `url`, `arn`, `namespace`, `consumers` | SQS queue + dead-letter queue · role grants · Lambda event source mappings / Service Bus namespace, queue, SAS rule |
+| `ObjectStorage` | Cloud dependency | `cloud`, `bucketName`, `versioning`, `emptyOnDelete`, `consumers[]` | DependencyReady; `arn`, `endpoint`, `storageAccount` | S3 bucket + public access block, ownership, encryption, versioning · role grants / Storage Account + container |
+| `ManagedPostgreSQL` | Cloud dependency | `cloud`, `serverName`, `version`, `size`, `storageGiB`, `databaseName`, `allowedCidrs`, `protect` | DependencyReady; `host`, `port`, `database`, `username` | VPC, subnets, security group, RDS instance / Flexible Server, database, firewall rules |
 | `AzureContainerAppTarget` | Cloud target | `appName`, `resourceGroup`, `location`, `containerPort`, `size`, `minReplicas`, `maxReplicas`, `registry` | TargetReady; `url`, `environment`, `cicd` | Resource group · Container Apps environment · Container App |
 
 \* required field
@@ -77,6 +80,7 @@ The tier isn't a UI grouping; it decides where a kind runs and how it is asked f
 |---|---|---|---|
 | **Bootstrap** | 7 app and function stacks, ApplicationEnvironment, TektonCICD | A commit into `xr-requests/`, reconciled on the dev cluster by `provider-upjet-github`, with no Kubernetes credential to another cluster | Creates a new addressable git location: a repo, or a `<cluster>/<env>/` folder |
 | **Cloud target** | AwsLambdaTarget, AwsEcsTarget, AzureContainerAppTarget | A stand-alone XR in the app's xr-requests, or a child composed by its app XR | The cloud infrastructure a non-Kubernetes deploy updates; lives only while the XR does |
+| **Cloud dependency** | MessageQueue, ObjectStorage, ManagedPostgreSQL | A stand-alone XR in the app's xr-requests, on the dev cluster where the cloud providers run | A managed cloud service an app uses; lives only while the XR does |
 | **Attached** | Redis, PostgreSQL, RabbitMQ, MongoDB, Dex, SLO, RolloutWatch · SecretStore (requested automatically) | A `components:` or `slos:` block in an environment's `values.yaml`, rendered as XRs by the chart | Its own lifecycle, but only expressible inside an existing environment |
 | **Embedded** | config maps, secrets, HPA, PodDisruptionBudget, AnalysisTemplate, resource limits, volumes, networkPolicy | Plain fields in the same `values.yaml`, no XR | 1:1 with the one workload the release owns |
 

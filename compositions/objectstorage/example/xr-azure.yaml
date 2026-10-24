@@ -1,0 +1,9 @@
+# A blob container in its own storage account and resource group.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ObjectStorage
+metadata:
+  name: smoke-artifacts
+  namespace: app-smoke-az-fn-cicd
+spec:
+  cloud: azure
+  emptyOnDelete: true

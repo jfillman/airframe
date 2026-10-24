@@ -1,0 +1,56 @@
+# Both queues, the grant and the trigger observed Ready, as the provider reports them.
+apiVersion: sqs.aws.m.upbound.io/v1beta1
+kind: Queue
+metadata:
+  name: smoke-jobs-queue
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: queue
+status:
+  atProvider:
+    arn: arn:aws:sqs:us-east-1:012345678901:smoke-jobs
+    url: https://sqs.us-east-1.amazonaws.com/012345678901/smoke-jobs
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+---
+apiVersion: sqs.aws.m.upbound.io/v1beta1
+kind: Queue
+metadata:
+  name: smoke-jobs-dlq
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: dead-letter-queue
+status:
+  atProvider:
+    arn: arn:aws:sqs:us-east-1:012345678901:smoke-jobs-dlq
+    url: https://sqs.us-east-1.amazonaws.com/012345678901/smoke-jobs-dlq
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+---
+apiVersion: iam.aws.m.upbound.io/v1beta1
+kind: RolePolicy
+metadata:
+  name: smoke-jobs-grant-smoke-fn
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: grant-smoke-fn
+spec:
+  forProvider:
+    role: glidepath-smoke-fn-exec
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available}
+---
+apiVersion: lambda.aws.m.upbound.io/v1beta1
+kind: EventSourceMapping
+metadata:
+  name: smoke-jobs-trigger-smoke-fn
+  namespace: app-smoke-fn-cicd
+  annotations:
+    crossplane.io/composition-resource-name: trigger-smoke-fn
+spec:
+  forProvider:
+    functionName: glidepath-smoke-fn
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available}

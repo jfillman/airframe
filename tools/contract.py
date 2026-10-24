@@ -91,11 +91,12 @@ def target_contracts():
 
 
 def kind_contracts():
-    """Every other XRD with a sidecar (role bootstrap, environment, platform, observability): the app
-    stacks, ApplicationEnvironment, SecretStore, TektonCICD, SLO, RolloutWatch. Same shape as a
+    """Every other XRD with a sidecar (role dependency, bootstrap, environment, platform, observability): the
+    cloud dependencies (MessageQueue, ObjectStorage, ManagedPostgreSQL), the app stacks, ApplicationEnvironment,
+    SecretStore, TektonCICD, SLO, RolloutWatch. Same shape as a
     component (summary, outputs, sources, conditions, verify, owner) plus its role; nothing here feeds
     the chart's fromComponent."""
-    return load_by_role("bootstrap", "environment", "platform", "observability")
+    return load_by_role("dependency", "bootstrap", "environment", "platform", "observability")
 
 
 def build_contract():

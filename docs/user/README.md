@@ -45,4 +45,5 @@ Each quickstart also exists as an illustrated page, generated from the Markdown 
 `tools/build-quickstart-docs`: start at **[Airframe Quickstart, part 1](html/quickstart.html)**.
 Edit the Markdown, then rerun the tool; `--check` fails when a page is out of date.
 
+- [Cloud dependencies](cloud-dependencies.md): a managed queue, bucket or PostgreSQL database on AWS or Azure, with access for Lambda targets.
 - [Cloud targets](cloud-targets.md): stand up the AWS Lambda, ECS or Azure Container Apps infrastructure a cloud deploy needs, on demand.

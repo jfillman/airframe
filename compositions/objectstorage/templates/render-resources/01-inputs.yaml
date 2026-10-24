@@ -1,0 +1,68 @@
+# Inputs shared by both steps (templates/dependency-status/01-inputs.yaml is a symlink to this file), declared
+# at the unindented scope so they persist across the --- separators for the rest of the step.
+#
+# An S3 bucket's ARN needs no account (arn:aws:s3:::<bucket>), so unlike MessageQueue nothing here waits for
+# the cluster registry. Consumers resolve exactly as in compositions/messagequeue/templates/render-resources/
+# 01-inputs.yaml: an AwsLambdaTarget of that name in this namespace, its role <functionName cut to 59>-exec,
+# and a target that can't be read for a reconcile keeps the grant it has from the grant's observed spec.
+<<- $xr := .observed.composite.resource >>
+<<- $xrName := $xr.metadata.name >>
+<<- $xrNs := $xr.metadata.namespace >>
+<<- $spec := $xr.spec >>
+<<- $obs := .observed.resources | default dict >>
+<<- $cloud := $spec.cloud | default "aws" >>
+<<- $bucketName := $spec.bucketName | default $xrName >>
+<<- $versioning := $spec.versioning | default false >>
+<<- $emptyOnDelete := $spec.emptyOnDelete | default false >>
+<<- $region := $spec.region | default "us-east-1" >>
+<<- $location := $spec.location | default "eastus" >>
+<<- $resourceGroup := $spec.resourceGroup | default (printf "%s-rg" $bucketName) >>
+<<- $accountName := $spec.storageAccountName | default (regexReplaceAll "[^a-z0-9]" $bucketName "" | trunc 24) >>
+<<- $bucketArn := printf "arn:aws:s3:::%s" $bucketName >>
+<<- $endpoint := printf "https://%s.s3.%s.amazonaws.com" $bucketName $region >>
+<<- if eq $cloud "azure" >>
+  <<- $endpoint = dig "resource" "status" "atProvider" "primaryBlobEndpoint" (printf "https://%s.blob.core.windows.net/" $accountName) (index $obs "storage-account" | default dict) >>
+<<- end >>
+<<- $extra := .extraResources | default dict >>
+<<- $consumers := list >>
+<<- if eq $cloud "aws" >>
+<<- range ($spec.consumers | default list) >>
+  <<- $tName := .awsLambdaTarget >>
+  <<- $items := index (index $extra (printf "consumer-%s" $tName) | default dict) "items" | default list >>
+  <<- $roleName := "" >>
+  <<- $problem := "" >>
+  <<- if $items >>
+    <<- $t := (first $items).resource >>
+    <<- $roleName = printf "%s-exec" (trunc 59 (dig "spec" "functionName" $t.metadata.name $t)) >>
+  <<- else >>
+    <<- $problem = printf "no AwsLambdaTarget %s in namespace %s" $tName $xrNs >>
+    <<- $roleName = dig "resource" "spec" "forProvider" "role" "" (index $obs (printf "grant-%s" $tName) | default dict) >>
+  <<- end >>
+  <<- $consumers = append $consumers (dict "name" $tName "access" (.access | default "readWrite") "roleName" $roleName "problem" $problem) >>
+<<- end >>
+<<- end >>
+<<- /* The composed resources DependencyReady waits for, by composition-resource-name. */ ->>
+<<- $expected := list >>
+<<- if eq $cloud "aws" >>
+  <<- $expected = list "bucket" "public-access-block" "ownership-controls" "encryption" >>
+  <<- if or $versioning (index $obs "versioning") >><<- $expected = append $expected "versioning" >><<- end >>
+  <<- range $consumers >>
+    <<- if .roleName >><<- $expected = append $expected (printf "grant-%s" .name) >><<- end >>
+  <<- end >>
+<<- else >>
+  <<- $expected = list "resource-group" "storage-account" "container" >>
+<<- end >>
+<<- $tags := dict "hangar.io/dependency" $xrName "hangar.io/component" "object-storage" >>
+<<- $azureTags := dict "hangar-dependency" $xrName "hangar-component" "object-storage" >>
+<<- if and (eq $cloud "aws") ($spec.consumers | default list) >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  <<- range $spec.consumers >>
+  consumer-<<.awsLambdaTarget>>:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: AwsLambdaTarget
+    namespace: <<$xrNs>>
+    matchName: <<.awsLambdaTarget>>
+  <<- end >>
+<<- end >>

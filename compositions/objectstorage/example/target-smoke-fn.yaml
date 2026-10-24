@@ -1,0 +1,9 @@
+# --required fixture: the AwsLambdaTarget a consumers[] entry names, as the API server returns it.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AwsLambdaTarget
+metadata:
+  name: smoke-fn
+  namespace: app-smoke-fn-cicd
+spec:
+  functionName: glidepath-smoke-fn
+  region: us-east-1

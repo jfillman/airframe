@@ -1,0 +1,14 @@
+# An S3 bucket for the smoke-fn app, read-write for its Lambda target; a second consumer names a target that
+# doesn't exist.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: ObjectStorage
+metadata:
+  name: smoke-artifacts
+  namespace: app-smoke-fn-cicd
+spec:
+  cloud: aws
+  bucketName: hangar-smoke-artifacts-700017004810
+  consumers:
+    - awsLambdaTarget: smoke-fn
+    - awsLambdaTarget: no-such-target
+      access: read

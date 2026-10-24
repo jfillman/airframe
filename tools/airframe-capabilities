@@ -8,7 +8,7 @@ exists.
     tools/airframe-capabilities component <TYPE>            one component's outputs, verify checks, owner
     tools/airframe-capabilities targets                    list every cloud target type and its summary
     tools/airframe-capabilities target <TYPE>               one cloud target's conditions, verify checks, owner
-    tools/airframe-capabilities kinds                      list every other kind with a contract (app stacks,
+    tools/airframe-capabilities kinds                      list every other kind with a contract (cloud dependencies, app stacks,
                                                            environments, platform, observability), role and summary
     tools/airframe-capabilities kind <TYPE>                 one such kind's outputs, conditions, verify checks
     tools/airframe-capabilities verify <TYPE>               the executable verify steps of any kind (airframe-verify runs them)

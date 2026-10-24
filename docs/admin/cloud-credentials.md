@@ -407,17 +407,20 @@ deletion never has to scale it to zero), `iam:CreatePolicy`, any `iam:*` on a ro
 ### Cloud dependencies (2026-10-24)
 
 `MessageQueue`, `ObjectStorage` and `ManagedPostgreSQL` ([cloud-dependencies.md](../user/cloud-dependencies.md))
-need two additions: new statements in the Crossplane policy, so it can create the queues, buckets and servers,
-and new statements in the boundary, so a Lambda target's execution role can be granted access to a queue or
+need two additions: a second Crossplane policy, `HangarCrossplaneCloudDependencies`, attached to the same role, so
+it can create the queues, buckets and servers, and new statements in the boundary, so a Lambda target's execution role can be granted access to a queue or
 bucket. The grant itself needs no new IAM permission. It is an inline `RolePolicy` on an `*-exec` role that
 carries the boundary, which `ComposedRolesGrantOnlyInsideTheBoundary` already allows.
 
-Append the statements to the live documents and publish them as new default versions. Don't recreate
-anything. Run this as an administrator of the Hangar account:
+The boundary's statements are appended to its live document and published as a new default version. The
+Crossplane statements go into a policy of their own, because `HangarCrossplaneCloudTargets` plus these is over
+IAM's 6,144-character limit for a managed policy (`LimitExceeded ... PolicySize`, found on the first publish,
+2026-10-24). A role can hold ten managed policies. Run this as an administrator of the Hangar account:
 
 ```bash
 export AWS_PAGER="" AWS_PROFILE=hangar-admin
 REGION=us-east-1
+CLUSTER=<dev-cluster>    # the dev cluster's registry name
 ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 live() {  # the live default version of a policy, as JSON
   local arn="arn:aws:iam::${ACCOUNT}:policy/$1"
@@ -442,7 +445,7 @@ live HangarCloudTargetBoundary | jq --arg r "$REGION" --arg a "$ACCOUNT" '.State
 ]' > hangar-cloud-target-boundary.json
 
 # 2. The Crossplane identity: create, observe and delete the three kinds' resources, in the region.
-live HangarCrossplaneCloudTargets | jq --arg r "$REGION" --arg a "$ACCOUNT" '.Statement += [
+jq -n --arg r "$REGION" --arg a "$ACCOUNT" '{"Version": "2012-10-17", "Statement": []} | .Statement += [
   { "Sid": "DependencySqsQueues", "Effect": "Allow",
     "Action": ["sqs:CreateQueue", "sqs:DeleteQueue", "sqs:GetQueueAttributes", "sqs:SetQueueAttributes",
                "sqs:GetQueueUrl", "sqs:ListQueueTags", "sqs:TagQueue", "sqs:UntagQueue"],
@@ -475,9 +478,9 @@ live HangarCrossplaneCloudTargets | jq --arg r "$REGION" --arg a "$ACCOUNT" '.St
     "Resource": "arn:aws:lambda:\($r):\($a):event-source-mapping:*" },
   { "Sid": "DependencyLambdaTriggersList", "Effect": "Allow", "Action": "lambda:ListEventSourceMappings",
     "Resource": "*", "Condition": { "StringEquals": { "aws:RequestedRegion": $r } } }
-]' > hangar-crossplane-policy.json
+]' > hangar-crossplane-cloud-dependencies.json
 
-for f in hangar-cloud-target-boundary.json hangar-crossplane-policy.json; do
+for f in hangar-cloud-target-boundary.json hangar-crossplane-cloud-dependencies.json; do
   aws accessanalyzer validate-policy --policy-type IDENTITY_POLICY --policy-document "file://$f" \
     --query 'findings[].[findingType,issueCode]' --output text      # expect: nothing
 done
@@ -486,9 +489,11 @@ done
 aws iam create-policy-version --set-as-default \
   --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCloudTargetBoundary" \
   --policy-document file://hangar-cloud-target-boundary.json
-aws iam create-policy-version --set-as-default \
-  --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCrossplaneCloudTargets" \
-  --policy-document file://hangar-crossplane-policy.json
+aws iam create-policy --policy-name HangarCrossplaneCloudDependencies \
+  --description "Crossplane provider-aws on the Hangar dev cluster: what MessageQueue, ObjectStorage and ManagedPostgreSQL compose, one region" \
+  --policy-document file://hangar-crossplane-cloud-dependencies.json
+aws iam attach-role-policy --role-name "hangar-crossplane-${CLUSTER}" \
+  --policy-arn "arn:aws:iam::${ACCOUNT}:policy/HangarCrossplaneCloudDependencies"
 ```
 
 IAM keeps five versions of a policy. If `create-policy-version` refuses, delete the oldest non-default

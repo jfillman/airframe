@@ -101,8 +101,8 @@
             },
             "digest": {
               "type": "string",
-              "pattern": "^sha256:[a-f0-9]{64}$",
-              "description": "The image's manifest (index) digest. When set the workload runs repository:tag@digest, so the tag cannot move what runs (ADR-0029)."
+              "pattern": "^(sha256:[a-f0-9]{64})?$",
+              "description": "The image's manifest (index) digest, sha256:<hex>; empty means not pinned. When set the workload runs repository:tag@digest, so the tag cannot move what runs (ADR-0029)."
             },
             "source": {
               "type": "string",

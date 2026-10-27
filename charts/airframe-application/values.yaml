@@ -43,12 +43,20 @@ namespace:
 # human-owned env file. Takes precedence over the deprecated rollout.image. No workload renders
 # (Rollout/Service/ServiceMonitor) until both release.image fields are set.
 release:
-  # The image this release runs. Both fields are required for a workload to render.
+  # The image this release runs. repository and tag are required for a workload to render; digest pins
+  # it; source records where it came from.
   image:
     # Image repository without a tag, e.g. ghcr.io/example-org/boarding-api (an example).
     repository: ''
     # Image tag.
     tag: ''
+    # The image's manifest (index) digest, sha256:<hex>; empty means not pinned. When set the workload
+    # runs repository:tag@digest, so the tag cannot move what runs (ADR-0029).
+    digest: ''
+    # Where the image was built and where its evidence was verified before promotion, without a tag, e.g.
+    # ghcr.io/example-org/boarding-api (an example). Equal to repository until a separate Flight registry
+    # is configured. Not rendered; read by the release gates and Tower.
+    source: ''
 
 # Opaque escape hatch, deliberately excluded from the strictness rule: written by glidepath's
 # open-release-pr.yaml, never hand-authored. Null when this env hasn't gone through a release pipeline

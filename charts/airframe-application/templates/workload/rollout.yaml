@@ -14,7 +14,7 @@ workload* helpers in _helpers.tpl, which Jobs and CronJobs share.
 {{- $defaultProbe := dict "httpGet" (dict "path" "/" "port" $firstPort.name) }}
 {{- $mainContainer := dict
       "name" .Values.appName
-      "image" (printf "%s:%s" $image.repository $image.tag)
+      "image" (include "airframe-application.imageRef" $image)
       "ports" (list)
 }}
 {{- range .Values.rollout.ports }}

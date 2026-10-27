@@ -51,6 +51,11 @@ the rest of `rollout:` is kept, so turning it back on restores the settings. `ro
 `enabled: false`. `rollout.image` is a deprecated fallback for `release.image`, which wins when both are
 set. `jobs:` and `cronJobs:` entries without their own `image:` run the release image.
 
+When the release file also sets `release.image.digest` (`sha256:<hex>`, written by Glidepath, ADR-0029), every
+container that runs the release image is rendered as `repository:tag@digest`: the runtime pulls the digest, so the
+tag can no longer change what runs. `release.image.source` records the repository the image was built in (the
+Ground registry) and is never rendered; it equals `repository` until a separate Flight registry is configured.
+
 `releaseTracking` (written by Glidepath's `open-release-pr`) puts `hangar.io/release-id` and
 `hangar.io/app-namespace` annotations and a `hangar.io/release-tracked` label on the Rollout's own
 metadata, never the pod template. The Argo Rollouts notifications engine reports the Rollout's phase to

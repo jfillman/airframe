@@ -64,20 +64,33 @@ airframe-application.otelInjectRuntime - the OpenTelemetry Operator runtime to i
 {{- end -}}
 
 {{/*
-airframe-application.image - the image this release runs, as YAML {repository, tag}, or empty when none is set.
-The release-owned key `release.image` wins; `rollout.image` is the deprecated location and is used only when
-`release.image` is not fully set. Both need repository AND tag.
+airframe-application.image - the image this release runs, as YAML {repository, tag[, digest]}, or empty when none
+is set. The release-owned key `release.image` wins; `rollout.image` is the deprecated location and is used only when
+`release.image` is not fully set. Both need repository AND tag. `release.image.digest` (ADR-0029), when set, pins
+the image: airframe-application.imageRef renders repository:tag@digest.
 Usage: {{ $img := include "airframe-application.image" . | fromYaml }}
 */}}
 {{- define "airframe-application.image" -}}
 {{- $rel := .Values.release | default dict -}}
 {{- $ri := $rel.image | default dict -}}
 {{- if and $ri.repository $ri.tag -}}
-{{- dict "repository" $ri.repository "tag" $ri.tag | toYaml -}}
+{{- $img := dict "repository" $ri.repository "tag" $ri.tag -}}
+{{- if $ri.digest -}}{{- $_ := set $img "digest" $ri.digest -}}{{- end -}}
+{{- $img | toYaml -}}
 {{- else if .Values.rollout -}}
 {{- $ro := .Values.rollout.image | default dict -}}
 {{- if and $ro.repository $ro.tag -}}{{- dict "repository" $ro.repository "tag" $ro.tag | toYaml -}}{{- end -}}
 {{- end -}}
+{{- end -}}
+
+{{/*
+airframe-application.imageRef - an image dict {repository, tag[, digest]} as the string a container runs:
+repository:tag, or repository:tag@digest when the digest is set (the runtime then pulls the digest; the tag is
+for people). Used for the Rollout and for jobs:/cronJobs: entries alike.
+Usage: {{ include "airframe-application.imageRef" $image }}
+*/}}
+{{- define "airframe-application.imageRef" -}}
+{{- if .digest -}}{{ printf "%s:%s@%s" .repository .tag .digest }}{{- else -}}{{ printf "%s:%s" .repository .tag }}{{- end -}}
 {{- end -}}
 
 {{/*
@@ -332,7 +345,7 @@ Usage: {{ $container := fromYaml (include "airframe-application.batchContainer" 
 {{- if or (not $image) (not $image.repository) -}}
 {{- fail (printf "'%s' needs an image - neither release.image nor rollout.image is set, so there's no default to fall back to. Set this entry's own image: {repository, tag}." $entry.name) -}}
 {{- end -}}
-{{- $container := dict "name" $entry.name "image" (printf "%s:%s" $image.repository $image.tag) -}}
+{{- $container := dict "name" $entry.name "image" (include "airframe-application.imageRef" $image) -}}
 {{- if $entry.command -}}{{- $_ := set $container "command" $entry.command -}}{{- end -}}
 {{- if $entry.args -}}{{- $_ := set $container "args" $entry.args -}}{{- end -}}
 {{- if $entry.resources -}}{{- $_ := set $container "resources" $entry.resources -}}{{- end -}}

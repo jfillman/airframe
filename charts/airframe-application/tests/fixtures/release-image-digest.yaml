@@ -1,0 +1,14 @@
+# ADR-0029: a release pinned by digest runs repository:tag@digest, in the Rollout and in a batch entry that falls
+# back to the release image. source is recorded, never rendered.
+appName: guard-test
+release:
+  image:
+    repository: registry.example/flight/guard-test
+    tag: v4
+    digest: sha256:53de992b7d3b3f5965a10695b5b04a02cc0558807c0ad3a8f1c10971c3bd762d
+    source: registry.example/ground/guard-test
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+cronJobs:
+  - {name: nightly, schedule: "0 3 * * *"}

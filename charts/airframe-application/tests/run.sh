@@ -39,6 +39,12 @@ helm template t . -f tests/fixtures/release-image.yaml | grep -q "image: registr
 helm template t . -f tests/fixtures/release-image-wins.yaml | grep -q "image: registry.example/new:v2" || { echo "FAIL: release.image did not win over rollout.image"; fail=1; }
 helm template t . -f tests/fixtures/release-image-wins.yaml | grep -q "registry.example/old" && { echo "FAIL: deprecated rollout.image leaked into the render"; fail=1; }
 helm template t . -f tests/fixtures/release-image-jobs.yaml | grep -A60 "kind: CronJob" | grep -q "image: registry.example/guard-test:v3" || { echo "FAIL: cronJob did not fall back to release.image"; fail=1; }
+# ADR-0029: release.image.digest pins what runs (Rollout and batch fallback); source is never rendered.
+D=sha256:53de992b7d3b3f5965a10695b5b04a02cc0558807c0ad3a8f1c10971c3bd762d
+out=$(helm template t . -f tests/fixtures/release-image-digest.yaml 2>&1)
+[ "$(echo "$out" | grep -c "image: registry.example/flight/guard-test:v4@$D")" -eq 2 ] || { echo "FAIL: digest not rendered as repository:tag@digest in both the Rollout and the CronJob"; fail=1; }
+echo "$out" | grep -q "registry.example/ground" && { echo "FAIL: release.image.source leaked into the render"; fail=1; }
+helm template t . -f tests/fixtures/release-image.yaml | grep -q "image: registry.example/guard-test:v2$" || { echo "FAIL: no digest must still render repository:tag"; fail=1; }
 
 # the empty-image render must never contain the ':' image
 if helm template t . -f tests/fixtures/no-image.yaml | grep -qE "image: '?\"?:'?\"?$"; then
@@ -61,6 +67,8 @@ for f in typo-top-level-key typo-nested-key bad-component-size typo-release-key.
   $V --no-render "tests/validate/$f.yaml" >/dev/null 2>&1 && { echo "FAIL: validate accepted $f"; fail=1; }
 done
 $V --no-render tests/validate/good.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good release file"; fail=1; }
+$V --no-render tests/validate/good-digest.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected a release file with digest and source"; fail=1; }
+$V --no-render tests/validate/bad-digest.release.yaml >/dev/null 2>&1 && { echo "FAIL: validate accepted a digest that is not sha256:<hex>"; fail=1; }
 $V --no-render tests/validate/good-boarding-api-dev.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file"; fail=1; }
 $V --no-render tests/validate/good-boarding-api-dev.release.yaml >/dev/null 2>&1 || { echo "FAIL: validate rejected the good file's release companion"; fail=1; }
 

@@ -1,5 +1,5 @@
-# The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it: the NetworkPolicy admits
-# Prometheus on the scrape port and the pods carry the OTel Operator's inject annotation for the app's runtime.
+# The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it: the pods carry the OTel
+# Operator's inject annotation for the app's runtime. No scrape unless the app opts in (observability-scrape.yaml).
 appName: guard-test
 envName: dev
 release:

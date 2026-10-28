@@ -216,8 +216,11 @@ ingress: {annotations: {}, enabled: false, host: '', path: /, pathType: Prefix, 
 # assumes one).
 httpRoute: {annotations: {}, enabled: false, hostnames: [], parentRefs: [], path: /, pathType: PathPrefix}
 
-# Prometheus scraping of the main workload's first rollout.ports entry, via kube-prometheus-stack.
-serviceMonitor: {additionalLabels: {}, enabled: true, interval: 30s, path: /metrics, port: ''}
+# Prometheus scraping of the main workload's first rollout.ports entry, via kube-prometheus-stack. Off
+# by default: Hangar apps send metrics and traces over OTLP to the cluster's collector, and a scrape
+# of an app that serves no /metrics is a target that is always down (and a 404 traced every 30s). Turn
+# it on for an app that exposes Prometheus metrics.
+serviceMonitor: {additionalLabels: {}, enabled: false, interval: 30s, path: /metrics, port: ''}
 
 # The cluster's observability stack, as the tenant-onboarding ApplicationSet passes it (from Apron's
 # cluster config and the app's kind). Empty fields turn each part off, so a cluster without the stack,

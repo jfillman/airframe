@@ -1,0 +1,11 @@
+# An app that serves Prometheus metrics opts in to the scrape: the ServiceMonitor renders and the NetworkPolicy admits
+# Prometheus on the scrape port.
+appName: guard-test
+envName: dev
+release:
+  image: {repository: registry.example/guard-test, tag: v2}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+observability: {namespace: observability, instrumentation: observability/hangar, runtime: python}
+serviceMonitor: {enabled: true}

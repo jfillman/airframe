@@ -131,8 +131,10 @@ environment with no Rollout fails the render (`templates/release-tracking-guard.
 `observability` is platform-owned: the tenant-onboarding ApplicationSet sets it from Apron's cluster config and
 the app's kind, and an env file may not. Every field empty (the default) renders exactly as before.
 
-- `observability.namespace` (where Prometheus runs): the NetworkPolicy admits it on the ServiceMonitor's port.
-  Without it the baseline policy drops every scrape.
+- `observability.namespace` (where Prometheus runs): when the app opts in to scraping (`serviceMonitor.enabled`,
+  off by default), the NetworkPolicy admits it on the ServiceMonitor's port. Without it the baseline policy drops
+  every scrape. The scrape is opt-in because Hangar apps send metrics over OTLP; a scrape of an app that serves no
+  `/metrics` is a target that is always down, and a 404 traced every 30s.
 - `observability.instrumentation` (`<namespace>/<name>` of the cluster's OpenTelemetry Operator
   `Instrumentation`) and `observability.runtime` (`nodejs`, `java`, `python` or `go`, from the app's kind): the
   pods carry `instrumentation.opentelemetry.io/inject-<runtime>` and `deployment.environment.name`, so the app

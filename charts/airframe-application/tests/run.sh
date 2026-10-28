@@ -222,7 +222,11 @@ done
 # observability: Prometheus admitted on the scrape port, OTel inject annotation for nodejs/java/python only, the
 # OTLP egress rule only when egress is already restricted, and nothing at all when the keys are empty.
 np() { helm template t . -f "tests/fixtures/$1.yaml" --show-only templates/networking/networkpolicy.yaml 2>&1; }
-np observability | grep -B3 -A4 'kubernetes.io/metadata.name: observability' | grep -q 'port: http' || { echo "FAIL: observability.namespace did not admit Prometheus on the scrape port"; fail=1; }
+np observability-scrape | grep -B3 -A4 'kubernetes.io/metadata.name: observability' | grep -q 'port: http' || { echo "FAIL: observability.namespace did not admit Prometheus on the scrape port"; fail=1; }
+expect_present observability-scrape ServiceMonitor
+# The scrape is opt-in: apps send metrics over OTLP, and a scrape of an app with no /metrics is a target always down.
+expect_absent  observability ServiceMonitor
+np observability | grep -q 'kubernetes.io/metadata.name: observability' && { echo "FAIL: Prometheus admitted with the scrape off"; fail=1; }
 np release-image | grep -q 'observability' && { echo "FAIL: observability rule rendered with no observability.namespace"; fail=1; }
 ro observability | grep -q 'instrumentation.opentelemetry.io/inject-python: "observability/hangar"' || { echo "FAIL: inject-python annotation missing"; fail=1; }
 ro observability | grep -q 'resource.opentelemetry.io/deployment.environment.name: "dev"' || { echo "FAIL: deployment.environment.name annotation missing"; fail=1; }

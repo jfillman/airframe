@@ -114,6 +114,73 @@ def hand_written_component_ref_rule(data):
     return out
 
 
+
+# A hand-written in-cluster Service host: <service>.<namespace>.svc[.cluster.local]. A superset of the hangar scorecard's
+# `svc\.cluster\.local` literal check (tools/airframe-scorecard/scorecard.py), so anything it counts, this names.
+SERVICE_HOST = re.compile(r"(?:(?P<scheme>[a-z][a-z0-9+.-]*)://)?(?P<svc>[a-z0-9]([-a-z0-9]*[a-z0-9])?)\."
+                          r"(?P<ns>[a-z0-9]([-a-z0-9]*[a-z0-9])?)\.svc(?P<local>\.cluster\.local)?(?![a-z0-9.-])"
+                          r"(?::(?P<port>[0-9]+))?(?P<rest>\S*)")
+
+
+def _from_service_suggestion(m, env_name):
+    """The fromService that renders the same URL, or None when the URL has more than fromService expresses (a path)
+    or its namespace is not an <app|infra>-<app>-<env> one."""
+    if m.group("rest") or not m.group("port") or m.start() != 0:
+        return None
+    svc, ns = m.group("svc"), m.group("ns")
+    for kind in ("app", "infra"):
+        if not ns.startswith(kind + "-"):
+            continue
+        rest = ns[len(kind) + 1:]
+        # The service is usually the app's own name; otherwise the namespace's env is this file's envName.
+        if rest.startswith(svc + "-"):
+            app, env, service = svc, rest[len(svc) + 1:], None
+        elif env_name and rest.endswith("-" + env_name):
+            app, env, service = rest[: -len(env_name) - 1], env_name, svc
+        else:
+            continue
+        ref = {"app": app, "port": int(m.group("port"))}
+        if (m.group("scheme") or "http") != "http":
+            ref["scheme"] = m.group("scheme")
+        if kind != "app":
+            ref["type"] = kind
+        if env != env_name:
+            ref["env"] = env
+        if service:
+            ref["service"] = service
+        return "{" + ", ".join(f"{k}: {v}" for k, v in ref.items()) + "}"
+    return None
+
+
+def hand_written_service_url_rule(data):
+    """AF-SVC-001 (advisory): an env value hand-writes another app's in-cluster Service URL, so it relies on the
+    platform's namespace convention (<type>-<app>-<env>) instead of letting the platform resolve it - the gap
+    env[].fromService closes. Warning, not an error: fromService needs the platform to pass
+    serviceNamespacePattern, which lands per cluster after the chart; and a URL into a namespace outside the
+    convention (a shared platform service) is legitimate. Promote it once the fleet is migrated."""
+    out = []
+    env_name = data.get("envName") if isinstance(data.get("envName"), str) else None
+    comp_names = {c["name"] for c in (data.get("components") or []) if isinstance(c, dict) and c.get("name")}
+    for i, e in enumerate(data.get("env") or []):
+        if not isinstance(e, dict) or not isinstance(e.get("value"), str):
+            continue
+        m = SERVICE_HOST.search(e["value"])
+        if not m:
+            continue
+        svc = m.group("svc")
+        comp = next((c for c in sorted(comp_names) if svc == c or svc.startswith(c + "-")), None)
+        sugg = None if comp else _from_service_suggestion(m, env_name)
+        if comp:
+            hint = f"this looks like component '{comp}'s own Service: use fromComponent (see its xrds/<type>.meta.yaml outputs)"
+        elif sugg:
+            hint = f"use fromService: {sugg}"
+        else:
+            hint = ("if it is another app's or an InfraService's Service, use fromService: {app, port} (scheme, type, env, "
+                    "service as needed); a platform service outside the <type>-<app>-<env> namespaces can stay a value")
+        out.append((f"/env/{i}/value", "AF-SVC-001",
+                    f"'{m.group(0)}' is a hand-written in-cluster Service URL", hint, "warning"))
+    return out
+
 def all_deadend_problems(data, schema):
     problems = []
     problems.extend(cluster_rule(data))
@@ -121,4 +188,5 @@ def all_deadend_problems(data, schema):
     problems.extend(component_kind_rule(data, schema))
     problems.extend(secret_literal_rule(data))
     problems.extend(hand_written_component_ref_rule(data))
+    problems.extend(hand_written_service_url_rule(data))
     return problems

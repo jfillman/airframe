@@ -1,0 +1,9 @@
+# fromService without its required port: the schema rejects it.
+appName: fromservice-bad-shape
+envName: dev
+serviceNamespacePattern: "{type}-{app}-{env}"
+release:
+  image: {repository: registry.example/fromservice-bad-shape, tag: v1}
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api}

@@ -1,0 +1,9 @@
+# A serviceNamespacePattern without {env}: the schema rejects it (every namespace is per environment).
+appName: fromservice-bad-pattern
+envName: dev
+serviceNamespacePattern: "{type}-{app}"
+release:
+  image: {repository: registry.example/fromservice-bad-pattern, tag: v1}
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api, port: 8080}

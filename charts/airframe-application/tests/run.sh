@@ -61,6 +61,19 @@ echo "$out" | grep -A4 "name: MQ_HOST" | grep -q "name: mq-connection" || { echo
 helm template t . -f tests/fixtures/from-component-bad-name.yaml 2>&1 | grep -q "no components\[\] entry named 'nonexistent'" || { echo "FAIL: fromComponent did not reject an unknown component name"; fail=1; }
 helm template t . -f tests/fixtures/from-component-bad-output.yaml 2>&1 | grep -q "has no output 'bogus'" || { echo "FAIL: fromComponent did not reject an unknown output name"; fail=1; }
 
+# fromService: another app's Service URL, the namespace from the platform-passed serviceNamespacePattern, in the
+# Rollout and every Job and CronJob; fails loudly when the pattern (or an env) is missing, never guesses.
+out=$(helm template t . -f tests/fixtures/from-service.yaml 2>&1)
+[ "$(echo "$out" | grep -c 'value: http://flight-api.app-flight-api-dev.svc.cluster.local:8080$')" -eq 3 ] || { echo "FAIL: fromService did not resolve in the Rollout, the Job and the CronJob"; fail=1; }
+echo "$out" | grep -q 'value: http://flight-api.app-flight-api-staging.svc.cluster.local:8080$' || { echo "FAIL: fromService.env did not override envName"; fail=1; }
+echo "$out" | grep -q 'value: amqp://broker.infra-skyport-broker-dev.svc.cluster.local:5672$' || { echo "FAIL: fromService type/scheme/service did not resolve"; fail=1; }
+echo "$out" | grep -q 'value: https://skyport-auth.infra-skyport-auth-dev.svc.cluster.local:443$' || { echo "FAIL: fromService type: infra did not resolve"; fail=1; }
+helm template t . -f tests/fixtures/from-service-no-pattern.yaml 2>&1 | grep -q "fromService: env 'FLIGHT_API_URL' needs serviceNamespacePattern" || { echo "FAIL: fromService did not fail without serviceNamespacePattern"; fail=1; }
+helm template t . -f tests/fixtures/from-service-no-env.yaml 2>&1 | grep -q "fromService: env 'FLIGHT_API_URL' has no environment to resolve" || { echo "FAIL: fromService did not fail without an env"; fail=1; }
+helm template t . -f tests/fixtures/from-service-bad-shape.yaml 2>&1 | grep -q "missing property 'port'" || { echo "FAIL: fromService without a port was accepted"; fail=1; }
+helm template t . -f tests/fixtures/from-service-and-value.yaml 2>&1 | grep -q "'oneOf' failed" || { echo "FAIL: fromService together with value was accepted"; fail=1; }
+helm template t . -f tests/fixtures/from-service-bad-pattern.yaml 2>&1 | grep -q "/serviceNamespacePattern" || { echo "FAIL: a serviceNamespacePattern without {env} was accepted"; fail=1; }
+
 # AF-4a: airframe validate rejects the typo cases and accepts a real file.
 V=../../tools/airframe-validate
 for f in typo-top-level-key typo-nested-key bad-component-size typo-release-key.release; do
@@ -87,6 +100,13 @@ $V --no-render tests/validate/unknown-component-type.yaml 2>&1 | grep -q AF-COMP
 $V --no-render tests/validate/secret-literal.yaml 2>&1 | grep -q AF-SECRET-001 || { echo "FAIL: AF-SECRET-001 did not fire"; fail=1; }
 # AF-COMP-003 is an advisory warning, not a failure - the boarding-api fixture (real hand-written names) proves it fires without blocking.
 $V --no-render tests/validate/good-boarding-api-dev.yaml 2>&1 | grep -q "warn.*AF-COMP-003" || { echo "FAIL: AF-COMP-003 advisory did not fire on the boarding-api fixture"; fail=1; }
+# AF-SVC-001 is advisory too: a hand-written in-cluster Service URL warns (with the exact fromService to use) without
+# blocking, the same reference through fromService validates, renders with the stand-in pattern, and does not warn.
+out=$($V --no-render tests/validate/hand-written-service-url.yaml 2>&1) || { echo "FAIL: AF-SVC-001 blocked a file (it is advisory)"; fail=1; }
+echo "$out" | grep -q "warn.*AF-SVC-001.*use fromService: {app: flight-api, port: 8080}" || { echo "FAIL: AF-SVC-001 did not fire with its fromService suggestion"; fail=1; }
+out=$($V tests/validate/good-from-service.yaml 2>&1) || { echo "FAIL: validate rejected a fromService file ($out)"; fail=1; }
+echo "$out" | grep -q AF-SVC-001 && { echo "FAIL: AF-SVC-001 fired on fromService"; fail=1; }
+$V --service-namespace-pattern "" tests/validate/good-from-service.yaml 2>&1 | grep -q "AF-RENDER-001.*needs serviceNamespacePattern" || { echo "FAIL: validate did not name the missing serviceNamespacePattern"; fail=1; }
 $V --no-render --format json tests/validate/good-boarding-api-dev.yaml | python3 -c "import json,sys; json.load(sys.stdin)" || { echo "FAIL: --format json did not produce valid JSON"; fail=1; }
 
 # Extra labels and annotations (rollout.labels/annotations, podLabels/podAnnotations, serviceLabels/serviceAnnotations):

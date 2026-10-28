@@ -1,0 +1,11 @@
+# The same reference as hand-written-service-url.yaml, through fromService: validates and renders (with the stand-in
+# serviceNamespacePattern airframe-validate passes; the Job's own image makes the render resolve the env) and raises
+# no AF-SVC-001.
+appName: good-from-service
+envName: dev
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api, port: 8080}
+jobs:
+  - name: migrate
+    image: {repository: registry.example/good-from-service-migrate, tag: v1}

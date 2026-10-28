@@ -73,6 +73,11 @@ ids and fix hints, so an agent can retry against them deterministically:
   anything else in a release file, fails. Humans and the release pipeline never edit the same keys.
 - `AF-COMP-001/002`: an unknown component type, or a `fromComponent` reference to an output the
   component does not declare, fails.
+- `AF-COMP-003` and `AF-SVC-001` (warnings): a hand-written reference the platform can resolve instead - a
+  component's derived Secret or ConfigMap name (use `fromComponent`), or an in-cluster Service URL that
+  guesses the `<type>-<app>-<env>` namespace convention (use `fromService`, which takes the namespace from
+  the platform-owned `serviceNamespacePattern`). Advisory until the fleet is migrated; a `fromService` with
+  no `serviceNamespacePattern` passed fails the render.
 - Chart guards: a developer label that would override a chart-owned identity label, a `podSpec`
   that replaces the container list, `releaseTracking` on a release with no Rollout, each fail the
   render with a message naming the key.

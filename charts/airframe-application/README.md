@@ -88,11 +88,24 @@ environment with no Rollout fails the render (`templates/release-tracking-guard.
 
 ## Config and secrets
 
-- `env:` entries carry `value`, `valueFrom`, or `fromComponent: {name, output}`. `fromComponent` resolves
+- `env:` entries carry `value`, `valueFrom`, `fromComponent: {name, output}` or `fromService`, at most one. `fromComponent` resolves
   against `files/component-outputs.yaml`, which `tools/gen_component_outputs.py` generates from each
   component's `xrds/<type>.meta.yaml`, so `{name: DB_URI, fromComponent: {name: db, output: uri}}` becomes a
   `secretKeyRef` to the Secret the PostgreSQL component created. An unknown component or output fails the
   render.
+- `fromService: {app, port, scheme, type, env, service}` is another app's in-cluster Service URL,
+  `<scheme>://<service>.<namespace>.svc.cluster.local:<port>`, so `{name: FLIGHT_API_URL, fromService: {app:
+  flight-api, port: 8080}}` in boarding-api's dev values becomes
+  `http://flight-api.app-flight-api-dev.svc.cluster.local:8080`. The chart does not know the namespace
+  convention: the platform passes it as `serviceNamespacePattern` (platform-owned, like `envName`), a pattern
+  over `{type}`, `{app}` and `{env}` taken from Glidepath's `glidepath-app.envNamespacePattern` for Ground and
+  PR environments and set by the cluster's tenant-onboarding ApplicationSet for Flight. `port` is required
+  (the chart cannot read another app's values); `scheme` defaults to `http`, `type` to `app` (`infra` for an
+  InfraService), `service` to `app`, and `env` to this release's `envName`. Set `env` where the names differ:
+  a PR environment (`pr-12`) has no `flight-api-pr-12`, so `glidepath/pr-env.yaml` sets `env: dev`. An empty
+  `serviceNamespacePattern` (an environment whose platform config or chart pin predates it), or no env at
+  all, fails the render; nothing falls back to a guessed namespace. `airframe-validate` warns on a
+  hand-written `*.svc[.cluster.local]` URL (AF-SVC-001) and names the `fromService` that replaces it.
 - `configMaps:` entries set `data:` (the chart renders the ConfigMap) or `existingConfigMap:` (one created
   elsewhere, under a fixed name), exactly one. `as: volume` (default), `env` (every key via `envFrom`) or
   `both`.

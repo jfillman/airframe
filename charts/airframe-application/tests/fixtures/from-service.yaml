@@ -1,0 +1,23 @@
+# fromService: another app's Service URL, its namespace from the platform's serviceNamespacePattern (set here as
+# the platform would pass it). Resolves in the Rollout, every Job and every CronJob alike.
+appName: fromservice-test
+envName: dev
+serviceNamespacePattern: "{type}-{app}-{env}"
+release:
+  image: {repository: registry.example/fromservice-test, tag: v1}
+rollout:
+  ports:
+    - {name: http, containerPort: 8080}
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api, port: 8080}
+  - name: FLIGHT_API_DEV_URL
+    fromService: {app: flight-api, port: 8080, env: staging}
+  - name: BROKER_URL
+    fromService: {app: skyport-broker, port: 5672, scheme: amqp, type: infra, service: broker}
+  - name: AUTH_URL
+    fromService: {app: skyport-auth, port: 443, scheme: https, type: infra}
+jobs:
+  - {name: migrate}
+cronJobs:
+  - {name: nightly, schedule: "0 3 * * *"}

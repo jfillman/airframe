@@ -32,6 +32,14 @@ envName: ''
 # environments.
 clusterType: ''
 
+# The platform's environment-namespace convention, as a pattern over {type}, {app} and {env} (it must
+# contain {app} and {env}). The platform passes it, the same way it passes envName: Glidepath from its
+# glidepath-app.envNamespacePattern helper for Ground and PR environments, the cluster's
+# tenant-onboarding ApplicationSet for Flight environments. env[].fromService resolves another app's
+# namespace with it, so the chart never hard-codes the convention. Empty means not passed: a
+# fromService entry then fails the render rather than guess.
+serviceNamespacePattern: ''
+
 # Extra labels/annotations stamped on this release's own Namespace object.
 namespace:
   # e.g. hangar.io/ephemeral-env: "true" for the PR-preview TTL sweep selector.

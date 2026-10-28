@@ -1,0 +1,8 @@
+# fromService with neither fromService.env nor envName: nothing to fill {env} with, so the render fails.
+appName: fromservice-no-env
+serviceNamespacePattern: "{type}-{app}-{env}"
+release:
+  image: {repository: registry.example/fromservice-no-env, tag: v1}
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api, port: 8080}

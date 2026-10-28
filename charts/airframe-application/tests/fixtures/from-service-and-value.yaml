@@ -1,0 +1,10 @@
+# fromService and value on one entry: the schema's oneOf allows at most one value source.
+appName: fromservice-and-value
+envName: dev
+serviceNamespacePattern: "{type}-{app}-{env}"
+release:
+  image: {repository: registry.example/fromservice-and-value, tag: v1}
+env:
+  - name: FLIGHT_API_URL
+    value: http://flight-api.app-flight-api-dev.svc.cluster.local:8080
+    fromService: {app: flight-api, port: 8080}

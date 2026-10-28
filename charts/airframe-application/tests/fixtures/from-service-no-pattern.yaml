@@ -1,0 +1,8 @@
+# fromService with no serviceNamespacePattern passed: the render fails rather than guess the convention.
+appName: fromservice-no-pattern
+envName: dev
+release:
+  image: {repository: registry.example/fromservice-no-pattern, tag: v1}
+env:
+  - name: FLIGHT_API_URL
+    fromService: {app: flight-api, port: 8080}

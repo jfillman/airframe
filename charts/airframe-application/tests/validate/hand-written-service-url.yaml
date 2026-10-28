@@ -1,0 +1,6 @@
+# AF-SVC-001 (advisory): a hand-written in-cluster Service URL guesses the namespace convention; fromService resolves it.
+appName: hand-written-service-url
+envName: dev
+env:
+  - name: FLIGHT_API_URL
+    value: http://flight-api.app-flight-api-dev.svc.cluster.local:8080

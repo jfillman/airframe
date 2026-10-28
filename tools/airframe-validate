@@ -29,7 +29,8 @@ AF-COMP-002 (AF-3): an env[].fromComponent reference names a components[] entry 
 doesn't exist. AF-4b dead-end rules (tools/deadend_rules.py): AF-CLUSTER-001 (the removed
 devClusterName key is set), AF-ENV-001 (envName named like a pipeline stage), AF-COMP-001
 (unknown component type), AF-SECRET-001 (a secret-shaped literal in env/configMaps), AF-COMP-003
-(warning: a hand-written valueFrom matches a real component's own output - use fromComponent).
+(warning: a hand-written valueFrom matches a real component's own output - use fromComponent), AF-SVC-001
+(warning: an env value hand-writes an in-cluster Service URL - use fromService, or fromComponent for a component's).
 AF-OWNER-001 (error, AF-5b): a release-owned key (`release`, `releaseTracking`, the deprecated
 `rollout.image`) in a human file, or anything else in a release file. A release file is named
 `*.release.yaml` or `release.yaml`.
@@ -165,11 +166,14 @@ def check_file(path, schema, args):
         with tempfile.TemporaryDirectory() as td:
             base = Path(td) / "base.yaml"
             base.write_text(yaml.safe_dump({"appName": app or "validate", "cluster": args.cluster, "clusterType": args.cluster_type,
-                                            "envName": data.get("envName", "dev")}))
+                                            "envName": data.get("envName", "dev"),
+                                            "serviceNamespacePattern": args.service_namespace_pattern}))
             r = subprocess.run(["helm", "template", "validate", str(CHART), "-f", str(base), "-f", str(path)],
                                capture_output=True, text=True)
             if r.returncode != 0:
-                msg = (r.stderr.strip().splitlines() or ["helm failed"])[-1][:200]
+                # helm ends a failed render with "Use --debug flag..."; the Error: line is the one that names the fix.
+                lines = r.stderr.strip().splitlines() or ["helm failed"]
+                msg = next((ln for ln in lines if ln.startswith("Error:")), lines[-1])[:400]
                 errors.append(("/", "AF-RENDER-001", msg, "fix the value the message names, then re-run"))
     return errors, warnings
 
@@ -291,6 +295,10 @@ def main():
     ap.add_argument("--cluster", default="validate-cluster", help="cluster name to render with (a stand-in by default)")
     ap.add_argument("--cluster-type", default="upper", choices=["dev", "upper"],
                     help="the cluster's registry type to render with (default upper)")
+    # The platform passes serviceNamespacePattern (Glidepath's glidepath-app.envNamespacePattern, the Flight
+    # tenant-onboarding ApplicationSet); a stand-in here only lets an env[].fromService entry render.
+    ap.add_argument("--service-namespace-pattern", default="validate-{type}-{app}-{env}",
+                    help="serviceNamespacePattern to render with (a stand-in by default)")
     ap.add_argument("--no-render", action="store_true")
     ap.add_argument("--xr", action="store_true", help="the files are XR requests; validate them against the XRDs")
     ap.add_argument("--format", choices=["text", "json"], default="text")

@@ -219,8 +219,32 @@ valueFrom:
 {{- end -}}
 
 {{/*
+airframe-application.resolveFromService - resolves one `env[].fromService: {app, port, scheme, type, env,
+service}` to a `value`: <scheme>://<service>.<namespace>.svc.cluster.local:<port>. The namespace comes from
+serviceNamespacePattern, which the platform passes (Glidepath's glidepath-app.envNamespacePattern; the Flight
+tenant-onboarding ApplicationSet), with {type}, {app} and {env} filled in. The chart never knows the convention
+itself, so an empty pattern, or no env to fill {env} with, fails the render instead of guessing.
+
+Usage: {{ $resolved := include "airframe-application.resolveFromService" (dict "root" $ "name" .name "ref" .fromService) | fromYaml }}
+*/}}
+{{- define "airframe-application.resolveFromService" -}}
+{{- $root := .root -}}
+{{- $ref := .ref -}}
+{{- $pattern := $root.Values.serviceNamespacePattern | default "" -}}
+{{- if not $pattern -}}
+{{- fail (printf "fromService: env '%s' needs serviceNamespacePattern (the platform's namespace convention), which is empty: the platform passes it to every environment, so this environment's chart pin or platform config predates it. Do not hand-write the URL instead." .name) -}}
+{{- end -}}
+{{- $env := $ref.env | default $root.Values.envName | default "" -}}
+{{- if not $env -}}
+{{- fail (printf "fromService: env '%s' has no environment to resolve: set fromService.env, or envName (which the platform passes)" .name) -}}
+{{- end -}}
+{{- $ns := $pattern | replace "{type}" ($ref.type | default "app") | replace "{app}" $ref.app | replace "{env}" $env -}}
+value: {{ printf "%s://%s.%s.svc.cluster.local:%d" ($ref.scheme | default "http") ($ref.service | default $ref.app) $ns (int $ref.port) | quote }}
+{{- end -}}
+
+{{/*
 airframe-application.workloadEnv - the container env shared by the Rollout and every Job and CronJob:
-each env: entry (`value`, `valueFrom`, or `fromComponent`), then a secretKeyRef into app-secrets for each
+each env: entry (`value`, `valueFrom`, `fromComponent` or `fromService`), then a secretKeyRef into app-secrets for each
 secrets: entry consumed as env (`key` is the env var name; default: the upper-cased name).
 
 Usage: {{ $env := fromYamlArray (include "airframe-application.workloadEnv" $) }}
@@ -231,6 +255,9 @@ Usage: {{ $env := fromYamlArray (include "airframe-application.workloadEnv" $) }
 {{- range .Values.env -}}
 {{- if .fromComponent -}}
 {{- $resolved := include "airframe-application.resolveFromComponent" (dict "root" $root "ref" .fromComponent) | fromYaml -}}
+{{- $env = append $env (merge (dict "name" .name) $resolved) -}}
+{{- else if .fromService -}}
+{{- $resolved := include "airframe-application.resolveFromService" (dict "root" $root "name" .name "ref" .fromService) | fromYaml -}}
 {{- $env = append $env (merge (dict "name" .name) $resolved) -}}
 {{- else if .valueFrom -}}
 {{- $env = append $env (dict "name" .name "valueFrom" .valueFrom) -}}

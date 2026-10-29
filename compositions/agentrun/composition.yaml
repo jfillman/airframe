@@ -30,6 +30,10 @@ spec:
         # Where AgentRun XRs live (Clearance's Role is on this namespace) and where Clearance and the model proxy run.
         runs_namespace: autopilot-runs
         clearance_namespace: autopilot-system
+        # The model proxy is Clearance itself (clearance server.create_model_app, port 8081 on the same pod): it charges a
+        # run's model tokens to the session budget in the same evidence chain as its tool calls, so a run's model
+        # egress goes to the Clearance pod. The Service is still named model-proxy (MODEL_PROXY_URL).
+        model_proxy_selector: {app.kubernetes.io/name: clearance}
         # sandbox: hardened -> runtime class. Empty: no cluster in the home lab has gVisor or Kata, so a hardened
         # request is Rejected, never downgraded.
         runtime_classes: {}

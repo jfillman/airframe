@@ -102,7 +102,7 @@ resources:
                   kubernetes.io/metadata.name: autopilot-system
               podSelector:
                 matchLabels:
-                  app.kubernetes.io/name: model-proxy
+                  app.kubernetes.io/name: clearance
           podSelector: {}
           policyTypes:
           - Egress

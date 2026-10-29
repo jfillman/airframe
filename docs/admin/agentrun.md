@@ -5,9 +5,10 @@ Autopilot's tool gateway, creates it through the Kubernetes API in `autopilot-ru
 the one Airframe kind that is not requested from git, because a run lives for minutes and no person reviews it
 (Autopilot design, "Durable writes are commits; ephemeral runs are direct requests").
 
-**Status: built, not installed.** The XRD, the composition and function-agentrun are in this repo with unit and
-render tests. They are not in any cluster's `airframe-service-catalog` include list: the first live use is a copy-test
-on the dev cluster (a second Composition, one scratch XR pointing at it).
+**Status: installed on hangar-dev.** The copy-test passed on 2026-10-28 ([results](agentrun-copy-test.md#results-2026-10-28)),
+and the XRD and Composition ship through `airframe-service-catalog` on clusters rendered with `components.autopilot`.
+Nothing creates runs yet: Clearance (AP-A2) is not deployed. Open: finished runs are never deleted (a reaper is owed,
+see the copy-test results).
 
 ## What a run gets
 
@@ -55,13 +56,11 @@ Everything below is in the cluster repo (apron renders it with `components.autop
 
 | Path | What |
 |---|---|
-| `55-autopilot/agent-sandbox/` | the agent-sandbox controller, chart and image pinned (v1.0.8, commit + digest) |
-| `55-autopilot/agentrun-grants/` | provider-kubernetes's ClusterRole, its confinement policy, Clearance's Role |
+| `55-autopilot/agent-sandbox/` | the agent-sandbox controller v1.0.8 (the image by tag: the chart labels with it), leader election off |
+| `55-autopilot/agentrun-grants/` | provider-kubernetes's ClusterRole, its confinement policy, the Object-origin policy, Clearance's Role |
 | `10-crds-operators/crossplane/provider-kubernetes-runtime.yaml` | a stable service account name for provider-kubernetes |
 | `10-crds-operators/crossplane/functions.yaml`, `function-agentrun-runtime.yaml` | the Function, with `HANGAR_CLUSTER_NAME` |
-
-Then the XRD and Composition (`xrds/agentrun.yaml`, `compositions/agentrun/composition.yaml`) go into
-`airframe-service-catalog`'s include list, after the copy-test.
+| `20-service-catalog/airframe-service-catalog/` | `xrds/agentrun.yaml` and `compositions/agentrun/composition.yaml` in the include list |
 
 Verify a live run: `tools/airframe-verify agentrun autopilot-runs/<name>`. Egress is proven by Autopilot's
 `tools/netpol_canary.py`, which renders the same policies with this function's `compose()`.

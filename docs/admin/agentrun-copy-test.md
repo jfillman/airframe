@@ -2,6 +2,8 @@
 
 The first live use of AgentRun: a person runs this on the dev cluster after the merges below. Nothing in it is
 automated, and every step says what you should see. Stop at the first step whose output differs, and report it.
+It passed on 2026-10-28 ([results](#results-2026-10-28)); since then the XRD and the Composition come from
+`airframe-service-catalog`, so a re-run applies only the copy Composition (step 3) and never deletes the XRD (step 9).
 
 Every command names `--context hangar-dev`. Never run any of it against hangar-prod.
 
@@ -35,13 +37,15 @@ $K -n agent-sandbox-system get deploy agent-sandbox-controller \
 $K get crd sandboxes.agents.x-k8s.io -o jsonpath='{.status.conditions[?(@.type=="Established")].status}{"\n"}'
 $K get ns agent-sandbox-system -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}{"\n"}'
 ```
-Expect `1/1 registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.8@sha256:e1d96312487eba7d8f001e848a9d4e644b7deea8c2a4564ccc318abb729be731`,
-then `True`, then `restricted`.
+Expect `1/1 registry.k8s.io/agent-sandbox/agent-sandbox-controller:v1.0.8` (a tag, not a digest: the chart copies
+the tag into a label, which can't hold `@sha256:`; v1.0.8 resolves to `sha256:e1d96312…a731`), then `True`, then
+`restricted`. The controller's args include `--leader-elect=false` (one replica; lease renewals timed out on the
+slow API server and restarted it).
 
 provider-kubernetes on its stable service account, and the old grants still working:
 ```shell
-$K -n crossplane-system get deploy -l pkg.crossplane.io/provider=provider-kubernetes \
-  -o jsonpath='{.items[0].spec.template.spec.serviceAccountName} {.items[0].status.readyReplicas}{"\n"}'
+$K -n crossplane-system get pod -l pkg.crossplane.io/provider=provider-kubernetes \
+  -o jsonpath='{.items[0].spec.serviceAccountName} {.items[0].status.containerStatuses[0].ready}{"\n"}'
 $K get clusterrolebinding -o json | python3 -c 'import json,sys
 for b in json.load(sys.stdin)["items"]:
     for s in b.get("subjects") or []:
@@ -52,7 +56,7 @@ bad = [o["metadata"]["name"] for o in items if any(c["type"] in ("Synced", "Read
        for c in o.get("status", {}).get("conditions", []))]
 print(len(items), "objects;", "not Synced/Ready:", bad or "none")'
 ```
-Expect `provider-kubernetes 1`; the bindings `crossplane:provider:provider-kubernetes-<hash>:system`,
+Expect `provider-kubernetes true`; the bindings `crossplane:provider:provider-kubernetes-<hash>:system`,
 `provider-kubernetes-applied-resources` and `hangar-agentrun-objects`, each with subject `provider-kubernetes` (no
 `provider-kubernetes-f6665ef36536` left); and `27 objects; not Synced/Ready: none` (the ClusterSecretStores and Secrets that exist today). If any
 Object went `Synced=False` after the provider restarted, stop: the binding change broke an existing grant.
@@ -60,12 +64,13 @@ Object went `Synced=False` after the provider restarted, stop: the binding chang
 function-agentrun, and the registry flag:
 ```shell
 $K get functions.pkg.crossplane.io function-agentrun -o jsonpath='{.status.conditions[?(@.type=="Healthy")].status} {.spec.package}{"\n"}'
-$K -n crossplane-system get deploy -l pkg.crossplane.io/function=function-agentrun \
-  -o jsonpath='{.items[0].spec.template.spec.containers[0].env}{"\n"}'
+$K -n crossplane-system get pod -l pkg.crossplane.io/function=function-agentrun \
+  -o jsonpath='{.items[0].spec.containers[0].env[0]}{"\n"}'
 $K -n crossplane-system get cm hangar-dev -o jsonpath='{.data.type} {.data.autopilotReady}{"\n"}'
 ```
 Expect `True ghcr.io/jfillman/function-agentrun@sha256:cf9f288c45b4722fd7e94ecc565e884234e4719d6c55b48c9ff36fb6fbb51935`,
-`[{"name":"HANGAR_CLUSTER_NAME","value":"hangar-dev"}]`, and `dev true`.
+`{"name":"HANGAR_CLUSTER_NAME","value":"hangar-dev"}`, and `dev true`. (Crossplane labels the pods, not the
+Deployments, so both selectors above read pods.)
 
 The policy, the role and Clearance's role:
 ```shell
@@ -79,7 +84,8 @@ $K auth can-i patch agentruns.catalog.hangar.io -n autopilot-runs --as=$CLEARANC
 $K auth can-i create agentruns.catalog.hangar.io -n default --as=$CLEARANCE          # no
 $K auth can-i create sandboxes.agents.x-k8s.io -n autopilot-runs --as=$CLEARANCE     # no
 ```
-(`agentruns` answers `no` with a warning until step 3 installs the XRD; re-run those three after step 3.)
+(Before the catalog shipped the XRD, `agentruns` answered `no` with a warning until step 3; now all three answer
+at once.)
 
 ## 2. The policy refuses what D15 forbids
 
@@ -107,7 +113,7 @@ Expect `... ValidatingAdmissionPolicy 'autopilot-agentrun-provider-confinement' 
 
 ```shell
 $K label ns kube-system vap-probe=1 --dry-run=server --as=$PROVIDER
-$K label ns kube-system pod-security.kubernetes.io/enforce- --dry-run=server --as=$PROVIDER
+$K label ns kube-system pod-security.kubernetes.io/warn=baseline --dry-run=server --as=$PROVIDER
 $K create ns agent-r-0b0b0b --dry-run=server --as=$PROVIDER
 ```
 Expect each refused by the same policy: `... namespaces only as or inside Autopilot run namespaces (agent-r-*), not kube-system`
@@ -152,15 +158,15 @@ Expect `0`.
 
 ## 3. Install the copy
 
-The XRD and a second Composition under another name, applied by hand (not in `airframe-service-catalog` yet):
+A second Composition under another name, applied by hand; the XRD is `airframe-service-catalog`'s (on the first
+run, before the catalog shipped it, it was applied by hand here too):
 ```shell
-git -C ~/tech/airframe show origin/main:xrds/agentrun.yaml | $K apply -f -
 $K wait xrd agentruns.catalog.hangar.io --for=condition=Established --timeout=120s
 git -C ~/tech/airframe show origin/main:compositions/agentrun/composition.yaml \
   | sed 's/^  name: agentruns.catalog.hangar.io$/  name: agentruns-copy.catalog.hangar.io/' | $K apply -f -
 $K get composition agentruns-copy.catalog.hangar.io -o jsonpath='{.spec.pipeline[0].functionRef.name}{"\n"}'
 ```
-Expect `condition met` and `function-agentrun`. Re-run the three Clearance `can-i` checks from step 1 (yes, yes, no).
+Expect `condition met` and `function-agentrun`.
 
 ## 4. A run reaches Running, under pod security restricted
 
@@ -192,6 +198,10 @@ EOF
 run r-c0de01 10
 $K -n autopilot-runs get agentrun r-c0de01 -w
 ```
+A run's name is single-use: an Expired run keeps it until step 9 deletes it, and the namespace `agent-r-<id>`
+follows it. To repeat a step after a fix, take the next unused name (`r-c0de03`, `r-c0de04`, ...) and use it in
+every command of that step, not `r-c0de01`/`r-c0de02`.
+
 Expect `PHASE` `Provisioning` then `Running` (`RUN` `AgentRunRunning`) within about a minute (the image pull is the
 wait). Then:
 ```shell
@@ -328,13 +338,45 @@ Expect the dry run refused (the name rule, the image pattern and the `/0` patter
 ```shell
 $K -n autopilot-runs delete agentrun --all --wait=true
 $K delete composition agentruns-copy.catalog.hangar.io agentruns-noflag.catalog.hangar.io agentruns-norecord.catalog.hangar.io
-$K delete xrd agentruns.catalog.hangar.io
 $K delete ns autopilot-scratch-registry
 $K get ns | grep '^agent-r-' ; $K get sandboxes -A
 ```
-Expect no `agent-r-*` namespaces and `No resources found`. The installed pieces (agent-sandbox, the grants, the
-policy, function-agentrun) stay: they are GitOps-managed. Adding the XRD and Composition to `airframe-service-catalog`
-is the next change, once this plan passed; record the run in the PR that does it.
+Expect no `agent-r-*` namespaces and `No resources found`. The installed pieces (agent-sandbox, the grants, both
+policies, function-agentrun, the XRD and its Composition) stay: they are GitOps-managed.
+
+## Results, 2026-10-28
+
+Run on hangar-dev against airframe `edbc75f` (function-agentrun `0.1.0-dev.cafa630`; its code is unchanged at that commit, so that digest stays the pin).
+Every step passed, after four fixes made during the run:
+
+| Step | Result |
+|---|---|
+| 1. Install checks | Pass. The 27 existing Objects stayed Synced and Ready throughout the provider's service-account change. |
+| 2, 2b. Both policies | Pass. Every refusal as written; the admitted cases admitted; no `fails to evaluate`. |
+| 4. Running, restricted | Pass. |
+| 5. NetworkPolicies | Pass. `MATCH`, canary `16/16`. |
+| 6. Expiry, Clearance absent | Pass. Pod terminating 2 s after the deadline, then `Expired` and the namespace deleted. |
+| 7. Expiry, function down | Pass on the retest (7 s late, API server under extra load). The first try ended 28 s late (fix 3). |
+| 8. Rejected cases | Pass. All four reasons exact, nothing created; the XRD's own refusals and the `expiresAt` rule held. |
+| 9. Cleanup | Pass. |
+
+Fixes, all merged:
+1. The controller never deployed: the chart puts `image.tag` in a label, so a `tag@digest` pin is invalid. Pinned
+   the tag (gitops-hangar-dev#49, apron#85).
+2. Runs sat in Provisioning: provider-kubernetes late-initialises `spec.readiness` on every Object, and the
+   Object-origin policy refused that update. The policy now compares every spec field except `readiness` and
+   `watch` (gitops-hangar-dev#50/#51, apron#86/#88).
+3. A run ended 28 s late: the controller lost its leader-election lease whenever the API server was slow (6
+   restarts in 41 minutes), a deadline fell in a restart, and the kubelet's `activeDeadlineSeconds` ended the pod.
+   One replica, so leader election is off (gitops-hangar-dev#52, apron#89).
+4. This plan: the Deployment selectors read pods now, the kube-system pod-security probe adds a label (removing an
+   absent one never reached the server), and run names are single-use.
+
+One finding is open. While the function was down and etcd was timing out, Crossplane cleared one retest run's
+`resourceRefs` without deleting its six Objects. Nothing garbage-collects untracked Objects, so its namespace
+stayed, and provider-kubernetes kept re-creating the expired Sandbox while the controller deleted it (no pod ever
+started) until the AgentRun was deleted, which cascaded through the owner references. The fix is a reaper that
+deletes finished (Expired or Rejected) AgentRuns after a TTL, with a backstop that runs without Clearance.
 
 ## What this plan does not cover
 

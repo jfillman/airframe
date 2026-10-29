@@ -66,4 +66,6 @@ Then the XRD and Composition (`xrds/agentrun.yaml`, `compositions/agentrun/compo
 Verify a live run: `tools/airframe-verify agentrun autopilot-runs/<name>`. Egress is proven by Autopilot's
 `tools/netpol_canary.py`, which renders the same policies with this function's `compose()`.
 
+The copy-test, step by step with expected output: [agentrun-copy-test.md](agentrun-copy-test.md).
+
 Function internals, the expiry clocks and the shared-grant caveat: [functions/function-agentrun/README.md](../../functions/function-agentrun/README.md).

@@ -9,6 +9,7 @@ Every command names `--context hangar-dev`. Never run any of it against hangar-p
 export K="kubectl --context hangar-dev"
 export PROVIDER=system:serviceaccount:crossplane-system:provider-kubernetes
 export CLEARANCE=system:serviceaccount:platform-system:clearance
+export CROSSPLANE=system:serviceaccount:crossplane-system:crossplane
 ```
 
 ## 0. Before you start
@@ -68,7 +69,7 @@ Expect `True ghcr.io/jfillman/function-agentrun@sha256:cf9f288c45b4722fd7e94ecc5
 
 The policy, the role and Clearance's role:
 ```shell
-$K get validatingadmissionpolicy,validatingadmissionpolicybinding autopilot-agentrun-provider-confinement
+$K get validatingadmissionpolicy,validatingadmissionpolicybinding autopilot-agentrun-provider-confinement autopilot-agentrun-object-origin
 $K auth can-i create namespaces --as=$PROVIDER                    # yes
 $K auth can-i create sandboxes.agents.x-k8s.io -n default --as=$PROVIDER   # yes (RBAC; the policy is what refuses it, step 2)
 $K auth can-i create jobs -n default --as=$PROVIDER               # no
@@ -112,6 +113,42 @@ $K create ns agent-r-0b0b0b --dry-run=server --as=$PROVIDER
 Expect each refused by the same policy: `... namespaces only as or inside Autopilot run namespaces (agent-r-*), not kube-system`
 (twice), then a refusal of `agent-r-0b0b0b` naming `hangar.io/agent-run` (the right name, but not a run namespace). The pod-security change on a
 live run namespace is in step 4.
+
+### 2b. Only Crossplane, for an AgentRun, may make a run-kind Object
+
+`autopilot-agentrun-object-origin` covers the other side: who may create a provider-kubernetes `Object` whose
+manifest is a run kind. A helper prints one (a run Namespace, with Crossplane's owner reference to an AgentRun unless
+told otherwise):
+```shell
+obj() { # obj NAME [owner|none] [Namespace|Secret]  -> an Object on stdout
+  local owner='ownerReferences: [{apiVersion: catalog.hangar.io/v1alpha1, kind: AgentRun, name: r-0b0b0b, uid: 00000000-0000-0000-0000-000000000000, controller: true}]'
+  [ "${2:-owner}" = none ] && owner=''
+  local m='{apiVersion: v1, kind: Namespace, metadata: {name: agent-r-0b0b0b}}'
+  [ "${3:-}" = Secret ] && m='{apiVersion: v1, kind: Secret, metadata: {name: vap-probe, namespace: default}}'
+  printf '%s\n' "apiVersion: kubernetes.m.crossplane.io/v1alpha1" "kind: Object" "metadata:" "  name: $1" \
+    "  namespace: autopilot-runs" "  labels: {crossplane.io/composite: r-0b0b0b}" "  $owner" "spec:" \
+    "  forProvider: {manifest: $m}" "  providerConfigRef: {kind: ClusterProviderConfig, name: default}"
+}
+obj vap-admin | $K create -f - --dry-run=server
+obj vap-xp-noowner none | $K create -f - --dry-run=server --as=$CROSSPLANE
+obj vap-xp | $K create -f - --dry-run=server --as=$CROSSPLANE
+obj vap-secret none Secret | $K create -f - --dry-run=server
+obj vap-clearance | $K create -f - --dry-run=server --as=$CLEARANCE
+```
+Expect, in order:
+1. You (cluster admin) are refused: `... ValidatingAdmissionPolicy 'autopilot-agentrun-object-origin' ... denied request: only Crossplane core may create or change a provider-kubernetes Object whose manifest is a run kind ...`.
+2. Crossplane's identity without the AgentRun owner reference is refused: `... must belong to an AgentRun: in autopilot-runs, with a controller ownerReference ...`.
+3. With the owner reference it is admitted: `object.kubernetes.m.crossplane.io/vap-xp created (server dry run)`.
+4. A Secret manifest (SecretStore's shape) is admitted for you, untouched by the policy: `... vap-secret created (server dry run)`.
+5. Clearance is refused by RBAC before the policy: `... cannot create resource "objects" in API group "kubernetes.m.crossplane.io" ...`.
+
+None of the replies may say `resulted in error` or `fails to evaluate` (a CEL error in this fail-closed policy would
+refuse every run-kind Object). The existing Objects are never in scope: they stay as step 1 left them
+(`27 objects; not Synced/Ready: none`), and Crossplane has logged no refusal from this policy:
+```shell
+$K -n crossplane-system logs deploy/crossplane --since=1h | grep -c autopilot-agentrun-object-origin
+```
+Expect `0`.
 
 ## 3. Install the copy
 

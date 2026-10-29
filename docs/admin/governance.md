@@ -53,7 +53,11 @@ bounds, defaults, required fields and CEL cross-field rules (`x-kubernetes-valid
 - The cluster registry chart refuses `airframe.autopilotReady` on any cluster without the
   control-plane role, so an upper cluster can never be marked as a place Autopilot runs may go. The
   flag itself is attested by a person after Autopilot's network-policy canary passes on that cluster
-  (`autopilot/tools/netpol-canary`); the AgentRun composition (Autopilot AP-A3) gates on it.
+  (`autopilot/tools/netpol_canary.py`); the AgentRun composition (Autopilot AP-A3) gates on it, reading this
+  cluster's own record by name, and Rejects every run without it.
+- `AgentRun`'s spec is immutable except `frozen` (false to true only), so a run's deadline, image, network and
+  limits can never be raised after creation; a non-`r-<hex>` name, an image tag instead of a digest, an allowlist
+  outside allowlist mode and a `/0` are CEL or pattern rejections (docs/admin/agentrun.md).
 
 What this layer cannot do today: reject an unknown field. The API server prunes it silently, so a
 misspelled field is accepted and ignored (roadmap item U1). Until an `--xr` mode of

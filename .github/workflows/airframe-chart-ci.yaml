@@ -12,7 +12,7 @@ name: airframe-chart-ci
 
 on:
   pull_request:
-    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", "functions/function-dex/**", ".github/workflows/airframe-chart-ci.yaml"]
+    paths: ["charts/**", "xrds/**", "compositions/**", "contract/**", "docs/**", "AGENTS.md", "functions/function-dex/**", "functions/function-agentrun/**", ".github/workflows/airframe-chart-ci.yaml"]
   push:
     branches: [main]
     paths: ["charts/**", "xrds/**", "compositions/**", "contract/**"]
@@ -81,11 +81,19 @@ jobs:
       - name: function-dex unit tests
         working-directory: functions/function-dex
         run: pip install click && python3 -m unittest tests.test_fn
+      # function-agentrun (AgentRun, AP-A3): compose() and the gRPC wrapper; its render fixtures run below
+      - name: function-agentrun unit tests
+        working-directory: functions/function-agentrun
+        run: python3 -m unittest tests.test_compose tests.test_fn
+      - name: start function-agentrun from source (its render fixtures' cluster is example-dev)
+        working-directory: functions/function-agentrun
+        run: |
+          HANGAR_CLUSTER_NAME=example-dev nohup python3 -m function.main --insecure --address 127.0.0.1:9445 > /tmp/fn-agentrun.log 2>&1 &
       - name: start the two functions (auto-ready with its CEL feature gate)
         run: |
           docker run -d --name fn-gotpl -p 127.0.0.1:9443:9443 xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.12.3 --insecure --address=0.0.0.0:9443
           docker run -d --name fn-ready -p 127.0.0.1:9444:9443 xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.0 --insecure --address=0.0.0.0:9443 --feature-gates=CELHealthcheckCustomizations=true
-          for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/9443) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9444) 2>/dev/null && break; sleep 2; done
+          for i in $(seq 1 30); do (echo > /dev/tcp/127.0.0.1/9443) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9444) 2>/dev/null && (echo > /dev/tcp/127.0.0.1/9445) 2>/dev/null && break; sleep 2; done
           docker ps --format '{{.Names}} {{.Status}}'
       - name: smoke render (one composition, fail fast if the functions are unreachable)
         run: timeout 180 python3 tools/test_compositions.py --renderer render-pipeline slo
@@ -96,6 +104,7 @@ jobs:
           docker ps -a --format '{{.Names}} {{.Status}}'
           docker logs --tail 30 fn-gotpl 2>&1 | tail -30
           docker logs --tail 30 fn-ready 2>&1 | tail -30
+          tail -30 /tmp/fn-agentrun.log || true
 
   scorecard:
     runs-on: ubuntu-latest

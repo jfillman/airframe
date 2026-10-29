@@ -1,0 +1,15 @@
+# The same record without airframe.autopilotReady: the network-policy canary has not been attested here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: 'true'
+data:
+  type: dev
+  cicdReady: 'true'
+  crossplaneReady: 'true'
+  scmOwner: example-org
+  zone: lower
+  roles: control-plane,workloads

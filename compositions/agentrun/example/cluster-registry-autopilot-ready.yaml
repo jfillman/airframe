@@ -1,0 +1,17 @@
+# The registry record of the cluster the test function runs on (HANGAR_CLUSTER_NAME=example-dev in CI and
+# tools/render-pipeline's header), with airframe.autopilotReady set.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: 'true'
+data:
+  type: dev
+  cicdReady: 'true'
+  crossplaneReady: 'true'
+  scmOwner: example-org
+  zone: lower
+  roles: control-plane,workloads
+  autopilotReady: 'true'

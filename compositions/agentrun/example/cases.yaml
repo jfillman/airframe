@@ -1,0 +1,105 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> with the listed required and observed
+# fixtures through function-agentrun (started with HANGAR_CLUSTER_NAME=example-dev) and is compared with
+# example/expected/<name>.yaml; `expect` adds readable assertions. Regenerate with
+# `tools/test_compositions.py --update agentrun` and review the diff: it IS the behaviour change.
+cases:
+# A fresh run on an autopilotReady cluster: all six Objects, nothing Ready yet.
+- name: provisioning
+  xr: xr-run.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    present: [namespace, quota, netpol-default-deny, netpol-egress, serviceaccount, sandbox]
+    conditions: {RunReady: AgentRunProvisioning}
+    status: {phase: Provisioning, namespace: agent-r-1a2b3c, sandbox: agent, cluster: example-dev}
+# Every Object applied and the Sandbox Ready.
+- name: running
+  xr: xr-run.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  observed: [observed-running.yaml]
+  expect:
+    present: [namespace, quota, netpol-default-deny, netpol-egress, serviceaccount, sandbox]
+    conditions: {RunReady: AgentRunRunning}
+    status: {phase: Running}
+- name: succeeded
+  xr: xr-run.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  observed: [observed-succeeded.yaml]
+  expect:
+    present: [sandbox]
+    conditions: {RunReady: AgentRunSucceeded}
+    status: {phase: Succeeded, outcome: Succeeded, finishedAt: "2099-01-01T00:04:00Z"}
+- name: failed
+  xr: xr-run.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  observed: [observed-failed.yaml]
+  expect:
+    present: [sandbox]
+    conditions: {RunReady: AgentRunFailed}
+    status: {phase: Failed, outcome: Failed}
+# A sidecar and an input: the quota covers the sidecar; HANGAR_INPUT carries the input; clearance mode only.
+- name: sidecar-and-input
+  xr: xr-sidecar.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    present: [namespace, quota, netpol-default-deny, netpol-egress, serviceaccount, sandbox]
+    conditions: {RunReady: AgentRunProvisioning}
+# network mode none: default-deny only, no egress policy, no URLs or tokens.
+- name: network-none
+  xr: xr-network-none.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    present: [namespace, quota, netpol-default-deny, serviceaccount, sandbox]
+    absent: [netpol-egress]
+# Clearance froze the run: egress policy gone, pod kept for forensics.
+- name: frozen
+  xr: xr-frozen.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    present: [namespace, netpol-default-deny, sandbox]
+    absent: [netpol-egress]
+    conditions: {RunReady: AgentRunFrozen}
+    status: {phase: Frozen, frozenAt: "2099-01-01T00:10:00Z"}
+# Past expiresAt: nothing renders, so Crossplane removes the namespace (the Sandbox is already gone by shutdownTime).
+- name: expired
+  xr: xr-expired.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    absent: [namespace, quota, netpol-default-deny, netpol-egress, serviceaccount, sandbox]
+    conditions: {RunReady: AgentRunExpired}
+    status: {phase: Expired}
+# A drained run stays drained: its Sandbox is gone, and it must not look like a run that has not started.
+- name: drained-is-final
+  xr: xr-drained.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    absent: [namespace, sandbox]
+    conditions: {RunReady: AgentRunDrained}
+    status: {phase: Drained, outcome: Succeeded}
+# Fail closed: each of these renders nothing.
+- name: rejected-not-autopilot-ready
+  xr: xr-run.yaml
+  required: [cluster-registry-not-autopilot-ready.yaml]
+  expect:
+    absent: [namespace, quota, netpol-default-deny, netpol-egress, serviceaccount, sandbox]
+    conditions: {RunReady: AgentRunRejected}
+    status: {phase: Rejected}
+- name: rejected-no-registry-record
+  xr: xr-run.yaml
+  expect:
+    absent: [namespace, sandbox]
+    conditions: {RunReady: AgentRunRejected}
+    status: {phase: Rejected}
+- name: rejected-hardened-without-runtime-class
+  xr: xr-hardened.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    absent: [namespace, sandbox]
+    conditions: {RunReady: AgentRunRejected}
+    status: {phase: Rejected, reason: "hardened sandbox requested but this cluster has no runtime class for it"}
+- name: rejected-oversized-input
+  xr: xr-oversized-input.yaml
+  required: [cluster-registry-autopilot-ready.yaml]
+  expect:
+    absent: [namespace, sandbox]
+    conditions: {RunReady: AgentRunRejected}
+    status: {phase: Rejected, reason: "input is larger than 4 KiB; pass a reference instead"}

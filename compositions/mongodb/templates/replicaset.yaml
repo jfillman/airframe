@@ -64,12 +64,24 @@ spec:
       # kind-prod's bag-db-0 without the pod ever being unready for real (failureThreshold is 40). 5s keeps
       # the probe meaningful and stops the event flood. The operator merges this into its own container spec
       # by name, so only timeoutSeconds changes.
+      #
+      # CPU requests (2026-10-29): the operator's defaults reserve 500m for each container, a full core per member,
+      # while an idle dev replica set uses ~50m in all. On hangar-dev's single node that reservation helped push
+      # requests to 99% and left builds Pending. mongod requests 100m and the agent 50m; the limits and memory are
+      # the operator's own defaults, restated so the whole resources block is ours.
       template:
         spec:
           containers:
+            - name: mongod
+              resources:
+                requests: { cpu: 100m, memory: 400M }
+                limits: { cpu: "1", memory: 500M }
             - name: mongodb-agent
               readinessProbe:
                 timeoutSeconds: 5
+              resources:
+                requests: { cpu: 50m, memory: 400M }
+                limits: { cpu: "1", memory: 500M }
       volumeClaimTemplates:
         - metadata:
             name: data-volume

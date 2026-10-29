@@ -372,11 +372,12 @@ Fixes, all merged:
 4. This plan: the Deployment selectors read pods now, the kube-system pod-security probe adds a label (removing an
    absent one never reached the server), and run names are single-use.
 
-One finding is open. While the function was down and etcd was timing out, Crossplane cleared one retest run's
+One finding, since fixed. While the function was down and etcd was timing out, Crossplane cleared one retest run's
 `resourceRefs` without deleting its six Objects. Nothing garbage-collects untracked Objects, so its namespace
 stayed, and provider-kubernetes kept re-creating the expired Sandbox while the controller deleted it (no pod ever
-started) until the AgentRun was deleted, which cascaded through the owner references. The fix is a reaper that
-deletes finished (Expired or Rejected) AgentRuns after a TTL, with a backstop that runs without Clearance.
+started) until the AgentRun was deleted, which cascaded through the owner references. The fix (Hangar decision D20) is
+a reaper: Clearance deletes finished runs, and a backstop CronJob in the cluster repo (`55-autopilot/agentrun-reaper/`)
+deletes every AgentRun 60 minutes past its deadline.
 
 ## What this plan does not cover
 

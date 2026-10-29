@@ -7,8 +7,7 @@ the one Airframe kind that is not requested from git, because a run lives for mi
 
 **Status: installed on hangar-dev.** The copy-test passed on 2026-10-28 ([results](agentrun-copy-test.md#results-2026-10-28)),
 and the XRD and Composition ship through `airframe-service-catalog` on clusters rendered with `components.autopilot`.
-Nothing creates runs yet: Clearance (AP-A2) is not deployed. Open: finished runs are never deleted (a reaper is owed,
-see the copy-test results).
+Nothing creates runs yet: Clearance (AP-A2) is not deployed.
 
 ## What a run gets
 
@@ -50,6 +49,12 @@ then `Expired`. The phase is `status.phase` and the `RunReady` condition's reaso
 [`xrds/agentrun.meta.yaml`](../../xrds/agentrun.meta.yaml)). Read `RunReady`, not `Ready`: with nothing composed
 (Expired, Drained, Rejected) Crossplane's `Ready` is True.
 
+A finished run's XR stays until something deletes it (Hangar decision D20). Clearance deletes it once it has recorded
+the run's evidence. Whatever Clearance doesn't delete, the reaper backstop does: every 10 minutes it deletes each
+AgentRun whose deadline, `min(spec.expiresAt, creation + 240 minutes)`, passed more than 60 minutes ago, read from those
+immutable fields, never from status. Deleting the XR removes everything the run composed through owner references,
+including Objects Crossplane lost track of.
+
 ## Installing it on a cluster
 
 Everything below is in the cluster repo (apron renders it with `components.autopilot`, control-plane clusters only):
@@ -61,6 +66,7 @@ Everything below is in the cluster repo (apron renders it with `components.autop
 | `10-crds-operators/crossplane/provider-kubernetes-runtime.yaml` | a stable service account name for provider-kubernetes |
 | `10-crds-operators/crossplane/functions.yaml`, `function-agentrun-runtime.yaml` | the Function, with `HANGAR_CLUSTER_NAME` |
 | `20-service-catalog/airframe-service-catalog/` | `xrds/agentrun.yaml` and `compositions/agentrun/composition.yaml` in the include list |
+| `55-autopilot/agentrun-reaper/` | the reaper backstop: a CronJob that deletes AgentRuns 60 minutes past their deadline |
 
 Verify a live run: `tools/airframe-verify agentrun autopilot-runs/<name>`. Egress is proven by Autopilot's
 `tools/netpol_canary.py`, which renders the same policies with this function's `compose()`.

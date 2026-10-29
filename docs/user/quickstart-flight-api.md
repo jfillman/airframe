@@ -137,8 +137,13 @@ deploy stage sets its image. The first start takes a minute or two while Flyway 
 Add one variable to `boarding-api`'s `glidepath/envs/dev.yaml`, under `env:`, and push:
 
 ```yaml
-  - { name: FLIGHT_API_URL, value: "http://flight-api.app-flight-api-dev.svc.cluster.local:8080" }
+  - name: FLIGHT_API_URL
+    fromService: { app: flight-api, port: 8080 }   # http://flight-api.<flight-api's dev namespace>.svc.cluster.local:8080
 ```
+
+`fromService` builds the URL from the namespace convention the platform passes every environment
+(`serviceNamespacePattern`), so you never write `app-flight-api-dev` yourself. A hand-written in-cluster URL still works,
+and `airframe validate` flags it with AF-SVC-001.
 
 Look up `AC123` on the gate board. The **source** row now says *flight-api (Postgres)*, with a live **status**.
 
@@ -181,7 +186,7 @@ This works as in part 1, steps 6 to 9. Only what differs is here.
    Edit this file in the PR directly and read the diff before merging: `fromComponent` entries are easier to
    check there than in App Configuration.
 4. **Release** a signed commit and merge the release PR.
-5. **Connect boarding-api:** in `boarding-api`'s staging values, set `FLIGHT_API_URL` to `http://flight-api.app-flight-api-staging.svc.cluster.local:8080`.
+5. **Connect boarding-api:** in `boarding-api`'s staging values, add the same `FLIGHT_API_URL` entry with `fromService: { app: flight-api, port: 8080 }`; it resolves to flight-api's staging Service.
 
 > **Check**
 > ```bash

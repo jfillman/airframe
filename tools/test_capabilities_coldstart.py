@@ -85,7 +85,7 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 23 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 24 and all(xrds.values())))
 
     # Q11: What cloud targets exist, and does each say how to tell it worked?
     targets = ask("targets")
@@ -112,6 +112,13 @@ def main():
     checks.append(("Q16 cloud dependency list with a closed DependencyReady reason set",
                    set(deps) == {"messagequeue", "objectstorage", "managedpostgresql"}
                    and all(ask("kind", k)["conditions"][0]["type"] == "DependencyReady" for k in deps)))
+
+    # Q17: Can an agent tell an Autopilot run's state from a closed reason set, and how to check it really runs?
+    run = ask("kind", "agentrun")
+    run_ready = next((c for c in run.get("conditions", []) if c.get("type") == "RunReady"), {})
+    checks.append(("Q17 AgentRun has a closed RunReady reason set and a sandbox verify step",
+                   {r["reason"] for r in run_ready.get("reasons", [])} >= {"AgentRunRunning", "AgentRunExpired", "AgentRunRejected"}
+                   and any(s["id"] == "sandbox-ready" for s in ask("verify", "agentrun"))))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

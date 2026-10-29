@@ -1,0 +1,9 @@
+# For `crossplane render` (the cross-check renderer; CI uses tools/render-pipeline). The package tag is the dev build
+# the copy-test installs; crossplane render's Docker runtime cannot set HANGAR_CLUSTER_NAME, so point it at a running
+# function instead: AIRFRAME_RENDER_TARGETS=function-agentrun=127.0.0.1:9445 (see tools/test_compositions.py).
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-agentrun
+spec:
+  package: ghcr.io/jfillman/function-agentrun:0.1.0-dev

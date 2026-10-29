@@ -1,0 +1,27 @@
+# Live-run fixtures are dated 2099 so the function's real clock is always before expiresAt and the render is
+# deterministic; the expired fixture is dated 2020. Nothing in the render depends on the current time.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AgentRun
+metadata:
+  name: r-f0f0f0
+  namespace: autopilot-runs
+  creationTimestamp: '2099-01-01T00:00:00Z'
+spec:
+  agent: coding-agent
+  image: ghcr.io/jfillman/agent-x@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  framework: claude-agent-sdk
+  sandbox: standard
+  compute: small
+  network:
+    mode: clearance+model
+  expiresAt: '2099-01-01T00:30:00Z'
+  taskId: t-1a2b3c
+  sessionId: s-f0f0f0
+  limits:
+    toolCalls: 100
+    githubCalls: 50
+    modelTokens: 100000
+  frozen: true
+status:
+  phase: Running
+  frozenAt: '2099-01-01T00:10:00Z'

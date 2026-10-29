@@ -23,6 +23,7 @@ nav:
       - Governance and security policy: admin/governance.md
       - Cloud credentials: admin/cloud-credentials.md
       - API versioning: admin/api-versioning.md
+      - Autopilot AgentRun: admin/agentrun.md
 
 plugins:
   - techdocs-core

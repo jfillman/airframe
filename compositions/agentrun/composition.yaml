@@ -1,0 +1,41 @@
+# Not a generated file (like dex/ and rolloutwatch/): one pipeline step running the custom Python function
+# function-agentrun (functions/function-agentrun), because the logic - expiry, failing closed, per-network-mode
+# policy, final phases - is bespoke and is easier to hold as a pure, unit-tested function than as go-templating.
+#
+# No function-auto-ready step: function-agentrun sets each composed resource's readiness itself, from that
+# provider-kubernetes Object's own Ready condition (the Sandbox Object derives Ready from the Sandbox), and reports
+# the run's phase as the RunReady condition, which is the signal to read (xrds/agentrun.meta.yaml).
+#
+# The input below is this composition's cluster policy. It is shared by every cluster that installs it, so nothing
+# cluster-specific goes here: the cluster's name comes from the function's runtime config (HANGAR_CLUSTER_NAME) and
+# whether runs may land there from that cluster's registry record (airframe.autopilotReady).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: agentruns.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: AgentRun
+  mode: Pipeline
+  pipeline:
+    - step: compose-run
+      functionRef:
+        name: function-agentrun
+      input:
+        apiVersion: agentrun.fn.hangar.io/v1alpha1
+        kind: Config
+        # The longest a run may live, from its XR's creation to expiresAt. A longer request is Rejected.
+        max_ttl_minutes: 240
+        # Where AgentRun XRs live (Clearance's Role is on this namespace) and where Clearance and the model proxy run.
+        runs_namespace: autopilot-runs
+        clearance_namespace: autopilot-system
+        # sandbox: hardened -> runtime class. Empty: no cluster in the home lab has gVisor or Kata, so a hardened
+        # request is Rejected, never downgraded.
+        runtime_classes: {}
+        # Compute classes this composition offers (requests/limits per agent container; a run's quota adds its
+        # sidecars). gpu is absent, so a gpu request is Rejected.
+        compute:
+          small: {requests: {cpu: 250m, memory: 512Mi}, limits: {cpu: "1", memory: 1Gi}}
+          medium: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "2", memory: 4Gi}}
+          large: {requests: {cpu: "2", memory: 4Gi}, limits: {cpu: "4", memory: 16Gi}}

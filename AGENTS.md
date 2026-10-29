@@ -26,6 +26,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
   (docs/user/cloud-dependencies.md). Each writes ConfigMap `<name>-connection` and, where there is a secret, the
   provider writes Secret `<name>-credentials`; `DependencyReady` has a closed reason set. On AWS, `consumers[]` grants
   AwsLambdaTargets IAM access (and a queue trigger). AWS is live-verified (2026-10-24); Azure is render-tested only.
+- **AgentRun** (Autopilot): one sandboxed agent run, created by Clearance through the Kubernetes API in `autopilot-runs`, never from git. Composes provider-kubernetes Objects and an agent-sandbox `Sandbox` whose `shutdownTime` is the hard deadline (docs/admin/agentrun.md). Not installed on any cluster yet; never create one outside a copy-test.
 - **Ground** environment: `glidepath/envs/<env>.yaml` in the app repo, dev cluster only.
 - **Flight** environment: an `ApplicationEnvironment` XR, rendering `gitops-<app>/<cluster>/<env>/values.yaml`.
 - **Components** (Redis, PostgreSQL, RabbitMQ, MongoDB, ...) are entries in `components:` of an environment's values.
@@ -74,6 +75,7 @@ can reach it through NetworkPolicy.
   at once and the data is unaffected. Each sidecar's `knownFailures` names these causes with a stable id
   and a hint (`CNPGWebhookUnavailable`, `RabbitMQTopologyWebhookUnavailable`), and `airframe-verify`'s
   first step classifies the message for you. Check the operator, not the component.
+- An `AgentRun` reports `RunReady` (closed set: `AgentRunProvisioning`, `AgentRunRunning`, `AgentRunSucceeded`, `AgentRunFailed`, `AgentRunFrozen`, `AgentRunExpired`, `AgentRunDrained`, `AgentRunRejected`). Read it, not `Ready`: an expired or rejected run composes nothing, so Crossplane's `Ready` is True.
 - An `ApplicationEnvironment` reports `ClusterReady` (the cluster-registry gate) and `AppResolved`
   (`spec.appName` names a real app XR; `AppNotFound` means a typo or an env requested before its app).
   It reports nothing about the workload: that is the target cluster's Rollout, read there or in Tower.

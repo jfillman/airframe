@@ -1,0 +1,113 @@
+# The agent pod failed: Finished=True/PodFailed. Not restarted (failedPodPolicy Retain).
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-namespace
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: namespace
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-quota
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: quota
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-netpol-default-deny
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: netpol-default-deny
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-netpol-egress
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: netpol-egress
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-serviceaccount
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: serviceaccount
+status:
+  conditions:
+  - type: Ready
+    status: 'True'
+    reason: Available
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+---
+apiVersion: kubernetes.m.crossplane.io/v1alpha1
+kind: Object
+metadata:
+  name: r-1a2b3c-sandbox
+  namespace: autopilot-runs
+  annotations:
+    crossplane.io/composition-resource-name: sandbox
+status:
+  conditions:
+  - type: Ready
+    status: 'False'
+    reason: Unavailable
+  - type: Synced
+    status: 'True'
+    reason: ReconcileSuccess
+  atProvider:
+    manifest:
+      apiVersion: agents.x-k8s.io/v1beta1
+      kind: Sandbox
+      metadata:
+        name: agent
+        namespace: agent-r-1a2b3c
+      status:
+        conditions:
+        - type: Ready
+          status: 'False'
+          reason: PodFailed
+          lastTransitionTime: '2099-01-01T00:03:00Z'
+        - type: Finished
+          status: 'True'
+          reason: PodFailed
+          lastTransitionTime: '2099-01-01T00:03:00Z'

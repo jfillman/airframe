@@ -1,0 +1,9 @@
+---
+apiVersion: meta.pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-agentrun
+  annotations:
+    meta.crossplane.io/source: github.com/jfillman/airframe
+    meta.crossplane.io/description: Composes an Autopilot AgentRun into provider-kubernetes Objects and an agent-sandbox Sandbox.
+spec: {}

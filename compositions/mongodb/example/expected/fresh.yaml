@@ -50,9 +50,24 @@ resources:
         template:
           spec:
             containers:
+            - name: mongod
+              resources:
+                limits:
+                  cpu: '1'
+                  memory: 500M
+                requests:
+                  cpu: 100m
+                  memory: 400M
             - name: mongodb-agent
               readinessProbe:
                 timeoutSeconds: 5
+              resources:
+                limits:
+                  cpu: '1'
+                  memory: 500M
+                requests:
+                  cpu: 50m
+                  memory: 400M
         volumeClaimTemplates:
         - metadata:
             name: data-volume

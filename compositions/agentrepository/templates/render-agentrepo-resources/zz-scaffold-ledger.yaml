@@ -1,0 +1,30 @@
+# SHARED PARTIAL (compositions/_shared/render-github-resources/zz-scaffold-ledger.yaml). Writes the
+# XR's scaffold ledger (see 00-scaffold-done.yaml for the design). Spliced last (zz- prefix); it only
+# reads observed state, so its position relative to the documents does not matter.
+#
+# A create-once RepositoryFile is recognised by its managementPolicies lacking "Update" - that is this
+# catalog's documented meaning of "scaffold" (create-once-then-hands-off, see any src-repo.yaml header),
+# so nothing has to be marked, and the Update-managed files (cluster-identity.yaml, secretstore XRs,
+# tenant identity) are never ledgered or retired. An MR with no managementPolicies at all is the
+# provider default "*" (everything, Update included) and is left alone too.
+#
+# The ledger is emitted on every reconcile, even when empty, so it never depends on how Crossplane
+# merges a status field the pipeline did not set this time.
+<<- $ledger := list >>
+<<- range $rn, $o := (.observed.resources | default dict) >>
+  <<- $res := index $o "resource" | default dict >>
+  <<- if eq (index $res "kind" | default "") "RepositoryFile" >>
+    <<- $pol := dig "spec" "managementPolicies" list $res >>
+    <<- if and (gt (len $pol) 0) (not (has "Update" $pol)) >>
+      <<- range (dig "status" "conditions" list $res) >>
+        <<- if and (eq .type "Ready") (eq .status "True") >><<- $ledger = append $ledger $rn >><<- end >>
+      <<- end >>
+    <<- end >>
+  <<- end >>
+<<- end >>
+<<- $scaffoldDoneNow := concat $scaffoldDone $ledger | uniq | sortAlpha >>
+apiVersion: <<.observed.composite.resource.apiVersion>>
+kind: <<.observed.composite.resource.kind>>
+status:
+  scaffold:
+    done: <<$scaffoldDoneNow | toJson>>

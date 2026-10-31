@@ -1,0 +1,16 @@
+# --required-resources fixture: simulates the real cluster-registry ConfigMap
+# (rendered by charts/cluster-registry from the hub's clusters.yaml) once the dev cluster is
+# a real, registered, cicdReady dev cluster. Example names: example-dev, example-org. Paired with xr-widget-service.yaml for
+# the gate-pass render - see ../README.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-dev
+  namespace: crossplane-system
+  labels:
+    hangar.io/cluster-registry: "true"
+data:
+  scmOwner: example-org
+  type: dev
+  cicdReady: "true"
+  tenantsRepo: gitops-cluster-dev-tenants

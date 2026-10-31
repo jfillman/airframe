@@ -1,0 +1,73 @@
+# --observed-resources fixture for the scaffold-ledger cases: the four create-once files as provider-github reports
+# them once written (Ready=True).
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: skyport-agents-readme
+  namespace: app-skyport-agents-cicd
+  annotations:
+    crossplane.io/composition-resource-name: readme
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies: [Create, Observe, LateInitialize]
+  forProvider:
+    repository: skyport-agents
+    file: README.md
+status:
+  conditions:
+  - {type: Ready, status: 'True', reason: Available}
+  - {type: Synced, status: 'True', reason: ReconcileSuccess}
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: skyport-agents-agents-readme
+  namespace: app-skyport-agents-cicd
+  annotations:
+    crossplane.io/composition-resource-name: agents-readme
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies: [Create, Observe, LateInitialize]
+  forProvider:
+    repository: skyport-agents
+    file: agents/README.md
+status:
+  conditions:
+  - {type: Ready, status: 'True', reason: Available}
+  - {type: Synced, status: 'True', reason: ReconcileSuccess}
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: skyport-agents-preflight-readme
+  namespace: app-skyport-agents-cicd
+  annotations:
+    crossplane.io/composition-resource-name: preflight-readme
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies: [Create, Observe, LateInitialize]
+  forProvider:
+    repository: skyport-agents
+    file: preflight/cases/README.md
+status:
+  conditions:
+  - {type: Ready, status: 'True', reason: Available}
+  - {type: Synced, status: 'True', reason: ReconcileSuccess}
+---
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: skyport-agents-cicd-yaml
+  namespace: app-skyport-agents-cicd
+  annotations:
+    crossplane.io/composition-resource-name: cicd-yaml
+    crossplane.io/external-name: ''
+spec:
+  managementPolicies: [Create, Observe, LateInitialize]
+  forProvider:
+    repository: skyport-agents
+    file: cicd.yaml
+status:
+  conditions:
+  - {type: Ready, status: 'True', reason: Available}
+  - {type: Synced, status: 'True', reason: ReconcileSuccess}

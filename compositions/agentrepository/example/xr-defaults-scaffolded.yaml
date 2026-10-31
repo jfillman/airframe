@@ -1,0 +1,17 @@
+# xr-defaults.yaml plus the scaffold ledger once both files have been seen Ready: neither may render again.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: AgentRepository
+metadata:
+  name: skyport-agents
+  namespace: app-skyport-agents-cicd
+spec:
+  devCluster: example-dev
+  description: Skyport ops team's prompt-only agents
+  visibility: private
+status:
+  scaffold:
+    done:
+    - agents-readme
+    - cicd-yaml
+    - preflight-readme
+    - readme

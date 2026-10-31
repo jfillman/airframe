@@ -1,0 +1,144 @@
+# The agents repository and its create-once scaffold (README, agents/, preflight/cases/, a checks-only cicd.yaml).
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $visibility := $spec.visibility >>
+<<- $description := $spec.description | default (printf "%s - Autopilot agent definitions (prompt-only agents)" $xrName) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: Repository
+metadata:
+  name: <<$xrName>>-repo
+  annotations:
+    <<setResourceNameAnnotation "repo">>
+    crossplane.io/external-name: <<$xrName>>
+spec:
+  managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    name: <<$xrName>>
+    description: <<$description | toJson>>
+    visibility: <<$visibility>>
+    autoInit: true
+    securityAndAnalysis:
+      - secretScanning:
+          - status: disabled
+        secretScanningPushProtection:
+          - status: disabled
+---
+<<- if not (has "readme" $scaffoldDone) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-readme
+  annotations:
+    <<setResourceNameAnnotation "readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "readme" | default dict) | default (printf "%s:README.md:" $xrName)>>"
+spec:
+  # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+  # deletes it from GitHub.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: README.md
+    overwriteOnCreate: false
+    content: |
+      # <<$xrName>>
+
+      Autopilot agent definitions for a team: prompt-only agents that run Autopilot's shared runtime images
+      (`runtime/catalog.yaml` in the autopilot repo), so this repo builds and deploys nothing. Scaffolded by Airframe's
+      `AgentRepository`.
+
+      - `agents/<name>.yaml`: one file per agent (Clearance's `agent-definition.schema.json`). A PR that changes one runs
+        the `agent-definitions-` check: Clearance says whether it would load the file and what tier the change is.
+      - Merging to `main` runs `agent-release`: Glidepath opens the pin PR in the platform's tenants repo
+        (`tenants/<<$xrName>>/xr-requests/<name>.yaml`) and Clearance tiers it (0-1 cleared by policy, 2-3 by people).
+        Merging the pin makes the definition live.
+      - `preflight/cases/<name>.yaml`: the agent's Preflight cases (what a good run must do).
+      - `cicd.yaml`: a checks-only repository (no `build`): Glidepath runs its PR checks and nothing else.
+
+      Start from Autopilot's New agent profile page in Hangar's portal, which writes the files and opens the PRs.
+    commitMessage: "AgentRepository scaffold: README.md"
+<<- end >>
+---
+<<- if not (has "agents-readme" $scaffoldDone) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-agents-readme
+  annotations:
+    <<setResourceNameAnnotation "agents-readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "agents-readme" | default dict) | default (printf "%s:agents/README.md:" $xrName)>>"
+spec:
+  # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+  # deletes it from GitHub.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: agents/README.md
+    overwriteOnCreate: false
+    content: |
+      # agents/
+
+      One agent definition per file, named after the agent: `agents/<name>.yaml`. See the repository README.
+    commitMessage: "AgentRepository scaffold: agents/README.md"
+<<- end >>
+---
+<<- if not (has "preflight-readme" $scaffoldDone) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-preflight-readme
+  annotations:
+    <<setResourceNameAnnotation "preflight-readme">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "preflight-readme" | default dict) | default (printf "%s:preflight/cases/README.md:" $xrName)>>"
+spec:
+  # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+  # deletes it from GitHub.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: preflight/cases/README.md
+    overwriteOnCreate: false
+    content: |
+      # preflight/cases/
+
+      One Preflight case per agent: a known cause, the fix a good run makes, the paths it may touch.
+    commitMessage: "AgentRepository scaffold: preflight/cases/README.md"
+<<- end >>
+---
+<<- if not (has "cicd-yaml" $scaffoldDone) >>
+apiVersion: repo.github.m.upbound.io/v1alpha1
+kind: RepositoryFile
+metadata:
+  name: <<$xrName>>-cicd-yaml
+  annotations:
+    <<setResourceNameAnnotation "cicd-yaml">>
+    crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "cicd-yaml" | default dict) | default (printf "%s:cicd.yaml:" $xrName)>>"
+spec:
+  # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+  # deletes it from GitHub.
+  managementPolicies: ["Create", "Observe", "LateInitialize"]
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+  forProvider:
+    repository: <<$xrName>>
+    file: cicd.yaml
+    overwriteOnCreate: false
+    content: |
+      apiVersion: platform/v1
+      kind: PipelineConfig
+      # No build: a checks-only repository (Glidepath HANDOFF-checks-only-repos.md). Glidepath runs its PR checks
+      # (agent-gates, cicd-validate, agent-definitions) and the agent release, and nothing else.
+    commitMessage: "AgentRepository scaffold: cicd.yaml (checks-only)"
+<<- end >>

@@ -1,0 +1,56 @@
+# Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
+# child's own status.conditions onto this XR's status - identical mechanism to
+# nodejsapplication's own copy of this file (see that file's own header for the
+# full explanation). "CicdOnboarded" is a slightly misleading name for an infra
+# service with no CI/CD pipeline, but it's the same real underlying signal (has
+# tenants/<name>/identity.yaml been committed and picked up) every other
+# Bootstrap-tier XRD already exposes under this name - kept as-is rather than
+# inventing an infra-specific condition name for the same fact.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $allObserved := .observed.resources | default dict >>
+<<- $childRes := index $allObserved "tektoncicd" | default dict >>
+<<- $childXR := index $childRes "resource" | default dict >>
+<<- $childStatus := index $childXR "status" | default dict >>
+<<- $childConditions := index $childStatus "conditions" | default list >>
+<<- $devClusterCondition := dict >>
+<<- $cicdOnboardedCondition := dict >>
+<<- range $childConditions >>
+  <<- if eq .type "DevClusterReady" >>
+    <<- $devClusterCondition = . >>
+  <<- else if eq .type "CicdOnboarded" >>
+    <<- $cicdOnboardedCondition = . >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+<<- if $devClusterCondition >>
+  - type: DevClusterReady
+    status: <<$devClusterCondition.status | toJson>>
+    reason: <<$devClusterCondition.reason>>
+    message: <<$devClusterCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: DevClusterReady
+    status: "False"
+    reason: DevClusterNotReady
+    message: >-
+      Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+      its own DevClusterReady condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>
+<<- if $cicdOnboardedCondition >>
+  - type: CicdOnboarded
+    status: <<$cicdOnboardedCondition.status | toJson>>
+    reason: <<$cicdOnboardedCondition.reason>>
+    message: <<$cicdOnboardedCondition.message | toJson>>
+    target: CompositeAndClaim
+<<- else >>
+  - type: CicdOnboarded
+    status: "False"
+    reason: CicdOnboardingPending
+    message: >-
+      Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+      its own CicdOnboarded condition - resolves itself once it does.
+    target: CompositeAndClaim
+<<- end >>

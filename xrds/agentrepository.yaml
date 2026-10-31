@@ -1,0 +1,105 @@
+# AgentRepository (Autopilot M4, decided 2026-10-31): a team's repository of prompt-only Autopilot agents. A
+# prompt-only agent is its definition (agents/<name>.yaml); its code is one of Autopilot's shared runtime images, so
+# the repo builds and deploys nothing. Composed: the GitHub repo <name> (create-once scaffold: README, agents/,
+# preflight/cases/, a checks-only cicd.yaml with no build) and the TektonCICD child, which registers it with Glidepath
+# (tenants/<name>/identity.yaml -> app-<name>-cicd, its Pipelines-as-Code Repository, RBAC). Glidepath then runs its
+# PR checks (agent-gates, cicd-validate, agent-definitions) and the agent release on merge; the pins land in
+# tenants/<name>/xr-requests/. Product independence: this kind knows Glidepath only through TektonCICD and cicd.yaml,
+# and nothing about Clearance. A code agent is an app, onboarded with an application kind, not this.
+#
+# Needs Glidepath's checks-only repositories (a cicd.yaml without build; glidepath HANDOFF-checks-only-repos.md).
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: agentrepositories.catalog.hangar.io
+  annotations:
+    terasky.backstage.io/add-to-catalog: "true"
+    terasky.backstage.io/target-path: "tenants/${{ parameters.xrName }}/xr-requests"
+    terasky.backstage.io/description: "A team's repository of prompt-only Autopilot agent definitions (agents/<name>.yaml), registered with Glidepath for its PR checks and the agent release; it builds and deploys nothing."
+    hangar.io/agent-summary: "A team's repository of prompt-only Autopilot agent definitions (agents/<name>.yaml), registered with Glidepath for its PR checks and the agent release; it builds and deploys nothing."
+spec:
+  group: catalog.hangar.io
+  names:
+    kind: AgentRepository
+    plural: agentrepositories
+    singular: agentrepository
+  scope: Namespaced
+  # Review C13: deterministic Composition choice for an XR that names none (there is one per kind).
+  defaultCompositionRef:
+    name: agentrepositories.catalog.hangar.io
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: DEVCLUSTER
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='DevClusterReady')].reason"
+          description: "DevClusterReady reason"
+        - name: CICD
+          type: string
+          jsonPath: ".status.conditions[?(@.type=='CicdOnboarded')].reason"
+          description: "CicdOnboarded reason"
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: "AgentRepository: A team's repository of prompt-only Autopilot agent definitions (agents/<name>.yaml), registered with Glidepath for its PR checks and the agent release; it builds and deploys nothing."
+          properties:
+            metadata:
+              type: object
+              description: "Standard object metadata. Only name is constrained here (its length)."
+              properties:
+                name:
+                  type: string
+                  maxLength: 52
+                  description: >-
+                    At most 52 characters (review C13). The composed TektonCICD child is <name>-tektoncicd, and its name becomes a 63-character label on everything it composes.
+            status:
+              type: object
+              description: "Observed state of the AgentRepository, written by its Composition (conditions are added by Crossplane)."
+              properties:
+                scaffold:
+                  type: object
+                  description: >-
+                    Scaffold ledger, written by the Composition. Scaffold files (RepositoryFiles the
+                    platform writes once and then hands to the developer: boilerplate source, cicd.yaml,
+                    README, the gitops values.yaml) are composed only until they are observed Ready;
+                    their composition-resource-names are then recorded here and the managed resources
+                    retire, leaving the GitHub files in place. "Scaffold once, reconcile never": a name
+                    in this list is never rendered again for this XR, so a later template change cannot
+                    overwrite a developer's edits and the provider has nothing to poll.
+                  properties:
+                    done:
+                      type: array
+                      description: >-
+                        composition-resource-names of the scaffold files this XR has already written
+                        (sorted, unique). Empty or absent on a fresh XR, and again after a cluster
+                        rebuild, when the pinned external names let the provider adopt the existing
+                        files without writing them - after which they re-enter this list.
+                      items:
+                        type: string
+                        description: "A composition-resource-name, e.g. src-repo-readme."
+            spec:
+              type: object
+              description: "Desired state of the AgentRepository. Each field below is documented; the XRD rejects unknown fields at sync time (server-side apply)."
+              properties:
+                devCluster:
+                  type: string
+                  description: >-
+                    The dev (control-plane) cluster whose Glidepath runs this repo's checks and whose Clearance loads
+                    its agents - the same cluster-registry gate as every application kind's spec.devCluster.
+                  minLength: 1
+                description:
+                  type: string
+                  description: >-
+                    Free-text description - used as the gitops-infra-<name> repo's
+                    GitHub description. Optional; omitted renders a generic
+                    placeholder instead.
+                  minLength: 1
+                visibility:
+                  type: string
+                  description: GitHub visibility for the gitops-infra-<name> repo.
+                  enum: [private, public]
+                  default: private
+              required: ["devCluster"]
+          required: ["spec"]

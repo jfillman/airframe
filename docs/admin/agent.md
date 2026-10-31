@@ -39,6 +39,16 @@ Clearance loads cannot change without a change here. Moving an agent to a new de
 - **Tightening is immediate.** A running session resolves its definition by name on every call, so re-pinning to a
   tighter definition applies to runs in flight. Raising authority is the reviewed pin plus the reviewed file.
 
+## Where definitions live
+
+- **A prompt-only agent** (its code is one of Autopilot's shared runtime images) lives in a team's
+  **`AgentRepository`**: a repo of `agents/<name>.yaml` files with a checks-only `cicd.yaml`, registered with Glidepath
+  through its TektonCICD child, so Glidepath runs its PR checks and the agent release and builds nothing. Its pins land
+  in `tenants/<repo>/xr-requests/`.
+- **A code agent** (its own source and image) is an app: onboard it with an application kind. Its `agents/` files get
+  the same checks and release.
+- Either way, Glidepath's `agent-release` opens the pin PR on merge (glidepath `docs/admin/agent-definitions.md`).
+
 ## How a pin is made
 
 Two Backstage templates (the backstage repo, `templates/autopilot/`), not the generated XRD form (the XRD carries

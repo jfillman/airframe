@@ -1,0 +1,43 @@
+# Real Crossplane extra-resources lookup against the cluster registry
+# (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
+# moved verbatim (mechanism unchanged) from nodejsapplication's own
+# 00-devcluster-gate.yaml. See that file's own comments for the full "why" behind
+# each piece ($tenantsRepo as registry data not a hardcoded literal, the
+# single-YAML-document structure, etc.) - not re-explained here since the mechanism
+# is identical, just reused for a different XRD.
+<<- $xrName := .observed.composite.resource.metadata.name >>
+<<- $spec := .observed.composite.resource.spec >>
+<<- $devCluster := $spec.devCluster >>
+<<- $allExtra := .extraResources | default dict >>
+<<- $entry := index $allExtra "devcluster-registry-entry" | default dict >>
+<<- $items := index $entry "items" | default list >>
+<<- $clusterOk := false >>
+<<- $clusterType := "" >>
+<<- $cicdReady := "" >>
+<<- $tenantsRepo := "" >>
+<<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+       record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+       without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+       owner-dependent objects fall back to what they already observe or wait. */ ->>
+<<- $scmOwner := "" >>
+<<- if gt (len $items) 0 >>
+  <<- $cm := (index $items 0).resource >>
+  <<- $clusterType = $cm.data.type >>
+  <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
+  <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+  <<- $scmOwner = index $cm.data "scmOwner" | default "" >>
+  <<- if not $scmOwner >>
+    <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+  <<- end >>
+  <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
+    <<- $clusterOk = true >>
+  <<- end >>
+<<- end >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ExtraResources
+requirements:
+  devcluster-registry-entry:
+    apiVersion: v1
+    kind: ConfigMap
+    namespace: crossplane-system
+    matchName: <<$devCluster>>

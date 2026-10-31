@@ -1,0 +1,400 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` blocks
+# below. Edit templates/render-agentrepo-resources/*.yaml or
+# templates/cicd-onboarding-status/*.yaml instead, then run ./build-composition.sh to
+# regenerate this file.
+#
+# Two function-go-templating steps, not one (compositions/nodejsapplication's own
+# pattern, copied here): render-agentrepo-resources composes the real provider-github
+# managed resources plus the composed TektonCICD child, cicd-onboarding-status
+# patches the XR's own status afterward to proxy DevClusterReady/CicdOnboarded from
+# that child. Both share the ONE already-installed function-go-templating Function
+# via source: Inline - registering a second Function package pointing at the same
+# reference corrupted Crossplane's shared dependency-lock graph cluster-wide, a real
+# bug hit live building the SLO Composition (see compositions/slo/build-composition.sh's
+# own header) - never repeat that here.
+#
+# Delimiters: << >> instead of Go's default {{ }}, matching every other Composition
+# in this catalog.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: agentrepositories.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: AgentRepository
+  mode: Pipeline
+  pipeline:
+    - step: render-agentrepo-resources
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Real Crossplane extra-resources lookup against the cluster registry
+            # (gitops-cluster-dev/00-bootstrap/cluster-registry/, service-catalog-design.md §0) -
+            # moved verbatim (mechanism unchanged) from nodejsapplication's own
+            # 00-devcluster-gate.yaml. See that file's own comments for the full "why" behind
+            # each piece ($tenantsRepo as registry data not a hardcoded literal, the
+            # single-YAML-document structure, etc.) - not re-explained here since the mechanism
+            # is identical, just reused for a different XRD.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $devCluster := $spec.devCluster >>
+            <<- $allExtra := .extraResources | default dict >>
+            <<- $entry := index $allExtra "devcluster-registry-entry" | default dict >>
+            <<- $items := index $entry "items" | default list >>
+            <<- $clusterOk := false >>
+            <<- $clusterType := "" >>
+            <<- $cicdReady := "" >>
+            <<- $tenantsRepo := "" >>
+            <<- /* scmOwner (2026-10-16): the GitHub user or organization the fleet's repos live under, from the registry
+                   record (charts/cluster-registry renders it from clusters.yaml's scm.owner). Never a literal here. A record
+                   without it fails the render (fatal: nothing is applied or deleted); no record at all leaves it empty, and the
+                   owner-dependent objects fall back to what they already observe or wait. */ ->>
+            <<- $scmOwner := "" >>
+            <<- if gt (len $items) 0 >>
+              <<- $cm := (index $items 0).resource >>
+              <<- $clusterType = $cm.data.type >>
+              <<- $cicdReady = index $cm.data "cicdReady" | default "" >>
+              <<- $tenantsRepo = index $cm.data "tenantsRepo" | default "" >>
+              <<- $scmOwner = index $cm.data "scmOwner" | default "" >>
+              <<- if not $scmOwner >>
+                <<- fail (printf "cluster registry record %q has no scmOwner: add the scm: block (owner) to the hub's clusters.yaml and sync this cluster's cluster-registry Application" (index $cm.metadata "name")) >>
+              <<- end >>
+              <<- if and (eq $clusterType "dev") (eq $cicdReady "true") >>
+                <<- $clusterOk = true >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              devcluster-registry-entry:
+                apiVersion: v1
+                kind: ConfigMap
+                namespace: crossplane-system
+                matchName: <<$devCluster>>
+            ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/00-scaffold-done.yaml). Variables only;
+            # no output. Spliced before any scaffold document (00- prefix) so every create-once RepositoryFile in
+            # the step can ask "was I already scaffolded?".
+            #
+            # $scaffoldDone is the XR's scaffold ledger: status.scaffold.done, the composition-resource-names of
+            # every create-once RepositoryFile (managementPolicies without "Update") this XR has already seen
+            # reach Ready. zz-scaffold-ledger.yaml (same directory) writes it; a create-once document wraps itself
+            # in `if not (has "<its name>" $scaffoldDone)` so it stops being composed once it is in the ledger,
+            # and Crossplane then deletes the managed resource - with no "Delete" policy the GitHub file stays.
+            # "Scaffold once, reconcile never": the file is real developer source after that first write, so
+            # there is nothing for the provider to observe every poll, and a later composition change to the
+            # template (or to the resource's identity fields) cannot touch an already-scaffolded repo.
+            #
+            # Why a ledger and not "compose until observed Ready, then stop": that was tried (2026-09-23 canary)
+            # and loops - stop composing, Crossplane deletes the MR, the next reconcile observes nothing and
+            # cannot tell "already scaffolded" from "brand new", so it creates again. The ledger is the durable
+            # memory. It lives in XR status (declared in the XRD, so the API server keeps it), is re-emitted on
+            # every reconcile as (observed ledger) UNION (create-once files observed Ready now), and a file is
+            # only dropped from the render on the reconcile AFTER it entered the ledger - so the ledger write
+            # always lands before the managed resource goes away.
+            #
+            # XR recreate or cluster rebuild (XR status lost): the ledger is empty, so every scaffold file is
+            # composed again. Two settings on every create-once document make that write-free:
+            #   - crossplane.io/external-name pinned to "<repo>:<file>:", so the provider's first Observe
+            #     finds the existing GitHub file and adopts it (Ready, no Create call);
+            #   - overwriteOnCreate: false, so if Create is ever reached against an existing file (no
+            #     external-name, or a misread observe) terraform-provider-github refuses ("refusing to
+            #     overwrite existing file") and the MR stays Ready: False instead of committing the template.
+            # The adopted file is Ready, enters the ledger, and retires again two reconciles later. Verified on
+            # kiac-dev 2026-10-17 with provider-upjet-github v0.20.0-2.g7530c3d: pinned + false adopted an
+            # existing cicd.yaml (Ready, blob SHA unchanged); unpinned + false failed with the refusal, no commit.
+            # Before 2026-10-17 the gitops README, infraservice cicd.yaml stub, app cicd.yaml and AppEnv
+            # values.yaml still had overwriteOnCreate: true (and the first two no external-name): moving the
+            # skyport-auth/broker InfraServices to new namespaces rewrote cicd.yaml and README.md in both
+            # gitops-infra-skyport-* repos (78419e9, 67e02a8). Do not reintroduce true on a create-once file.
+            # Cost: a repo created with autoInit already has GitHub's README.md, so README scaffolds adopt that
+            # stub on a brand-new repo and their template content is never committed.
+            <<- $scaffoldDone := dig "status" "scaffold" "done" list .observed.composite.resource >>
+            <<- if not $scaffoldDone >><<- $scaffoldDone = list >><<- end >>
+            ---
+            # The agents repository and its create-once scaffold (README, agents/, preflight/cases/, a checks-only cicd.yaml).
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $spec := .observed.composite.resource.spec >>
+            <<- $visibility := $spec.visibility >>
+            <<- $description := $spec.description | default (printf "%s - Autopilot agent definitions (prompt-only agents)" $xrName) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: Repository
+            metadata:
+              name: <<$xrName>>-repo
+              annotations:
+                <<setResourceNameAnnotation "repo">>
+                crossplane.io/external-name: <<$xrName>>
+            spec:
+              managementPolicies: ["Observe", "Create", "Update", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                name: <<$xrName>>
+                description: <<$description | toJson>>
+                visibility: <<$visibility>>
+                autoInit: true
+                securityAndAnalysis:
+                  - secretScanning:
+                      - status: disabled
+                    secretScanningPushProtection:
+                      - status: disabled
+            ---
+            <<- if not (has "readme" $scaffoldDone) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-readme
+              annotations:
+                <<setResourceNameAnnotation "readme">>
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "readme" | default dict) | default (printf "%s:README.md:" $xrName)>>"
+            spec:
+              # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+              # deletes it from GitHub.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: README.md
+                overwriteOnCreate: false
+                content: |
+                  # <<$xrName>>
+
+                  Autopilot agent definitions for a team: prompt-only agents that run Autopilot's shared runtime images
+                  (`runtime/catalog.yaml` in the autopilot repo), so this repo builds and deploys nothing. Scaffolded by Airframe's
+                  `AgentRepository`.
+
+                  - `agents/<name>.yaml`: one file per agent (Clearance's `agent-definition.schema.json`). A PR that changes one runs
+                    the `agent-definitions-` check: Clearance says whether it would load the file and what tier the change is.
+                  - Merging to `main` runs `agent-release`: Glidepath opens the pin PR in the platform's tenants repo
+                    (`tenants/<<$xrName>>/xr-requests/<name>.yaml`) and Clearance tiers it (0-1 cleared by policy, 2-3 by people).
+                    Merging the pin makes the definition live.
+                  - `preflight/cases/<name>.yaml`: the agent's Preflight cases (what a good run must do).
+                  - `cicd.yaml`: a checks-only repository (no `build`): Glidepath runs its PR checks and nothing else.
+
+                  Start from Autopilot's New agent profile page in Hangar's portal, which writes the files and opens the PRs.
+                commitMessage: "AgentRepository scaffold: README.md"
+            <<- end >>
+            ---
+            <<- if not (has "agents-readme" $scaffoldDone) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-agents-readme
+              annotations:
+                <<setResourceNameAnnotation "agents-readme">>
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "agents-readme" | default dict) | default (printf "%s:agents/README.md:" $xrName)>>"
+            spec:
+              # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+              # deletes it from GitHub.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: agents/README.md
+                overwriteOnCreate: false
+                content: |
+                  # agents/
+
+                  One agent definition per file, named after the agent: `agents/<name>.yaml`. See the repository README.
+                commitMessage: "AgentRepository scaffold: agents/README.md"
+            <<- end >>
+            ---
+            <<- if not (has "preflight-readme" $scaffoldDone) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-preflight-readme
+              annotations:
+                <<setResourceNameAnnotation "preflight-readme">>
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "preflight-readme" | default dict) | default (printf "%s:preflight/cases/README.md:" $xrName)>>"
+            spec:
+              # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+              # deletes it from GitHub.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: preflight/cases/README.md
+                overwriteOnCreate: false
+                content: |
+                  # preflight/cases/
+
+                  One Preflight case per agent: a known cause, the fix a good run makes, the paths it may touch.
+                commitMessage: "AgentRepository scaffold: preflight/cases/README.md"
+            <<- end >>
+            ---
+            <<- if not (has "cicd-yaml" $scaffoldDone) >>
+            apiVersion: repo.github.m.upbound.io/v1alpha1
+            kind: RepositoryFile
+            metadata:
+              name: <<$xrName>>-cicd-yaml
+              annotations:
+                <<setResourceNameAnnotation "cicd-yaml">>
+                crossplane.io/external-name: "<<dig "resource" "metadata" "annotations" "crossplane.io/external-name" "" (index (.observed.resources | default dict) "cicd-yaml" | default dict) | default (printf "%s:cicd.yaml:" $xrName)>>"
+            spec:
+              # Create-once (the scaffold ledger, review C4): after scaffolding the file is the team's; deleting the XR never
+              # deletes it from GitHub.
+              managementPolicies: ["Create", "Observe", "LateInitialize"]
+              providerConfigRef:
+                kind: ClusterProviderConfig
+                name: default
+              forProvider:
+                repository: <<$xrName>>
+                file: cicd.yaml
+                overwriteOnCreate: false
+                content: |
+                  apiVersion: platform/v1
+                  kind: PipelineConfig
+                  # No build: a checks-only repository (Glidepath HANDOFF-checks-only-repos.md). Glidepath runs its PR checks
+                  # (agent-gates, cicd-validate, agent-definitions) and the agent release, and nothing else.
+                commitMessage: "AgentRepository scaffold: cicd.yaml (checks-only)"
+            <<- end >>
+            ---
+            # The repo's registration with Glidepath (TektonCICD: tenants/<name>/identity.yaml, which creates app-<name>-cicd,
+            # its Pipelines-as-Code Repository and RBAC). The repo is both the app and the gitops repo: there is nothing to deploy.
+            <<- $obsTektonCicd := index (.observed.resources | default dict) "tektoncicd" | default dict >>
+            <<- $tektonCicdApiVersion := dig "resource" "apiVersion" "catalog.hangar.io/v1alpha1" $obsTektonCicd >>
+            <<- $tektonCicdGroupOverride := dig "metadata" "annotations" "hangar.io/tektoncicd-group" "" .observed.composite.resource >>
+            <<- if eq $tektonCicdGroupOverride "hangar" >>
+              <<- $tektonCicdApiVersion = "catalog.hangar.io/v1alpha1" >>
+            <<- end >>
+            <<- /* Repo URLs from the registry's scmOwner (00-devcluster-gate.yaml), never a literal owner. No registry
+                   record yet: keep what the child already has, or render no child until the owner is known. */ ->>
+            <<- $childRepoUrl := dig "resource" "spec" "appRepoUrl" "" $obsTektonCicd >>
+            <<- if $scmOwner >><<- $childRepoUrl = printf "https://github.com/%s/%s" $scmOwner $xrName >><<- end >>
+            <<- if $childRepoUrl >>
+            apiVersion: <<$tektonCicdApiVersion>>
+            kind: TektonCICD
+            metadata:
+              name: <<$xrName>>-tektoncicd
+              annotations:
+                <<setResourceNameAnnotation "tektoncicd">>
+            spec:
+              appName: <<$xrName>>
+              type: app
+              registerPipelinesAsCode: false
+              gitopsRepoUrl: <<$childRepoUrl>>
+              appRepoUrl: <<$childRepoUrl>>
+              devCluster: <<$devCluster>>
+            <<- end >>
+            ---
+            ---
+            # SHARED PARTIAL (compositions/_shared/render-github-resources/zz-scaffold-ledger.yaml). Writes the
+            # XR's scaffold ledger (see 00-scaffold-done.yaml for the design). Spliced last (zz- prefix); it only
+            # reads observed state, so its position relative to the documents does not matter.
+            #
+            # A create-once RepositoryFile is recognised by its managementPolicies lacking "Update" - that is this
+            # catalog's documented meaning of "scaffold" (create-once-then-hands-off, see any src-repo.yaml header),
+            # so nothing has to be marked, and the Update-managed files (cluster-identity.yaml, secretstore XRs,
+            # tenant identity) are never ledgered or retired. An MR with no managementPolicies at all is the
+            # provider default "*" (everything, Update included) and is left alone too.
+            #
+            # The ledger is emitted on every reconcile, even when empty, so it never depends on how Crossplane
+            # merges a status field the pipeline did not set this time.
+            <<- $ledger := list >>
+            <<- range $rn, $o := (.observed.resources | default dict) >>
+              <<- $res := index $o "resource" | default dict >>
+              <<- if eq (index $res "kind" | default "") "RepositoryFile" >>
+                <<- $pol := dig "spec" "managementPolicies" list $res >>
+                <<- if and (gt (len $pol) 0) (not (has "Update" $pol)) >>
+                  <<- range (dig "status" "conditions" list $res) >>
+                    <<- if and (eq .type "Ready") (eq .status "True") >><<- $ledger = append $ledger $rn >><<- end >>
+                  <<- end >>
+                <<- end >>
+              <<- end >>
+            <<- end >>
+            <<- $scaffoldDoneNow := concat $scaffoldDone $ledger | uniq | sortAlpha >>
+            apiVersion: <<.observed.composite.resource.apiVersion>>
+            kind: <<.observed.composite.resource.kind>>
+            status:
+              scaffold:
+                done: <<$scaffoldDoneNow | toJson>>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+    - step: cicd-onboarding-status
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # Proxies DevClusterReady/CicdOnboarded straight from the composed TektonCICD
+            # child's own status.conditions onto this XR's status - identical mechanism to
+            # nodejsapplication's own copy of this file (see that file's own header for the
+            # full explanation). "CicdOnboarded" is a slightly misleading name for an infra
+            # service with no CI/CD pipeline, but it's the same real underlying signal (has
+            # tenants/<name>/identity.yaml been committed and picked up) every other
+            # Bootstrap-tier XRD already exposes under this name - kept as-is rather than
+            # inventing an infra-specific condition name for the same fact.
+            <<- $xrName := .observed.composite.resource.metadata.name >>
+            <<- $allObserved := .observed.resources | default dict >>
+            <<- $childRes := index $allObserved "tektoncicd" | default dict >>
+            <<- $childXR := index $childRes "resource" | default dict >>
+            <<- $childStatus := index $childXR "status" | default dict >>
+            <<- $childConditions := index $childStatus "conditions" | default list >>
+            <<- $devClusterCondition := dict >>
+            <<- $cicdOnboardedCondition := dict >>
+            <<- range $childConditions >>
+              <<- if eq .type "DevClusterReady" >>
+                <<- $devClusterCondition = . >>
+              <<- else if eq .type "CicdOnboarded" >>
+                <<- $cicdOnboardedCondition = . >>
+              <<- end >>
+            <<- end >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+            <<- if $devClusterCondition >>
+              - type: DevClusterReady
+                status: <<$devClusterCondition.status | toJson>>
+                reason: <<$devClusterCondition.reason>>
+                message: <<$devClusterCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: DevClusterReady
+                status: "False"
+                reason: DevClusterNotReady
+                message: >-
+                  Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+                  its own DevClusterReady condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
+            <<- if $cicdOnboardedCondition >>
+              - type: CicdOnboarded
+                status: <<$cicdOnboardedCondition.status | toJson>>
+                reason: <<$cicdOnboardedCondition.reason>>
+                message: <<$cicdOnboardedCondition.message | toJson>>
+                target: CompositeAndClaim
+            <<- else >>
+              - type: CicdOnboarded
+                status: "False"
+                reason: CicdOnboardingPending
+                message: >-
+                  Waiting on the composed TektonCICD child (<<$xrName>>-tektoncicd) to report
+                  its own CicdOnboarded condition - resolves itself once it does.
+                target: CompositeAndClaim
+            <<- end >>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"

@@ -1,0 +1,28 @@
+# The repo's registration with Glidepath (TektonCICD: tenants/<name>/identity.yaml, which creates app-<name>-cicd,
+# its Pipelines-as-Code Repository and RBAC). The repo is both the app and the gitops repo: there is nothing to deploy.
+<<- $obsTektonCicd := index (.observed.resources | default dict) "tektoncicd" | default dict >>
+<<- $tektonCicdApiVersion := dig "resource" "apiVersion" "catalog.hangar.io/v1alpha1" $obsTektonCicd >>
+<<- $tektonCicdGroupOverride := dig "metadata" "annotations" "hangar.io/tektoncicd-group" "" .observed.composite.resource >>
+<<- if eq $tektonCicdGroupOverride "hangar" >>
+  <<- $tektonCicdApiVersion = "catalog.hangar.io/v1alpha1" >>
+<<- end >>
+<<- /* Repo URLs from the registry's scmOwner (00-devcluster-gate.yaml), never a literal owner. No registry
+       record yet: keep what the child already has, or render no child until the owner is known. */ ->>
+<<- $childRepoUrl := dig "resource" "spec" "appRepoUrl" "" $obsTektonCicd >>
+<<- if $scmOwner >><<- $childRepoUrl = printf "https://github.com/%s/%s" $scmOwner $xrName >><<- end >>
+<<- if $childRepoUrl >>
+apiVersion: <<$tektonCicdApiVersion>>
+kind: TektonCICD
+metadata:
+  name: <<$xrName>>-tektoncicd
+  annotations:
+    <<setResourceNameAnnotation "tektoncicd">>
+spec:
+  appName: <<$xrName>>
+  type: app
+  registerPipelinesAsCode: false
+  gitopsRepoUrl: <<$childRepoUrl>>
+  appRepoUrl: <<$childRepoUrl>>
+  devCluster: <<$devCluster>>
+<<- end >>
+---

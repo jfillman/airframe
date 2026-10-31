@@ -1,0 +1,32 @@
+# Render cases for compositions/agentrepository - see README.md.
+cases:
+- name: gate-fail
+  xr: xr-defaults.yaml
+- name: defaults
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+- name: scaffold-ready
+  xr: xr-defaults.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+  observed:
+  - observed-scaffold-ready.yaml
+  expect:
+    present: &id001
+    - agents-readme
+    - cicd-yaml
+    - preflight-readme
+    - readme
+    status:
+      scaffold:
+        done: *id001
+- name: scaffold-retired
+  xr: xr-defaults-scaffolded.yaml
+  required:
+  - cluster-registry-dev-ready.yaml
+  expect:
+    absent: *id001
+    status:
+      scaffold:
+        done: *id001

@@ -85,7 +85,7 @@ def main():
 
     # Q10: Does every XRD in the contract actually have an agent-summary (AF-1b's own coverage promise)?
     xrds = ask("xrds")
-    checks.append(("Q10 every XRD has a summary", len(xrds) == 25 and all(xrds.values())))
+    checks.append(("Q10 every XRD has a summary", len(xrds) == 26 and all(xrds.values())))
 
     # Q11: What cloud targets exist, and does each say how to tell it worked?
     targets = ask("targets")

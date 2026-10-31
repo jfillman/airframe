@@ -1,0 +1,37 @@
+# Sidecar contract for Agent (AF-3 conventions; format in tools/sidecars.py). Checked against compositions/agent/
+# renders by tools/test_sidecars.py.
+kind: Agent
+role: platform
+summary: >-
+  The durable half of an Autopilot agent, as a pin: which commit of the agent definition in the app's own repository
+  (agents/<name>.yaml) is live. Clearance lists these XRs, fetches each pinned file through the agents' GitHub App and
+  loads it beside the platform's bundled definitions. The XR composes nothing and carries no definition content or
+  credential; it is requested through the Autopilot templates in Backstage (New agent, Pin agent) into
+  tenants/<app>/xr-requests/.
+outputs: {}
+sources: []
+conditions:
+  - type: AgentPinned
+    reasons:
+      - reason: AgentPinned
+        status: "True"
+        meaning: The XR is a well-formed pin and status carries repo, path, commit and shortCommit. It says nothing about whether Clearance loaded the definition; that is clearance-api GET /v1/agents (each agent's `source`, and `rejected` for pins it could not load, with the reason).
+verify:
+  - id: pinned
+    check: AgentPinned is True and status.commit is spec.source.commit.
+    run: {kind: condition, type: AgentPinned, reasons: [AgentPinned]}
+  - id: commit-published
+    check: status.commit equals the pinned commit.
+    run: {kind: xrField, path: status.commit, equals: "{spec.source.commit}"}
+  - id: loaded-by-clearance
+    check: >-
+      clearance-api GET /v1/agents lists {name} with source.commit equal to spec.source.commit (and it is not in
+      `rejected`). A pin Clearance could not load (file missing at that commit, schema error, name or owner mismatch,
+      repository not the app's own) is listed under `rejected` with the reason; fix the file or the pin.
+    run: {kind: manual}
+agentNotes:
+  - "Nothing is composed: the composition only writes status and AgentPinned. Ready=True means the pin is well-formed, not that Clearance loaded it; read clearance-api GET /v1/agents."
+  - "A pin names a commit, never a branch. To move an agent to a new definition, re-pin (the Pin agent template): change spec.source.commit in tenants/<app>/xr-requests/<name>.yaml."
+  - "The definition file's `name` must equal the XR's metadata.name and its `owner` must equal spec.owner, or Clearance rejects the pin (visible under `rejected`)."
+  - "spec.app is fixed at creation; the repository must be the app's own (<app>, gitops-<app>, gitops-infra-<app>): the broker refuses a read token for any other."
+owner: human

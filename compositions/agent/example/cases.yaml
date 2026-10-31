@@ -1,0 +1,12 @@
+# Render cases for tools/test_compositions.py: each renders example/<xr> through function-go-templating and
+# function-auto-ready and is compared with example/expected/<name>.yaml; `expect` adds readable assertions.
+# Regenerate with `tools/test_compositions.py --update agent` and review the diff: it IS the behaviour change.
+cases:
+# The only shape there is: a well-formed pin. Nothing composed, the pin published as status, AgentPinned True.
+# Everything that could be wrong with a pin (a branch instead of a commit, a path outside the repo, a repository that
+# is not the app's own) is refused by the XRD's schema at admission, so there is no Rejected render.
+- name: pinned
+  xr: xr-pinned.yaml
+  expect:
+    conditions: {AgentPinned: AgentPinned}
+    status: {repo: jfillman/gate-api, path: agents/gate-triage.yaml, shortCommit: 1a2b3c4, pin: "jfillman/gate-api@1a2b3c4 agents/gate-triage.yaml"}

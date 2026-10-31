@@ -23,6 +23,7 @@ nav:
       - Governance and security policy: admin/governance.md
       - Cloud credentials: admin/cloud-credentials.md
       - API versioning: admin/api-versioning.md
+      - Autopilot Agent (the pin): admin/agent.md
       - Autopilot AgentRun: admin/agentrun.md
       - AgentRun copy-test: admin/agentrun-copy-test.md
 

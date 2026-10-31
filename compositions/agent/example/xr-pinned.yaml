@@ -1,0 +1,15 @@
+# tenants/gate-api/xr-requests/gate-triage.yaml: the pin the New agent template opens, beside the definition PR on
+# jfillman/gate-api (agents/gate-triage.yaml). Namespace app-gate-api-cicd like the app's other requests.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: Agent
+metadata:
+  name: gate-triage
+  namespace: app-gate-api-cicd
+spec:
+  app: gate-api
+  owner: group:default/team-platform
+  description: Reads a failed gate-api pipeline run and proposes one fix PR.
+  source:
+    repo: jfillman/gate-api
+    path: agents/gate-triage.yaml
+    commit: 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b

@@ -28,6 +28,7 @@ its `xrds/<kind>.meta.yaml` sidecar.
 | Observability | `RolloutWatch`, `SLO` | Rollout watching with AI triage on `Degraded`; SLO rules through Sloth |
 | Cloud target | `AwsLambdaTarget`, `AwsEcsTarget`, `AzureContainerAppTarget` | The cloud infrastructure a non-Kubernetes deploy needs |
 | Cloud dependency | `MessageQueue`, `ObjectStorage`, `ManagedPostgreSQL` | A managed queue, bucket or database on AWS or Azure, private by default, with IAM grants to Lambda targets |
+| Autopilot | `Agent`, `AgentRun` | An agent's durable half (a pin of one commit of its definition in the app's repository, loaded by Clearance) and its ephemeral half (one sandboxed run with a hard deadline) |
 
 How the kinds compose, what each takes and returns, and the tiering rules are in
 [architecture.md](docs/admin/architecture.md). Every kind's outputs, conditions and verify steps

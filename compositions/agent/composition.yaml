@@ -1,0 +1,64 @@
+# GENERATED FILE - do not hand-edit the pipeline's `input.inline.template` block below. Edit templates/*.yaml
+# instead, then run ./build-composition.sh (tools/build-compositions) to regenerate it.
+#
+# Agent (Autopilot M4): a pin of one commit of an agent definition in the app's own repository (xrds/agent.yaml). This
+# composition composes NOTHING. It publishes the pin as status (repo, path, commit, shortCommit, pin) and one condition,
+# AgentPinned, so `kubectl get agents` and the catalog show what is pinned. Clearance reads the XR itself (its
+# airframe reader lists catalog.hangar.io kinds), fetches the file through the agents' GitHub App and loads it;
+# whether that succeeded is clearance-api's GET /v1/agents (source, rejected), never this XR's status.
+#
+# Delimiters: << >> like the catalog's other go-templating compositions.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: agents.catalog.hangar.io
+spec:
+  compositeTypeRef:
+    apiVersion: catalog.hangar.io/v1alpha1
+    kind: Agent
+  mode: Pipeline
+  pipeline:
+    - step: publish-pin
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            # The pin as status, and one condition (AgentPinned; closed set in xrds/agent.meta.yaml). Nothing is composed: an
+            # agent needs no in-cluster object until it runs, and AgentRun composes those. The composite document below carries no
+            # composition-resource-name annotation, which is how function-go-templating knows it updates the composite's status
+            # rather than composing a resource. Whether Clearance LOADED the pinned definition is Clearance's record (clearance-api
+            # GET /v1/agents: source, rejected); Clearance writes no XR status, so no condition here can say it.
+            <<- $xr := .observed.composite.resource >>
+            <<- $spec := $xr.spec >>
+            <<- $short := trunc 7 $spec.source.commit >>
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: AgentPinned
+                status: "True"
+                reason: AgentPinned
+                message: <<printf "%s is pinned to %s@%s (%s); whether Clearance loaded it is clearance-api GET /v1/agents (source, rejected)." $xr.metadata.name $spec.source.repo $short $spec.source.path | quote>>
+                target: CompositeAndClaim
+            ---
+            apiVersion: <<$xr.apiVersion>>
+            kind: Agent
+            status:
+              repo: <<$spec.source.repo | quote>>
+              path: <<$spec.source.path | quote>>
+              commit: <<$spec.source.commit | quote>>
+              shortCommit: <<$short | quote>>
+              pin: <<printf "%s@%s %s" $spec.source.repo $short $spec.source.path | quote>>
+            ---
+        delims:
+          left: "<<"
+          right: ">>"
+    - step: detect-ready
+      functionRef:
+        name: function-auto-ready
+      input:
+        apiVersion: autoready.fn.crossplane.io/v1alpha1
+        kind: Input

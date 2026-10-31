@@ -1,0 +1,25 @@
+# The pin as status, and one condition (AgentPinned; closed set in xrds/agent.meta.yaml). Nothing is composed: an
+# agent needs no in-cluster object until it runs, and AgentRun composes those. The composite document below carries no
+# composition-resource-name annotation, which is how function-go-templating knows it updates the composite's status
+# rather than composing a resource. Whether Clearance LOADED the pinned definition is Clearance's record (clearance-api
+# GET /v1/agents: source, rejected); Clearance writes no XR status, so no condition here can say it.
+<<- $xr := .observed.composite.resource >>
+<<- $spec := $xr.spec >>
+<<- $short := trunc 7 $spec.source.commit >>
+apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+kind: ClaimConditions
+conditions:
+  - type: AgentPinned
+    status: "True"
+    reason: AgentPinned
+    message: <<printf "%s is pinned to %s@%s (%s); whether Clearance loaded it is clearance-api GET /v1/agents (source, rejected)." $xr.metadata.name $spec.source.repo $short $spec.source.path | quote>>
+    target: CompositeAndClaim
+---
+apiVersion: <<$xr.apiVersion>>
+kind: Agent
+status:
+  repo: <<$spec.source.repo | quote>>
+  path: <<$spec.source.path | quote>>
+  commit: <<$spec.source.commit | quote>>
+  shortCommit: <<$short | quote>>
+  pin: <<printf "%s@%s %s" $spec.source.repo $short $spec.source.path | quote>>

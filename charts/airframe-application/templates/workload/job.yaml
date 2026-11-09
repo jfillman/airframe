@@ -15,6 +15,7 @@ metadata:
   namespace: {{ include "airframe-application.namespace" $ }}
   labels:
     {{- include "airframe-application.labels" $ | nindent 4 }}
+    {{- include "airframe-application.versionLabel" $ | nindent 4 }}
     hangar.io/subcomponent: workload
   {{- if or (not (hasKey . "hook")) .hook }}
   annotations:
@@ -28,6 +29,7 @@ spec:
     metadata:
       labels:
         {{- include "airframe-application.labels" $ | nindent 8 }}
+        {{- include "airframe-application.versionLabel" $ | nindent 8 }}
     spec:
       {{- toYaml $podSpec | nindent 6 }}
 ---

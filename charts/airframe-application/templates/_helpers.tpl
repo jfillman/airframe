@@ -15,11 +15,6 @@ put every app under one "hangar" group.
 {{- define "airframe-application.labels" -}}
 app.kubernetes.io/name: {{ .Values.appName }}
 app.kubernetes.io/instance: {{ .Release.Name }}
-{{- if eq (include "airframe-application.hasRollout" .) "true" }}
-app.kubernetes.io/version: {{ (include "airframe-application.image" . | fromYaml).tag | quote }}
-{{- else }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-{{- end }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 app.kubernetes.io/part-of: {{ .Values.appName }}
 helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
@@ -27,6 +22,21 @@ hangar.io/component: application
 hangar.io/app: {{ .Values.appName }}
 hangar.io/env: {{ .Values.envName }}
 hangar.io/cluster: {{ .Values.cluster }}
+{{- end -}}
+
+{{/*
+airframe-application.versionLabel - app.kubernetes.io/version, the released image tag (the chart appVersion before
+an image is released). Deliberately NOT in airframe-application.labels: a release changes it, and a label on every
+object makes every release change the Service, ServiceAccount, NetworkPolicy, Namespace and RolloutWatch (out of
+sync in Argo for no reason). Include it only on an object that runs the image: the Rollout, Job and CronJob and
+their pod templates.
+*/}}
+{{- define "airframe-application.versionLabel" -}}
+{{- if eq (include "airframe-application.hasRollout" .) "true" -}}
+app.kubernetes.io/version: {{ (include "airframe-application.image" . | fromYaml).tag | quote }}
+{{- else -}}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end -}}
 {{- end -}}
 
 {{/*

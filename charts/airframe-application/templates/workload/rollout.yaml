@@ -51,6 +51,7 @@ metadata:
   namespace: {{ include "airframe-application.namespace" . }}
   labels:
     {{- include "airframe-application.labels" . | nindent 4 }}
+    {{- include "airframe-application.versionLabel" . | nindent 4 }}
     hangar.io/subcomponent: workload
     {{- if $releaseId }}
     hangar.io/release-tracked: "true"
@@ -90,6 +91,7 @@ spec:
     metadata:
       labels:
         {{- include "airframe-application.labels" . | nindent 8 }}
+        {{- include "airframe-application.versionLabel" . | nindent 8 }}
         {{- with include "airframe-application.userMeta" (dict "root" $ "kind" "labels" "field" "rollout.podLabels" "map" .Values.rollout.podLabels) }}
         {{- . | nindent 8 }}
         {{- end }}

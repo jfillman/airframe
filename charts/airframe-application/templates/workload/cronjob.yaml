@@ -13,6 +13,7 @@ metadata:
   namespace: {{ include "airframe-application.namespace" $ }}
   labels:
     {{- include "airframe-application.labels" $ | nindent 4 }}
+    {{- include "airframe-application.versionLabel" $ | nindent 4 }}
     hangar.io/subcomponent: workload
 spec:
   schedule: {{ .schedule | quote }}
@@ -27,6 +28,7 @@ spec:
         metadata:
           labels:
             {{- include "airframe-application.labels" $ | nindent 12 }}
+            {{- include "airframe-application.versionLabel" $ | nindent 12 }}
         spec:
           {{- toYaml $podSpec | nindent 10 }}
 ---

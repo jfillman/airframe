@@ -4,7 +4,7 @@
 #   container build -f tools/validate.Containerfile -t airframe-validate:dev .
 # Usage: validate-values [--app NAME] FILE...   (exit 0 = all valid, 1 = a problem; see tools/airframe-validate)
 # (the image's default entrypoint is airframe-validate itself, so `<image> FILE...` works too)
-FROM python:3.13-alpine
+FROM python:3.13-alpine@sha256:1e1f6334529d1fb26a2ef619d7cffb30a7c7d7cc1cc7338ebee283a58d1aeaca
 ARG TARGETARCH
 ARG HELM_VERSION=3.21.3
 RUN apk upgrade --no-cache && apk add --no-cache bash ca-certificates curl \

@@ -45,6 +45,7 @@ Helm chart. This file says what is true **today**; items marked *(planned)* do n
 
 ## Do not
 - Hand-edit `release` (the image), `releaseTracking` or the deprecated `rollout.image` in a live env file. `airframe-validate` rejects it (AF-OWNER-001) when they appear in a human-owned file, or anything else in a release file.
+- Change a Dockerfile `FROM` to an unpinned tag. The bases in `functions/*/Dockerfile` and `tools/validate.Containerfile` are `tag@sha256:<multi-arch index digest>` (linux/amd64 and linux/arm64 both resolve; check with `skopeo inspect --raw docker://<image>`, hash the bytes). To update one, re-resolve the tag and change the digest. The `examples/skyport` Containerfiles are app templates and stay on tags.
 - Use `extraManifests`, `networkPolicy` or `httpRoute` without a human's approval.
 - Put a secret value in `env` or `configMaps`. Secrets are references to Infisical keys.
 - Name an environment after a pipeline stage (`build`, `test`, `deploy`, `release`).

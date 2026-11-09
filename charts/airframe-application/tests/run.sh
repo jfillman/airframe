@@ -255,4 +255,16 @@ ro observability-go-egress | grep -q 'instrumentation.opentelemetry.io' && { ech
 np observability | grep -q 'port: 4317' && { echo "FAIL: OTLP egress rule rendered while egress is open"; fail=1; }
 np observability-egress | grep -q 'port: 4317' || { echo "FAIL: OTLP egress rule missing while egress is restricted"; fail=1; }
 np observability-go-egress | grep -q 'port: 4317' && { echo "FAIL: OTLP egress rule rendered with nothing injected"; fail=1; }
+# app.kubernetes.io/version names the running image, so it lives only on the objects that run it (Rollout, Job,
+# CronJob and their pod templates). On every object it made each release change the Service, ServiceAccount,
+# NetworkPolicy, Namespace and RolloutWatch too (out of sync in Argo). Nothing may select on it.
+for fx in release-image release-image-jobs from-service; do
+  out=$(helm template t . -f "tests/fixtures/$fx.yaml" 2>&1); rc=$?
+  [ $rc -eq 0 ] || { echo "FAIL: $fx did not render (exit $rc)"; fail=1; continue; }
+  echo "$out" | grep -q 'app.kubernetes.io/version' || { echo "FAIL: $fx rendered no version label at all (vacuous)"; fail=1; }
+  bad=$(echo "$out" | awk '/^---/{if(k!="" && v>0 && k!~/^(Rollout|Job|CronJob)$/)print k; k="";v=0} /^kind:/{k=$2} /app.kubernetes.io\/version/{v++} END{if(k!="" && v>0 && k!~/^(Rollout|Job|CronJob)$/)print k}')
+  [ -z "$bad" ] || { echo "FAIL: $fx: version label on non-workload kind(s): $bad"; fail=1; }
+done
+helm template t . -f tests/fixtures/release-image.yaml --show-only templates/workload/rollout.yaml | grep -c 'app.kubernetes.io/version' | grep -q '^2$' || { echo "FAIL: Rollout must carry the version label on itself and its pod template"; fail=1; }
+helm template t . -f tests/fixtures/release-image.yaml | grep -A3 'selector:' | grep -q 'version' && { echo "FAIL: a selector references the version label"; fail=1; }
 [ $fail -eq 0 ] && echo "ok" || exit 1

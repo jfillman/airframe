@@ -85,6 +85,10 @@ environment with no Rollout fails the render (`templates/release-tracking-guard.
   (every pod) and `serviceLabels/serviceAnnotations` (the Services). A label the chart owns
   (`app.kubernetes.io/*`, `hangar.io/*`, `helm.sh/chart`) or a `checksum/*` pod annotation fails the
   render, naming the key.
+- `app.kubernetes.io/version` (the released image tag) is stamped only on the objects that run the image: the
+  Rollout, Job and CronJob and their pod templates. It is not on the Service, ServiceAccount, NetworkPolicy,
+  Namespace, RolloutWatch or other objects, so a release changes only the workload and nothing else shows
+  out of sync in Argo. No selector uses it.
 
 ## Config and secrets
 

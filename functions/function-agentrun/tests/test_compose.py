@@ -128,6 +128,12 @@ class Rendering(unittest.TestCase):
         self.assertEqual(json.loads(e["HANGAR_LIMITS"])["toolCalls"], 100)
         self.assertEqual(e["CLEARANCE_URL"], "http://clearance.autopilot-system.svc:8080")
 
+    def test_the_tool_grant_reaches_the_run_in_hangar_limits(self):
+        """spec.limits.tools (Autopilot A-7): the gateway's grant, which the runtime narrows its tool offer to."""
+        x = xr(limits={"toolCalls": 100, "githubCalls": 50, "modelTokens": 1000,
+                       "tools": ["catalog.read", "glidepath.run.get"]})
+        self.assertEqual(json.loads(env(run(x))["HANGAR_LIMITS"])["tools"], ["catalog.read", "glidepath.run.get"])
+
     def test_numbers_that_came_through_protobuf_as_doubles_stay_integers(self):
         x = xr(limits={"toolCalls": 100.0, "githubCalls": 50.0, "modelTokens": 1000.0}, input={"n": 3.0, "f": 0.5})
         e = env(run(x))

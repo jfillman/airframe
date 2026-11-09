@@ -17,7 +17,7 @@ Nothing creates runs yet: Clearance (AP-A2) is not deployed.
 | One pod | an agent-sandbox `Sandbox` running the agent image (by digest) as non-root, read-only root filesystem, no capabilities, service account `run` with no token mounted |
 | Egress by mode | `none` (nothing), `clearance` (DNS + Clearance), `clearance+model` (+ the model proxy, port 8081: Clearance's own pod, which charges model tokens to the session; the composition sets `model_proxy_selector` to Clearance's label), `allowlist` (+ listed CIDRs) |
 | Identity | projected tokens for the `clearance` and `model-proxy` audiences only, never a key |
-| The runtime contract | `HANGAR_RUN_ID`, `_TASK_ID`, `_SESSION_ID`, `_AGENT`, `_EXPIRES_AT`, `_LIMITS`, `_INPUT`, `_OUTPUT_DIR`, `_WORKSPACE`, `CLEARANCE_URL`, `MODEL_PROXY_URL`; `/workspace`, `/run/output`, tokens under `/var/run/hangar` |
+| The runtime contract | `HANGAR_RUN_ID`, `_TASK_ID`, `_SESSION_ID`, `_AGENT`, `_EXPIRES_AT`, `_LIMITS` (`spec.limits`: the budgets and, since Autopilot A-7, `tools`, the session's grant the runtime narrows its tool offer to), `_INPUT`, `_OUTPUT_DIR`, `_WORKSPACE`, `CLEARANCE_URL`, `MODEL_PROXY_URL`; `/workspace`, `/run/output`, tokens under `/var/run/hangar` |
 
 ## Guardrails
 

@@ -178,6 +178,15 @@ composition, which is why a risky composition change is tested through a copy
 pointed at one XR's `compositionRef` first. The lower and upper `AppProject`s keep an app's
 Ground-tier identity from reaching Flight-tier destinations.
 
+An agent follows the same path. Autopilot's `airframe.apply` (T1, through Clearance) plans an `AppSpec` with
+the planner and opens the plan's steps as pull requests as the agents' own GitHub App: first the tenants-repo PR
+(the app XR and each Flight environment's `ApplicationEnvironment`), then, once the platform has created and onboarded
+the app's repository, the PR carrying its Ground environments and the Ground half of `cicd.yaml`. It opens one per
+call, derives where it is from the branches on GitHub (so a run killed and started again opens no duplicate), has no
+merge or approve call, and leaves the Flight half to people: `cicd.yaml`'s Flight fields (human-only in Glidepath's
+scope rules) and the upper `gitops-<app>` repository. Every PR is a human merge; the receipt Clearance records for each
+lets its provenance check vouch that the agent opened it.
+
 ### 7. Evidence: how anyone can tell
 
 Every XRD reports standard `Ready`/`Synced` conditions plus catalog-specific conditions with a

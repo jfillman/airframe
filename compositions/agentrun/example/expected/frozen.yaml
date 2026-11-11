@@ -137,9 +137,9 @@ resources:
                 - name: HANGAR_LIMITS
                   value: '{"githubCalls":50,"modelTokens":100000,"toolCalls":100}'
                 - name: AUTOPILOT_URL
-                  value: http://clearance.autopilot-system.svc:8080
+                  value: http://autopilot-gateway.autopilot-system.svc:8080
                 - name: CLEARANCE_URL
-                  value: http://clearance.autopilot-system.svc:8080
+                  value: http://autopilot-gateway.autopilot-system.svc:8080
                 - name: MODEL_PROXY_URL
                   value: http://model-proxy.autopilot-system.svc:8081
                 - name: HANGAR_TOKEN_DIR

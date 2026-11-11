@@ -15,13 +15,13 @@ Nothing creates runs yet: Clearance (AP-A2) is not deployed.
 |---|---|
 | Its own namespace | `agent-<name>`, pod security `restricted`, default-deny NetworkPolicy, a quota with room for one Sandbox and no Secrets, Services, Jobs or PVCs |
 | One pod | an agent-sandbox `Sandbox` running the agent image (by digest) as non-root, read-only root filesystem, no capabilities, service account `run` with no token mounted |
-| Egress by mode | `none` (nothing), `clearance` (DNS + Clearance), `clearance+model` (+ the model proxy, port 8081: Clearance's own pod, which charges model tokens to the session; the composition sets `model_proxy_selector` to Clearance's label), `allowlist` (+ listed CIDRs) |
+| Egress by mode | `none` (nothing), `clearance` (DNS + the gateway, label `autopilot-gateway`), `clearance+model` (+ the model proxy, port 8081: Clearance's own pod, which charges model tokens to the session; the composition sets `model_proxy_selector` to the gateway's pod label, `app.kubernetes.io/name: autopilot-gateway`), `allowlist` (+ listed CIDRs) |
 | Identity | projected tokens for the gateway (audiences `autopilot` and, for one release, `clearance`) and the model proxy (`model-proxy`) only, never a key |
 | The runtime contract | `HANGAR_RUN_ID`, `_TASK_ID`, `_SESSION_ID`, `_AGENT`, `_EXPIRES_AT`, `_LIMITS` (`spec.limits`: the budgets and, since Autopilot A-7, `tools`, the session's grant the runtime narrows its tool offer to), `_INPUT`, `_OUTPUT_DIR`, `_WORKSPACE`, `AUTOPILOT_URL` (the gateway's MCP URL; `CLEARANCE_URL` carries the same value for one release, for the previous runtime image), `MODEL_PROXY_URL`; `/workspace`, `/run/output`, tokens under `/var/run/hangar` (`autopilot-token`, `clearance-token`, `model-proxy-token`) |
 
 ## Naming the gateway (R-10b)
 
-The Composition input `gateway_service` (default `clearance`) is the gateway's Service name. A run receives
+The Composition input `gateway_service` (function default `clearance`; the shared Composition sets `autopilot-gateway` since R-10c, with `clearance_selector` and `model_proxy_selector` on the label `app.kubernetes.io/name: autopilot-gateway`) is the gateway's Service name. A run receives
 `AUTOPILOT_URL` and `CLEARANCE_URL` (same value; the second only for the previous runtime image) and two projected
 gateway tokens, `autopilot-token` (audience `autopilot`) and `clearance-token` (audience `clearance`). The gateway
 accepts either audience (`AUTOPILOT_RUN_AUDIENCES`), and the runtime prefers `AUTOPILOT_URL` and the `autopilot`

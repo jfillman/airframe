@@ -92,7 +92,7 @@ resources:
                   kubernetes.io/metadata.name: autopilot-system
               podSelector:
                 matchLabels:
-                  app.kubernetes.io/name: clearance
+                  app.kubernetes.io/name: autopilot-gateway
           podSelector: {}
           policyTypes:
           - Egress
@@ -186,9 +186,9 @@ resources:
                 - name: HANGAR_LIMITS
                   value: '{"githubCalls":50,"modelTokens":100000,"toolCalls":100}'
                 - name: AUTOPILOT_URL
-                  value: http://clearance.autopilot-system.svc:8080
+                  value: http://autopilot-gateway.autopilot-system.svc:8080
                 - name: CLEARANCE_URL
-                  value: http://clearance.autopilot-system.svc:8080
+                  value: http://autopilot-gateway.autopilot-system.svc:8080
                 - name: HANGAR_TOKEN_DIR
                   value: /var/run/hangar
                 - name: HANGAR_INPUT

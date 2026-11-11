@@ -123,10 +123,26 @@ class Rendering(unittest.TestCase):
     def test_env_contract(self):
         e = env(run())
         for k in ("HANGAR_RUN_ID", "HANGAR_TASK_ID", "HANGAR_SESSION_ID", "HANGAR_AGENT", "HANGAR_EXPIRES_AT",
-                  "HANGAR_OUTPUT_DIR", "HANGAR_WORKSPACE", "HANGAR_LIMITS", "CLEARANCE_URL", "MODEL_PROXY_URL"):
+                  "HANGAR_OUTPUT_DIR", "HANGAR_WORKSPACE", "HANGAR_LIMITS", "AUTOPILOT_URL", "CLEARANCE_URL", "MODEL_PROXY_URL"):
             self.assertIn(k, e)
         self.assertEqual(json.loads(e["HANGAR_LIMITS"])["toolCalls"], 100)
         self.assertEqual(e["CLEARANCE_URL"], "http://clearance.autopilot-system.svc:8080")
+        self.assertEqual(e["AUTOPILOT_URL"], e["CLEARANCE_URL"])
+
+    def test_gateway_service_name_is_configurable_and_both_urls_follow_it(self):
+        e = env(run(cfg=ClusterConfig.from_input({"gateway_service": "autopilot-gateway"})))
+        self.assertEqual(e["AUTOPILOT_URL"], "http://autopilot-gateway.autopilot-system.svc:8080")
+        self.assertEqual(e["CLEARANCE_URL"], e["AUTOPILOT_URL"])
+        self.assertTrue(e["MODEL_PROXY_URL"].startswith("http://model-proxy."))
+        with self.assertRaises(ValueError):
+            ClusterConfig.from_input({"gateway_service": "Not A Name"})
+
+    def test_gateway_tokens_carry_both_audiences_at_the_paths_the_runtime_reads(self):
+        c = run()
+        srcs = [s["serviceAccountToken"] for v in pod(c)["volumes"] if "projected" in v for s in v["projected"]["sources"]]
+        self.assertEqual({(s["audience"], s["path"]) for s in srcs},
+                         {("autopilot", "autopilot-token"), ("clearance", "clearance-token"),
+                          ("model-proxy", "model-proxy-token")})
 
     def test_the_tool_grant_reaches_the_run_in_hangar_limits(self):
         """spec.limits.tools (Autopilot A-7): the gateway's grant, which the runtime narrows its tool offer to."""
@@ -169,18 +185,18 @@ class NetworkModes(unittest.TestCase):
         c = run(xr(network={"mode": "none"}))
         self.assertNotIn("netpol-egress", c.resources)
         self.assertEqual(self.audiences(c), [])
-        self.assertFalse({"CLEARANCE_URL", "MODEL_PROXY_URL"} & set(env(c)))
+        self.assertFalse({"AUTOPILOT_URL", "CLEARANCE_URL", "MODEL_PROXY_URL"} & set(env(c)))
 
     def test_clearance_reaches_dns_and_the_gateway_only(self):
         c = run(xr(network={"mode": "clearance"}))
         self.assertEqual(len(self.egress(c)), 2)
-        self.assertEqual(self.audiences(c), ["clearance"])
+        self.assertEqual(self.audiences(c), ["autopilot", "clearance"])
         self.assertNotIn("MODEL_PROXY_URL", env(c))
 
     def test_clearance_model_adds_the_model_proxy_and_its_token(self):
         c = run()
         self.assertEqual(len(self.egress(c)), 3)
-        self.assertEqual(self.audiences(c), ["clearance", "model-proxy"])
+        self.assertEqual(self.audiences(c), ["autopilot", "clearance", "model-proxy"])
 
     def test_allowlist_adds_only_the_listed_cidrs(self):
         c = run(xr(network={"mode": "allowlist", "allowCidrs": ["203.0.113.0/24"]}))

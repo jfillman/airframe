@@ -63,6 +63,15 @@ and admits a run only if it says `type: dev` and `autopilotReady: "true"`. Every
 record, so a gate that looked for "any record with the flag" would pass on the upper cluster too; the name is what
 makes it this cluster's answer.
 
+## Where is the gateway, and what does it call itself?
+
+The Composition's `gateway_service` input (default `clearance`, the Service in `clearance_namespace`) names the
+gateway's Service; apron sets it to `autopilot-gateway` when the Service is renamed (R-10b). A run gets
+`AUTOPILOT_URL` and, with the same value, `CLEARANCE_URL` (for the previous runtime image), plus projected tokens
+`autopilot-token` (audience `autopilot`) and `clearance-token` (audience `clearance`); both go for one release.
+`clearance_selector` (the pod label the NetworkPolicy allows) is separate and moves with the gateway's pods.
+The model proxy's names (`model-proxy` Service, audience and token) are unchanged.
+
 ## Which runtime classes does this cluster have?
 
 The same runtime config carries `HANGAR_RUNTIME_CLASSES`, a JSON object from sandbox tier to RuntimeClass name, for

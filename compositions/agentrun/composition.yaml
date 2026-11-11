@@ -34,8 +34,9 @@ spec:
         # run's model tokens to the session budget in the same evidence chain as its tool calls, so a run's model
         # egress goes to the Clearance pod. The Service is still named model-proxy (MODEL_PROXY_URL).
         model_proxy_selector: {app.kubernetes.io/name: clearance}
-        # sandbox: hardened -> runtime class. Empty: no cluster in the home lab has gVisor or Kata, so a hardened
-        # request is Rejected, never downgraded.
+        # sandbox: hardened -> runtime class. Empty here because the Composition is shared: a cluster that has one
+        # (gVisor on an EKS sandbox node group) says so through HANGAR_RUNTIME_CLASSES in function-agentrun's runtime
+        # config, which is merged over this. With neither, a hardened request is Rejected, never downgraded.
         runtime_classes: {}
         # Compute classes this composition offers (requests/limits per agent container; a run's quota adds its
         # sidecars). gpu is absent, so a gpu request is Rejected.

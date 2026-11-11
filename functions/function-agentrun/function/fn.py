@@ -4,6 +4,10 @@ What this file adds to the pure function:
   - which cluster it runs on: HANGAR_CLUSTER_NAME, from the Function's DeploymentRuntimeConfig (the gitops repo's
     10-crds-operators/crossplane/function-agentrun-runtime.yaml). The Composition is shared by every cluster, so the
     name cannot live there. Unset means Rejected.
+  - which runtime classes it has: HANGAR_RUNTIME_CLASSES, a JSON object from the same runtime config (for example
+    {"hardened": "gvisor"}), rendered by apron from the same cluster.yaml key that renders the RuntimeClass, so the
+    two cannot disagree. It is merged over the Composition's runtime_classes. Unset or "{}" means none (a hardened
+    run is Rejected); a value that is not such an object is fatal on every call, never ignored.
   - the cluster registry record: a required-resources lookup of ConfigMap <cluster> in crossplane-system, the same
     record every Airframe composition's cluster gate reads (charts/cluster-registry). Until Crossplane has resolved
     the lookup, the function renders nothing and decides nothing; Crossplane calls it again in the same reconcile
@@ -14,7 +18,9 @@ What this file adds to the pure function:
 from __future__ import annotations
 
 import datetime
+import json
 import os
+import re
 
 import grpc
 from crossplane.function import logging, request, resource, response
@@ -25,6 +31,27 @@ from function.compose import ClusterConfig, compose
 
 REGISTRY_REQUIREMENT = "cluster-registry"
 CLUSTER_ENV = "HANGAR_CLUSTER_NAME"
+RUNTIME_CLASSES_ENV = "HANGAR_RUNTIME_CLASSES"
+SANDBOX_TIERS = ("hardened",)
+DNS1123_SUBDOMAIN = re.compile(r"^[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$")
+
+
+def parse_runtime_classes(raw: str) -> dict[str, str]:
+    """HANGAR_RUNTIME_CLASSES: {"<sandbox tier>": "<RuntimeClass name>"}. Raises ValueError on anything else."""
+    if not raw.strip():
+        return {}
+    try:
+        v = json.loads(raw)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"{RUNTIME_CLASSES_ENV} is not JSON: {e}") from None
+    if not isinstance(v, dict):
+        raise ValueError(f"{RUNTIME_CLASSES_ENV} must be a JSON object, got {type(v).__name__}")
+    for tier, name in v.items():
+        if tier not in SANDBOX_TIERS:
+            raise ValueError(f"{RUNTIME_CLASSES_ENV}: unknown sandbox tier {tier!r} (known: {', '.join(SANDBOX_TIERS)})")
+        if not isinstance(name, str) or not DNS1123_SUBDOMAIN.match(name):
+            raise ValueError(f"{RUNTIME_CLASSES_ENV}: {tier}: {name!r} is not a RuntimeClass name")
+    return dict(v)
 
 
 def _object_ready(observed: fnv1.Resource) -> bool:
@@ -35,9 +62,14 @@ def _object_ready(observed: fnv1.Resource) -> bool:
 
 
 class FunctionRunner(grpcv1.FunctionRunnerService):
-    def __init__(self, cluster: str | None = None) -> None:
+    def __init__(self, cluster: str | None = None, runtime_classes: str | None = None) -> None:
         self.log = logging.get_logger()
         self.cluster = cluster if cluster is not None else os.environ.get(CLUSTER_ENV, "")
+        raw = runtime_classes if runtime_classes is not None else os.environ.get(RUNTIME_CLASSES_ENV, "")
+        try:
+            self.runtime_classes, self.runtime_classes_error = parse_runtime_classes(raw), ""
+        except ValueError as e:
+            self.runtime_classes, self.runtime_classes_error = {}, str(e)
 
     async def RunFunction(self, req: fnv1.RunFunctionRequest, _: grpc.aio.ServicerContext) -> fnv1.RunFunctionResponse:
         rsp = response.to(req)
@@ -47,6 +79,10 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
         except (ValueError, KeyError, TypeError) as e:
             response.fatal(rsp, f"function-agentrun: bad Composition input: {e}")
             return rsp
+        if self.runtime_classes_error:
+            response.fatal(rsp, f"function-agentrun: bad runtime config: {self.runtime_classes_error}")
+            return rsp
+        cfg.runtime_classes = {**cfg.runtime_classes, **self.runtime_classes}
 
         if self.cluster:
             # Always declare the requirement: Crossplane treats requirements as satisfied once they are stable

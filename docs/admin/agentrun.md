@@ -29,7 +29,8 @@ Nothing creates runs yet: Clearance (AP-A2) is not deployed.
 - **The deadline can't move.** The XRD makes every spec field immutable except `frozen`, which can go from false to
   true only (Clearance's breaker). Nobody, Clearance included, can extend a run, widen its network or raise its limits.
 - **Fail closed.** No `airframe.autopilotReady` on this cluster's registry record, a `hardened` sandbox without a
-  runtime class, an unknown compute class, a TTL over the cap (240 minutes), an allowlist of `/0`, loopback or
+  runtime class (the cluster names one only through function-agentrun's `HANGAR_RUNTIME_CLASSES`, which Apron sets from
+  cluster.yaml `autopilot.hardenedRuntime: gvisor` together with the RuntimeClass itself), an unknown compute class, a TTL over the cap (240 minutes), an allowlist of `/0`, loopback or
   link-local, or an input over 4 KiB: `Rejected`, nothing created, never downgraded. The upper cluster can't carry
   the flag (the registry chart refuses it).
 - **No PR-sweep label.** The run namespace never carries `hangar.io/ephemeral-env`; the PR-namespace TTL sweep would

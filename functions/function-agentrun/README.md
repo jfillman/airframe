@@ -46,7 +46,8 @@ until the function's cleanup; D15/U11 chose Delete.
 
 `Rejected`, nothing rendered, never downgraded, for: no `HANGAR_CLUSTER_NAME`; no registry record for it; a record
 that is not `type: dev` or lacks `autopilotReady: "true"`; an XR not named `r-<hex>` or not in `autopilot-runs`; a TTL
-over `max_ttl_minutes`; `hardened` with no runtime class; a compute class the input lacks; an allowlist that is empty,
+over `max_ttl_minutes`; `hardened` with no runtime class (neither the Composition's `runtime_classes` nor
+`HANGAR_RUNTIME_CLASSES` names one); a compute class the input lacks; an allowlist that is empty,
 `/0`, loopback or link-local; `allowCidrs` outside allowlist mode; an input over 4 KiB.
 
 `Expired`, `Drained` and `Rejected` are **final**: read back from the XR's status, they never render again. (After a
@@ -61,6 +62,15 @@ asks Crossplane for ConfigMap `crossplane-system/<name>` (the cluster registry e
 and admits a run only if it says `type: dev` and `autopilotReady: "true"`. Every cluster carries every cluster's
 record, so a gate that looked for "any record with the flag" would pass on the upper cluster too; the name is what
 makes it this cluster's answer.
+
+## Which runtime classes does this cluster have?
+
+The same runtime config carries `HANGAR_RUNTIME_CLASSES`, a JSON object from sandbox tier to RuntimeClass name, for
+example `{"hardened": "gvisor"}`. apron renders it from `autopilot.hardenedRuntime` in cluster.yaml, the same key that
+renders the RuntimeClass itself (`55-autopilot/sandbox-runtime/`), so the function never names a class the cluster
+lacks. It is merged over the Composition's `runtime_classes`, which stays `{}` because the Composition is shared.
+Unset or `{}`: a `hardened` run is Rejected. Anything that is not such an object (bad JSON, an unknown tier, a name
+that is not a DNS-1123 subdomain) is a fatal result on every call, so a typo stops runs instead of downgrading them.
 
 ## Shared grant (decision D15)
 

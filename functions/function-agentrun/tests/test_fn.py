@@ -15,12 +15,12 @@ def ts(dt):
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def request(expires_in_minutes=30, registry="ready", sandbox=None, objects=None, status=None):
+def request(expires_in_minutes=30, registry="ready", sandbox=None, objects=None, status=None, tier="standard"):
     now = datetime.now(timezone.utc)
     xr = {
         "apiVersion": "catalog.hangar.io/v1alpha1", "kind": "AgentRun",
         "metadata": {"name": "r-1a2b3c", "namespace": "autopilot-runs", "creationTimestamp": ts(now - timedelta(minutes=1))},
-        "spec": {"agent": "coding-agent", "image": DIGEST, "sandbox": "standard", "compute": "small",
+        "spec": {"agent": "coding-agent", "image": DIGEST, "sandbox": tier, "compute": "small",
                  "network": {"mode": "clearance"}, "expiresAt": ts(now + timedelta(minutes=expires_in_minutes)),
                  "taskId": "t-1a2b3c", "sessionId": "s-1a2b3c",
                  "limits": {"toolCalls": 1, "githubCalls": 1, "modelTokens": 1}},
@@ -59,7 +59,7 @@ def condition(rsp, typ="RunReady"):
 class TestFn(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         logging.configure(level=logging.Level.DISABLED)
-        self.runner = fn.FunctionRunner(cluster="example-dev")
+        self.runner = fn.FunctionRunner(cluster="example-dev", runtime_classes="")
 
     async def test_first_call_asks_for_the_registry_record_and_renders_nothing(self):
         rsp = await self.runner.RunFunction(request(registry=None), None)
@@ -116,6 +116,33 @@ class TestFn(unittest.IsolatedAsyncioTestCase):
         rsp = await self.runner.RunFunction(request(status={"phase": "Drained", "reason": "agent succeeded"}), None)
         self.assertEqual(len(rsp.desired.resources), 0)
         self.assertEqual(status_of(rsp)["phase"], "Drained")
+
+    async def test_hardened_is_rejected_without_runtime_classes(self):
+        rsp = await self.runner.RunFunction(request(tier="hardened"), None)
+        self.assertEqual(len(rsp.desired.resources), 0)
+        self.assertEqual(status_of(rsp)["phase"], "Rejected")
+        self.assertIn("runtime class", status_of(rsp)["reason"])
+
+    async def test_hardened_gets_the_runtime_class_from_the_runtime_config(self):
+        runner = fn.FunctionRunner(cluster="example-dev", runtime_classes='{"hardened": "gvisor"}')
+        rsp = await runner.RunFunction(request(tier="hardened"), None)
+        self.assertNotEqual(status_of(rsp)["phase"], "Rejected")
+        sb = resource.struct_to_dict(rsp.desired.resources["sandbox"].resource)
+        self.assertEqual(sb["spec"]["forProvider"]["manifest"]["spec"]["podTemplate"]["spec"]["runtimeClassName"], "gvisor")
+
+    async def test_a_standard_run_gets_no_runtime_class_where_one_exists(self):
+        runner = fn.FunctionRunner(cluster="example-dev", runtime_classes='{"hardened": "gvisor"}')
+        rsp = await runner.RunFunction(request(), None)
+        sb = resource.struct_to_dict(rsp.desired.resources["sandbox"].resource)
+        self.assertNotIn("runtimeClassName", sb["spec"]["forProvider"]["manifest"]["spec"]["podTemplate"]["spec"])
+
+    async def test_bad_runtime_classes_are_fatal_not_ignored(self):
+        for raw in ("gvisor", "[]", '{"strict": "gvisor"}', '{"hardened": "Not_A_Name"}', '{"hardened": 1}'):
+            with self.subTest(raw=raw):
+                rsp = await fn.FunctionRunner(cluster="example-dev", runtime_classes=raw).RunFunction(
+                    request(tier="hardened"), None)
+                self.assertEqual(len(rsp.desired.resources), 0)
+                self.assertTrue(any(r.severity == fnv1.SEVERITY_FATAL for r in rsp.results))
 
     async def test_bad_input_is_fatal(self):
         req = request()

@@ -107,7 +107,7 @@ class ClusterConfig:
         for k in ("clearance_selector", "model_proxy_selector", "dns_selector", "runtime_classes"):
             if k in d:
                 setattr(c, k, dict(d.pop(k)))
-        if not re.fullmatch(r"[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?", str(c.gateway_service)):
+        if not re.fullmatch(r"[a-z]([-a-z0-9]{0,61}[a-z0-9])?", str(c.gateway_service)):
             raise ValueError(f"function-agentrun input: gateway_service {c.gateway_service!r} is not a Service name")
         if "compute" in d:
             c.compute = {k: ComputeClassCfg(dict(v["requests"]), dict(v["limits"]), dict(v.get("nodeSelector", {})),

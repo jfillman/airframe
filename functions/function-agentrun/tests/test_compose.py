@@ -136,6 +136,8 @@ class Rendering(unittest.TestCase):
         self.assertTrue(e["MODEL_PROXY_URL"].startswith("http://model-proxy."))
         with self.assertRaises(ValueError):
             ClusterConfig.from_input({"gateway_service": "Not A Name"})
+        with self.assertRaises(ValueError):
+            ClusterConfig.from_input({"gateway_service": "0gateway"})
 
     def test_gateway_tokens_carry_both_audiences_at_the_paths_the_runtime_reads(self):
         c = run()

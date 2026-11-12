@@ -86,3 +86,8 @@ tools/airframe-validate --xr tenants/<app>/xr-requests/<kind>.yaml
 
 Never hard-code a cluster name, GitHub owner or Infisical address: compositions read them from
 the cluster registry. The rules for people and agents are in [AGENTS.md](AGENTS.md).
+
+## License
+
+Copyright 2026 James Fillman. Licensed under the [Apache License, Version 2.0](LICENSE).
+See [NOTICE](NOTICE) for attribution and [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute.

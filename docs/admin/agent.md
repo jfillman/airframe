@@ -44,7 +44,10 @@ Clearance loads cannot change without a change here. Moving an agent to a new de
 - **A prompt-only agent** (its code is one of Autopilot's shared runtime images) lives in a team's
   **`AgentRepository`**: a repo of `agents/<name>.yaml` files with a checks-only `cicd.yaml`, registered with Glidepath
   through its TektonCICD child, so Glidepath runs its PR checks and the agent release and builds nothing. Its pins land
-  in `tenants/<repo>/xr-requests/`.
+  in `tenants/<repo>/xr-requests/`. In Tower it lists as an **Agent repository** (Overview, Pull Requests with check
+  state, Clearance): Tower infers the class from the catalog Component's `kind:agentrepository` tag, and the catalog
+  ingestor sets `github.com/project-slug` to `<owner>/<xr name>` (the repo is named after the XR), so the XR request
+  carries neither annotation. A Composition cannot set annotations on its own XR, so nothing here could.
 - **A code agent** (its own source and image) is an app: onboard it with an application kind. Its `agents/` files get
   the same checks and release.
 - Either way, Glidepath's `agent-release` opens the pin PR on merge (glidepath `docs/admin/agent-definitions.md`).

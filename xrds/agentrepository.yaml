@@ -7,6 +7,11 @@
 # tenants/<name>/xr-requests/. Product independence: this kind knows Glidepath only through TektonCICD and cicd.yaml,
 # and nothing about Clearance. A code agent is an app, onboarded with an application kind, not this.
 #
+# The Component this produces needs no Tower annotation: Tower infers hangar.io/service-class: agent-repository from
+# the kind:agentrepository tag (tower docs/service-classes.md), and the catalog ingestor sets github.com/project-slug
+# from the XR name, which is the repo name. (A Composition cannot set annotations on its own XR; they are the
+# requester's.)
+#
 # Needs Glidepath's checks-only repositories (a cicd.yaml without build; glidepath HANDOFF-checks-only-repos.md).
 apiVersion: apiextensions.crossplane.io/v2
 kind: CompositeResourceDefinition

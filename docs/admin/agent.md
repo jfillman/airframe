@@ -75,4 +75,4 @@ which the Autopilot plugin's Agents page shows.
 |---|---|
 | `20-service-catalog/airframe-service-catalog/` | `xrds/agent.yaml` and `compositions/agent/composition.yaml` in the include list |
 | `02-argocd-apps/xr-requests/appproject.yaml` | `Agent` in the `airframe-onboarding` project's namespace resource whitelist, so a tenant's xr-requests may carry one |
-| `55-autopilot/clearance/` | the gateway with `GITHUB_PR_ENABLED=1` (the loader reads through the same broker token) and the agents' App installed on the app repositories that hold definitions |
+| `55-autopilot/gateway/` | the gateway with `GITHUB_PR_ENABLED=1` (the loader reads through the same broker token) and the agents' App installed on the app repositories that hold definitions |

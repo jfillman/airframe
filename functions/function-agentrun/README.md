@@ -65,11 +65,11 @@ makes it this cluster's answer.
 
 ## Where is the gateway, and what does it call itself?
 
-The Composition's `gateway_service` input (default `clearance`, the Service in `clearance_namespace`) names the
-gateway's Service; apron sets it to `autopilot-gateway` when the Service is renamed (R-10b). A run gets
-`AUTOPILOT_URL` and, with the same value, `CLEARANCE_URL` (for the previous runtime image), plus projected tokens
-`autopilot-token` (audience `autopilot`) and `clearance-token` (audience `clearance`); both go for one release.
-`clearance_selector` (the pod label the NetworkPolicy allows) is separate and moves with the gateway's pods.
+The Composition's `gateway_service` input (default `autopilot-gateway`, the Service in `clearance_namespace`) names the
+gateway's Service. A run gets `AUTOPILOT_URL` and a projected token `autopilot-token` (audience `autopilot`). Until R-10e
+it also got `CLEARANCE_URL` (same value) and `clearance-token` (audience `clearance`), for runtime images older than
+R-10b; a run on such an image no longer reaches the gateway, so re-pin it. `clearance_selector` (default
+`app.kubernetes.io/name: autopilot-gateway`) is the pod label the NetworkPolicy allows.
 The model proxy's names (`model-proxy` Service, audience and token) are unchanged.
 
 ## Which runtime classes does this cluster have?

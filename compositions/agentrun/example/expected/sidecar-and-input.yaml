@@ -187,8 +187,6 @@ resources:
                   value: '{"githubCalls":50,"modelTokens":100000,"toolCalls":100}'
                 - name: AUTOPILOT_URL
                   value: http://autopilot-gateway.autopilot-system.svc:8080
-                - name: CLEARANCE_URL
-                  value: http://autopilot-gateway.autopilot-system.svc:8080
                 - name: HANGAR_TOKEN_DIR
                   value: /var/run/hangar
                 - name: HANGAR_INPUT
@@ -273,10 +271,6 @@ resources:
                       audience: autopilot
                       expirationSeconds: 3600
                       path: autopilot-token
-                  - serviceAccountToken:
-                      audience: clearance
-                      expirationSeconds: 3600
-                      path: clearance-token
           service: false
           shutdownPolicy: Delete
           shutdownTime: '2099-01-01T00:30:00Z'

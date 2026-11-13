@@ -123,28 +123,26 @@ class Rendering(unittest.TestCase):
     def test_env_contract(self):
         e = env(run())
         for k in ("HANGAR_RUN_ID", "HANGAR_TASK_ID", "HANGAR_SESSION_ID", "HANGAR_AGENT", "HANGAR_EXPIRES_AT",
-                  "HANGAR_OUTPUT_DIR", "HANGAR_WORKSPACE", "HANGAR_LIMITS", "AUTOPILOT_URL", "CLEARANCE_URL", "MODEL_PROXY_URL"):
+                  "HANGAR_OUTPUT_DIR", "HANGAR_WORKSPACE", "HANGAR_LIMITS", "AUTOPILOT_URL", "MODEL_PROXY_URL"):
             self.assertIn(k, e)
         self.assertEqual(json.loads(e["HANGAR_LIMITS"])["toolCalls"], 100)
-        self.assertEqual(e["CLEARANCE_URL"], "http://clearance.autopilot-system.svc:8080")
-        self.assertEqual(e["AUTOPILOT_URL"], e["CLEARANCE_URL"])
-
-    def test_gateway_service_name_is_configurable_and_both_urls_follow_it(self):
-        e = env(run(cfg=ClusterConfig.from_input({"gateway_service": "autopilot-gateway"})))
         self.assertEqual(e["AUTOPILOT_URL"], "http://autopilot-gateway.autopilot-system.svc:8080")
-        self.assertEqual(e["CLEARANCE_URL"], e["AUTOPILOT_URL"])
+        self.assertNotIn("CLEARANCE_URL", e, "the old name was retired with R-10e")
+
+    def test_gateway_service_name_is_configurable_and_the_url_follows_it(self):
+        e = env(run(cfg=ClusterConfig.from_input({"gateway_service": "the-gateway"})))
+        self.assertEqual(e["AUTOPILOT_URL"], "http://the-gateway.autopilot-system.svc:8080")
         self.assertTrue(e["MODEL_PROXY_URL"].startswith("http://model-proxy."))
         with self.assertRaises(ValueError):
             ClusterConfig.from_input({"gateway_service": "Not A Name"})
         with self.assertRaises(ValueError):
             ClusterConfig.from_input({"gateway_service": "0gateway"})
 
-    def test_gateway_tokens_carry_both_audiences_at_the_paths_the_runtime_reads(self):
+    def test_the_gateway_token_is_the_autopilot_audience_at_the_path_the_runtime_reads(self):
         c = run()
         srcs = [s["serviceAccountToken"] for v in pod(c)["volumes"] if "projected" in v for s in v["projected"]["sources"]]
         self.assertEqual({(s["audience"], s["path"]) for s in srcs},
-                         {("autopilot", "autopilot-token"), ("clearance", "clearance-token"),
-                          ("model-proxy", "model-proxy-token")})
+                         {("autopilot", "autopilot-token"), ("model-proxy", "model-proxy-token")})
 
     def test_the_tool_grant_reaches_the_run_in_hangar_limits(self):
         """spec.limits.tools (Autopilot A-7): the gateway's grant, which the runtime narrows its tool offer to."""
@@ -158,7 +156,7 @@ class Rendering(unittest.TestCase):
         self.assertEqual(e["HANGAR_LIMITS"], '{"githubCalls":50,"modelTokens":1000,"toolCalls":100}')
         self.assertEqual(e["HANGAR_INPUT"], '{"f":0.5,"n":3}')
         cfg = ClusterConfig.from_input({"clearance_port": 8080.0, "max_ttl_minutes": 60.0})
-        self.assertEqual(env(run(cfg=cfg))["CLEARANCE_URL"], "http://clearance.autopilot-system.svc:8080")
+        self.assertEqual(env(run(cfg=cfg))["AUTOPILOT_URL"], "http://autopilot-gateway.autopilot-system.svc:8080")
 
     def test_output_is_deterministic(self):
         self.assertEqual(json.dumps(run().resources, sort_keys=True), json.dumps(run().resources, sort_keys=True))
@@ -187,18 +185,18 @@ class NetworkModes(unittest.TestCase):
         c = run(xr(network={"mode": "none"}))
         self.assertNotIn("netpol-egress", c.resources)
         self.assertEqual(self.audiences(c), [])
-        self.assertFalse({"AUTOPILOT_URL", "CLEARANCE_URL", "MODEL_PROXY_URL"} & set(env(c)))
+        self.assertFalse({"AUTOPILOT_URL", "MODEL_PROXY_URL"} & set(env(c)))
 
     def test_clearance_reaches_dns_and_the_gateway_only(self):
         c = run(xr(network={"mode": "clearance"}))
         self.assertEqual(len(self.egress(c)), 2)
-        self.assertEqual(self.audiences(c), ["autopilot", "clearance"])
+        self.assertEqual(self.audiences(c), ["autopilot"])
         self.assertNotIn("MODEL_PROXY_URL", env(c))
 
     def test_clearance_model_adds_the_model_proxy_and_its_token(self):
         c = run()
         self.assertEqual(len(self.egress(c)), 3)
-        self.assertEqual(self.audiences(c), ["autopilot", "clearance", "model-proxy"])
+        self.assertEqual(self.audiences(c), ["autopilot", "model-proxy"])
 
     def test_allowlist_adds_only_the_listed_cidrs(self):
         c = run(xr(network={"mode": "allowlist", "allowCidrs": ["203.0.113.0/24"]}))

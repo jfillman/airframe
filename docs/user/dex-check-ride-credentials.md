@@ -23,7 +23,9 @@ components:
 ```
 
 It is off unless `checkRide` is set. Set it on one environment per CI namespace: two Dex components
-would write the same Secret.
+would write the same Secret. If two do (dev and qa), the one with the lowest `namespace/name` publishes and the
+other publishes nothing and raises a Warning event naming the winner, so they never fight; remove `checkRide`
+from the one you do not want.
 
 ## What Airframe does
 
@@ -43,9 +45,12 @@ the environment's credentials:
   recreated), the copy follows on the Object's next reconcile. Nobody acts.
 - Removal: detaching the Dex component, or removing `checkRide`, removes the Object and with it the copy.
 - A Dex outage keeps the copy, as it keeps the credentials Secret.
-- The function refuses a namespace that is not the CI namespace of the app the component is in (it checks the
-  XR's own namespace and `environmentRef`), publishes nothing and raises a Warning event on the XR. An app
-  cannot aim it at another app.
+- The only namespace it will write to is `app-<app>-cicd`, where `<app>` comes from the `hangar.io/app` label
+  airframe-application stamps on the XR (from the platform-owned `appName`, which Glidepath injects), never
+  from anything in `spec`. App names contain hyphens, so the name is not parsed out of the namespace: the target
+  must equal `app-<label>-cicd`, and the XR's own namespace must equal `app-<label app>-<label env>`. Anything
+  else publishes nothing and raises a Warning event on the XR. An app cannot aim it at another app. An XR that
+  was not rendered by the chart (no labels) publishes nothing.
 
 ## What Glidepath does
 

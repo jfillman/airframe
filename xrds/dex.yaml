@@ -143,8 +143,8 @@ spec:
                       type: string
                       description: >-
                         The app's CI namespace, app-<app>-cicd. The function refuses (with a Warning event,
-                        publishing nothing) any namespace that is not the CI namespace of the app this XR
-                        belongs to.
+                        publishing nothing) any namespace other than app-<app>-cicd, with <app> taken from the
+                        platform-stamped hangar.io/app label, not from spec.
                       pattern: '^app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-cicd$'
                       maxLength: 63
               x-kubernetes-validations:

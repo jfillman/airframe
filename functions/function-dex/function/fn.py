@@ -403,28 +403,51 @@ CHECK_RIDE_KEYS = {
 }
 
 
-def check_ride_namespace_problem(xr_namespace, env_ref_name, cicd_namespace):
+def check_ride_namespace_problem(xr_namespace, labels, cicd_namespace):
     """Why `cicd_namespace` may not receive this XR's credentials, or None when it may.
 
-    The composed Object is applied by provider-kubernetes with its own rights, so the XR (written in an
-    app's gitops repo) must not be able to aim it at another app's namespace. The target has to be the CI
-    namespace of the very app this XR belongs to: app-<app>-cicd, where this XR's namespace is
-    app-<app>-<env> and environmentRef.name is <app>-<cluster>-<env> (airframe-application's
-    environmentRef helper). Both are checked, so a hand-edited field on either side alone fails."""
-    if not (cicd_namespace.startswith("app-") and cicd_namespace.endswith("-cicd")):
-        return f"checkRide.namespace {cicd_namespace!r} is not an app CI namespace (app-<app>-cicd)"
-    app = cicd_namespace[len("app-"):-len("-cicd")]
-    prefix = f"app-{app}-"
-    if not app or not xr_namespace.startswith(prefix) or len(xr_namespace) == len(prefix):
-        return f"checkRide.namespace {cicd_namespace!r} is not the CI namespace of the app this XR is in ({xr_namespace!r})"
-    env = xr_namespace[len(prefix):]
-    ref = env_ref_name or ""
-    if not (ref.startswith(f"{app}-") and ref.endswith(f"-{env}") and len(ref) > len(app) + len(env) + 2):
-        return (
-            f"checkRide.namespace {cicd_namespace!r} does not match environmentRef.name {ref!r} "
-            f"(expected {app}-<cluster>-{env})"
-        )
+    The composed Object is applied by provider-kubernetes with its own rights, so the XR must not be able
+    to aim it at another app's namespace. App names contain hyphens, so app-<app>-<env> cannot be parsed
+    back into an app (app foo-bar env dev and app foo env bar-dev are the same string), and nothing the
+    tenant writes in spec (checkRide.namespace, environmentRef) may name the app. The app comes from the
+    `hangar.io/app` and `hangar.io/env` labels airframe-application stamps on every object it renders
+    (charts/airframe-application/templates/_helpers.tpl, labels), from values.appName / envName, which are
+    x-hangar-owner: platform and which Glidepath injects as Helm parameters for the app
+    (glidepath charts/glidepath-app/templates/_helpers.tpl, valuesObject appName / envName). The single
+    allowed target is then derived by EQUALITY from those, and must also be this XR's own namespace
+    (which Argo CD's destination, not the tenant, fixes) read back the same way."""
+    app = labels.get("hangar.io/app")
+    env = labels.get("hangar.io/env")
+    if not app or not env:
+        return "the XR carries no hangar.io/app and hangar.io/env labels (it was not rendered by airframe-application), so the app it belongs to is unknown"
+    if xr_namespace != f"app-{app}-{env}":
+        return f"the XR's namespace {xr_namespace!r} is not app-{app}-{env} (its hangar.io/app and hangar.io/env labels)"
+    expected = f"app-{app}-cicd"
+    if cicd_namespace != expected:
+        return f"checkRide.namespace {cicd_namespace!r} is not this app's CI namespace ({expected!r})"
     return None
+
+
+def check_ride_rival(req, xr_name, xr_namespace, app, cicd_namespace):
+    """The Dex XR that wins the CI namespace's one Secret when another XR of the same app also sets
+    checkRide to it, else None. Two XRs (dev and qa) would write one Secret name with different clients:
+    the Objects would fight. The XR with the lowest (namespace, name) publishes; the others publish
+    nothing and warn. Peers come from the `dex-peers` requirement (Dex XRs labelled with this app)."""
+    peers = req.required_resources["dex-peers"].items if "dex-peers" in req.required_resources else []
+    rivals = []
+    for item in peers:
+        peer = resource.struct_to_dict(item.resource)
+        meta = peer.get("metadata") or {}
+        key = (meta.get("namespace") or "", meta.get("name") or "")
+        if key == (xr_namespace, xr_name):
+            continue
+        if ((peer.get("spec") or {}).get("checkRide") or {}).get("namespace") != cicd_namespace:
+            continue
+        if (meta.get("labels") or {}).get("hangar.io/app") != app:
+            continue
+        rivals.append(key)
+    winner = min(rivals + [(xr_namespace, xr_name)])
+    return None if winner == (xr_namespace, xr_name) else winner
 
 
 def check_ride_object(xr_name, xr_namespace, labels, cicd_namespace):
@@ -530,11 +553,21 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
                 cicd_namespace = safe_get(spec, "checkRide", "namespace")
                 if not cicd_namespace:
                     return
-                problem = check_ride_namespace_problem(
-                    xr_namespace, safe_get(spec, "environmentRef", "name"), cicd_namespace,
-                )
+                problem = check_ride_namespace_problem(xr_namespace, labels, cicd_namespace)
                 if problem:
                     response.warning(rsp, f"Check ride credentials not published: {problem}")
+                    return
+                app = labels["hangar.io/app"]
+                response.require_resources(
+                    rsp, "dex-peers", "catalog.hangar.io/v1alpha1", "Dex", match_labels={"hangar.io/app": app},
+                )
+                winner = check_ride_rival(req, xr_name, xr_namespace, app, cicd_namespace)
+                if winner:
+                    response.warning(rsp, (
+                        f"Check ride credentials not published: Dex {winner[0]}/{winner[1]} also sets checkRide to "
+                        f"{cicd_namespace} and publishes there (lowest namespace/name wins). One Secret, one writer: "
+                        "set checkRide on one environment."
+                    ))
                     return
                 rsp.desired.resources["check-ride-credentials"].resource.update(
                     check_ride_object(xr_name, xr_namespace, labels, cicd_namespace),

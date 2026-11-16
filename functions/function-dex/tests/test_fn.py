@@ -94,15 +94,17 @@ def warnings_of(rsp):
     return [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING]
 
 
-async def run_attach(server, observed=None, address=None):
+async def run_attach(server, observed=None, address=None, extra=None):
     """One attach reconcile against the fake server (or an explicit address), optionally with an
-    observed oauth-credentials Secret (a dict with a `data` block, see secret_data)."""
+    observed oauth-credentials Secret (a dict with a `data` block, see secret_data) and extra spec fields."""
     resources = {}
     if observed is not None:
         resources["oauth-credentials"] = fnv1.Resource(resource=resource.dict_to_struct(observed))
     req = fnv1.RunFunctionRequest(
         observed=fnv1.State(
-            composite=fnv1.Resource(resource=xr("attach", serverRef={"name": "srv", "namespace": "srv-ns"})),
+            composite=fnv1.Resource(resource=xr(
+                "attach", serverRef={"name": "srv", "namespace": "srv-ns"}, **(extra or {}),
+            )),
             resources=resources,
         ),
     )
@@ -230,6 +232,71 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
                     {"apiVersion": "v1", "kind": "Secret", "resourceRef": {"name": "my-dex-oauth-credentials"}},
                 )
                 self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
+
+    # --- check ride credentials (spec.checkRide) ---------------------------------------------------
+    # The XR is my-dex in namespace app-x-dev; airframe-application stamps environmentRef x-<cluster>-dev.
+    RIDE = {"checkRide": {"namespace": "app-x-cicd"}, "environmentRef": {"name": "x-kiac-dev-dev"}}
+
+    async def test_check_ride_off_by_default_composes_nothing(self):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_check_ride_publishes_an_object_that_copies_the_three_keys_into_the_cicd_namespace(self):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE)
+        obj = resource.struct_to_dict(rsp.desired.resources["check-ride-credentials"].resource)
+        self.assertEqual(obj["kind"], "Object")
+        self.assertEqual(obj["apiVersion"], "kubernetes.m.crossplane.io/v1alpha1")
+        self.assertEqual(obj["metadata"]["name"], "my-dex-check-ride-credentials")
+        self.assertEqual(obj["metadata"]["namespace"], "app-x-dev")
+        self.assertEqual(obj["spec"]["managementPolicies"], ["*"])  # deleting the XR deletes the copy
+        manifest = obj["spec"]["forProvider"]["manifest"]
+        self.assertEqual(manifest["kind"], "Secret")
+        self.assertEqual(manifest["metadata"]["name"], "dex-check-ride-credentials")
+        self.assertEqual(manifest["metadata"]["namespace"], "app-x-cicd")
+        self.assertEqual(set(manifest["data"]), {"DEX_TOKEN_URL", "DEX_CLIENT_ID", "DEX_CLIENT_SECRET"})
+        self.assertNotIn("stringData", manifest)
+        # Each key is copied server side from the real credentials Secret; no value is in the manifest.
+        self.assertEqual(set(manifest["data"].values()), {""})
+        refs = {r["toFieldPath"]: r["patchesFrom"] for r in obj["spec"]["references"]}
+        self.assertEqual(set(refs), {"data.DEX_TOKEN_URL", "data.DEX_CLIENT_ID", "data.DEX_CLIENT_SECRET"})
+        for to, key in (("DEX_TOKEN_URL", "token-url"), ("DEX_CLIENT_ID", "client-id"), ("DEX_CLIENT_SECRET", "client-secret")):
+            self.assertEqual(refs[f"data.{to}"], {
+                "apiVersion": "v1", "kind": "Secret", "name": "my-dex-oauth-credentials",
+                "namespace": "app-x-dev", "fieldPath": f"data[{key}]",
+            })
+
+    async def test_check_ride_survives_a_dex_outage_when_credentials_are_kept(self):
+        observed = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "my-dex-oauth-credentials"},
+                    **secret_data({"client-id": "my-dex", "client-secret": "s3cret"})}
+        rsp = await run_attach(None, observed=observed, address="127.0.0.1:1", extra=self.RIDE)
+        self.assertIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_check_ride_not_declared_before_any_credentials_exist(self):
+        rsp = await run_attach(None, address="127.0.0.1:1", extra=self.RIDE)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_check_ride_refuses_another_apps_namespace(self):
+        cases = {
+            "another app": {"checkRide": {"namespace": "app-y-cicd"}, "environmentRef": {"name": "x-kiac-dev-dev"}},
+            "prefix app": {"checkRide": {"namespace": "app-cicd"}, "environmentRef": {"name": "x-kiac-dev-dev"}},
+            "not a ci namespace": {"checkRide": {"namespace": "kube-system"}, "environmentRef": {"name": "x-kiac-dev-dev"}},
+            "environmentRef of another app": {"checkRide": {"namespace": "app-x-cicd"}, "environmentRef": {"name": "y-kiac-dev-dev"}},
+        }
+        for label, extra in cases.items():
+            with self.subTest(label):
+                async with FakeDexServer() as server:
+                    rsp = await run_attach(server, extra=extra)
+                self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+                self.assertTrue(any("Check ride credentials not published" in w for w in warnings_of(rsp)), warnings_of(rsp))
+                # The OAuth client itself is unaffected.
+                self.assertEqual(rsp.conditions[0].reason, "DexAttachReady")
+
+    async def test_server_mode_never_composes_check_ride(self):
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server", **self.RIDE))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
 
     async def test_attach_declares_no_usage_before_any_credentials_exist(self):
         # Server down on the very first reconcile: no Secret, so nothing to protect and nothing for `by` to name.

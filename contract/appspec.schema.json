@@ -2674,12 +2674,32 @@
                             "type": "string",
                             "description": "One OAuth scope the client may request."
                           }
+                        },
+                        "checkRide": {
+                          "type": "object",
+                          "description": "(attach) Off unless set. Publishes this client's credentials for the app's check ride: a Secret `dex-check-ride-credentials` (keys DEX_TOKEN_URL, DEX_CLIENT_ID, DEX_CLIENT_SECRET) in the app's CI namespace, kept equal to `{name}-oauth-credentials` (a rotated secret follows) and removed with this XR. Glidepath's test stage forwards it to the check ride. Set it on ONE environment per CI namespace (the one whose test stage runs the check ride): two XRs would write the same Secret.",
+                          "required": [
+                            "namespace"
+                          ],
+                          "properties": {
+                            "namespace": {
+                              "type": "string",
+                              "description": "The app's CI namespace, app-<app>-cicd. The function refuses (with a Warning event, publishing nothing) any namespace that is not the CI namespace of the app this XR belongs to.",
+                              "pattern": "^app-[a-z0-9]([a-z0-9-]*[a-z0-9])?-cicd$",
+                              "maxLength": 63
+                            }
+                          },
+                          "additionalProperties": false
                         }
                       },
                       "x-kubernetes-validations": [
                         {
                           "rule": "self.mode != 'attach' || has(self.serverRef)",
                           "message": "serverRef is required when mode == attach"
+                        },
+                        {
+                          "rule": "!has(self.checkRide) || self.mode == 'attach'",
+                          "message": "checkRide applies to mode attach only"
                         }
                       ],
                       "additionalProperties": false

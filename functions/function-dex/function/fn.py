@@ -392,6 +392,88 @@ def credentials_secret(xr_name, xr_namespace, labels, *, data=None, string_data=
     return manifest
 
 
+CHECK_RIDE_SECRET = "dex-check-ride-credentials"
+
+# check ride key -> key in {xr}-oauth-credentials. Glidepath's test stage forwards these into the
+# Testkube namespace; a check ride reads them as optional env (see docs/user/dex-check-ride-credentials.md).
+CHECK_RIDE_KEYS = {
+    "DEX_TOKEN_URL": "token-url",
+    "DEX_CLIENT_ID": "client-id",
+    "DEX_CLIENT_SECRET": "client-secret",
+}
+
+
+def check_ride_namespace_problem(xr_namespace, env_ref_name, cicd_namespace):
+    """Why `cicd_namespace` may not receive this XR's credentials, or None when it may.
+
+    The composed Object is applied by provider-kubernetes with its own rights, so the XR (written in an
+    app's gitops repo) must not be able to aim it at another app's namespace. The target has to be the CI
+    namespace of the very app this XR belongs to: app-<app>-cicd, where this XR's namespace is
+    app-<app>-<env> and environmentRef.name is <app>-<cluster>-<env> (airframe-application's
+    environmentRef helper). Both are checked, so a hand-edited field on either side alone fails."""
+    if not (cicd_namespace.startswith("app-") and cicd_namespace.endswith("-cicd")):
+        return f"checkRide.namespace {cicd_namespace!r} is not an app CI namespace (app-<app>-cicd)"
+    app = cicd_namespace[len("app-"):-len("-cicd")]
+    prefix = f"app-{app}-"
+    if not app or not xr_namespace.startswith(prefix) or len(xr_namespace) == len(prefix):
+        return f"checkRide.namespace {cicd_namespace!r} is not the CI namespace of the app this XR is in ({xr_namespace!r})"
+    env = xr_namespace[len(prefix):]
+    ref = env_ref_name or ""
+    if not (ref.startswith(f"{app}-") and ref.endswith(f"-{env}") and len(ref) > len(app) + len(env) + 2):
+        return (
+            f"checkRide.namespace {cicd_namespace!r} does not match environmentRef.name {ref!r} "
+            f"(expected {app}-<cluster>-{env})"
+        )
+    return None
+
+
+def check_ride_object(xr_name, xr_namespace, labels, cicd_namespace):
+    """A provider-kubernetes Object that keeps Secret dex-check-ride-credentials in the app's CI
+    namespace equal to this XR's own credentials. Crossplane v2 will not let a namespaced XR compose
+    into another namespace directly; the Object is the same indirection compositions/secretstore uses
+    for its token-reviewer Secret. `references.patchesFrom` copies each value server side at apply time,
+    on every reconcile: nothing secret is in this manifest or in any function payload, a rotated
+    client-secret reaches the copy on the Object's next poll, and deleting the XR deletes the Object
+    (managementPolicies `*`) and with it the copy."""
+    refs = [
+        {
+            "patchesFrom": {
+                "apiVersion": "v1",
+                "kind": "Secret",
+                "name": f"{xr_name}-oauth-credentials",
+                "namespace": xr_namespace,
+                "fieldPath": f"data[{src}]",
+            },
+            "toFieldPath": f"data.{dst}",
+        }
+        for dst, src in CHECK_RIDE_KEYS.items()
+    ]
+    return {
+        "apiVersion": "kubernetes.m.crossplane.io/v1alpha1",
+        "kind": "Object",
+        "metadata": {"name": f"{xr_name}-check-ride-credentials", "namespace": xr_namespace, "labels": labels},
+        "spec": {
+            "references": refs,
+            "forProvider": {
+                "manifest": {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {
+                        "name": CHECK_RIDE_SECRET,
+                        "namespace": cicd_namespace,
+                        "labels": {**labels, "hangar.io/subcomponent": "check-ride-credentials"},
+                    },
+                    "type": "Opaque",
+                    # data, never stringData (provider-kubernetes cannot observe stringData); the
+                    # empty values are the placeholders patchesFrom overwrites.
+                    "data": {dst: "" for dst in CHECK_RIDE_KEYS},
+                },
+            },
+            "managementPolicies": ["*"],
+        },
+    }
+
+
 class FunctionRunner(grpcv1.FunctionRunnerService):
     """A FunctionRunner handles gRPC RunFunctionRequests."""
 
@@ -439,6 +521,24 @@ class FunctionRunner(grpcv1.FunctionRunnerService):
             def declare_usage():
                 if safe_get(server_ref, "name"):
                     rsp.desired.resources["server-usage"].resource.update(server_usage(xr, server_ref))
+                declare_check_ride()
+
+            def declare_check_ride():
+                # Off unless spec.checkRide.namespace is set. Declared exactly when the credentials
+                # Secret is (success, or a failed reconcile that keeps an observed one), so the copy
+                # is neither created before there is anything to copy nor pruned by a Dex outage.
+                cicd_namespace = safe_get(spec, "checkRide", "namespace")
+                if not cicd_namespace:
+                    return
+                problem = check_ride_namespace_problem(
+                    xr_namespace, safe_get(spec, "environmentRef", "name"), cicd_namespace,
+                )
+                if problem:
+                    response.warning(rsp, f"Check ride credentials not published: {problem}")
+                    return
+                rsp.desired.resources["check-ride-credentials"].resource.update(
+                    check_ride_object(xr_name, xr_namespace, labels, cicd_namespace),
+                )
 
             def fail(reason, message):
                 # Fail closed on the CONDITION, but never prune a Secret an app is already

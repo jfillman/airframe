@@ -46,8 +46,9 @@ resources:
       objective: 99.5
       sli:
         events:
-          errorQuery: sum(rate(http_request_duration_seconds_count{service="checkout-api"}[{{.window}}])) - sum(rate(http_request_duration_seconds_bucket{service="checkout-api",le="0.3"}[{{.window}}]))
-          totalQuery: sum(rate(http_request_duration_seconds_count{service="checkout-api"}[{{.window}}]))
+          errorQuery: sum(rate(http_request_duration_seconds_count{namespace="demo-apps",service="checkout-api"}[{{.window}}]))
+            - sum(rate(http_request_duration_seconds_bucket{namespace="demo-apps",service="checkout-api",le="0.3"}[{{.window}}]))
+          totalQuery: sum(rate(http_request_duration_seconds_count{namespace="demo-apps",service="checkout-api"}[{{.window}}]))
 xr:
   conditions:
   - message: 'Unready resources: dashboard-configmap, prometheusservicelevel'

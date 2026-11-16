@@ -163,7 +163,10 @@ the app's kind, and an env file may not. Every field empty (the default) renders
 
 `components:` entries become XRs of the kind `componentKinds` maps their `type` to, with `spec:` passed
 through and `spec.environmentRef.name: <app>-<cluster>-<env>` added. The component's XRD validates the
-spec; `tools/airframe-validate` checks it before merge. `slos:` entries become `SLO` XRs the same way. A
+spec; `tools/airframe-validate` checks it before merge. `slos:` entries become `SLO` XRs the same way. An SLO reads only its own environment's namespace:
+the composition adds `namespace="<env namespace>"` to every query, `indicator.metric` must be a bare metric name,
+and `totalFilter` / `errorFilter` must be plain `label="value"` matchers; a `namespace` or `__name__` matcher or
+any other PromQL is refused (docs/admin/known-gaps.md #11). A
 `RolloutWatch` named after the app watches the Rollout and, with `notifications.slack.enabled`, posts its
 diagnosis to Slack using the `slack-webhook-url` key from the app's shared store. All attached XRs use
 `attachedResourceApiVersion` (`catalog.hangar.io/v1alpha1`).

@@ -134,16 +134,27 @@ spec:
                         http_requests_total). For latency, the histogram's
                         base name without the _bucket/_count/_sum suffix.
                       minLength: 1
+                      pattern: '^[a-zA-Z_:][a-zA-Z0-9_:]*$'
                     totalFilter:
                       type: string
-                      description: PromQL label-matcher fragment selecting all eligible events.
+                      description: >-
+                        PromQL label-matcher fragment selecting all eligible
+                        events: a comma-separated list of label="value"
+                        matchers (=, !=, =~, !~; double-quoted values), nothing
+                        else. The composition adds the SLO's own namespace as a
+                        matcher on every query, so a `namespace` or `__name__`
+                        matcher is refused and the SLO can only read its own
+                        namespace's series.
                       minLength: 1
+                      pattern: '^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(=~|!~|!=|=)\s*"([^"\\\r\n]|\\.)*"(\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(=~|!~|!=|=)\s*"([^"\\\r\n]|\\.)*")*\s*$'
                     errorFilter:
                       type: string
                       description: >-
                         PromQL label-matcher fragment selecting bad/error
-                        events. Required when type == availability.
+                        events, in the same restricted form as totalFilter.
+                        Required when type == availability.
                       minLength: 1
+                      pattern: '^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(=~|!~|!=|=)\s*"([^"\\\r\n]|\\.)*"(\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(=~|!~|!=|=)\s*"([^"\\\r\n]|\\.)*")*\s*$'
                     latencyThreshold:
                       type: string
                       description: >-

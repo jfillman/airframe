@@ -17,3 +17,35 @@ cases:
   xr: xr-invalid.yaml
   expect:
     fatal: true
+# Tenant scope: every query is confined to the XR's own namespace, and a request that tries to read
+# another tenant's namespace (or to break out of the selector) is refused.
+- name: cross-tenant
+  xr: xr-cross-tenant.yaml
+  expect:
+    fatal: true
+- name: escape-or-branch
+  xr: bad-escape-or-branch.yaml
+  expect:
+    fatal: true
+- name: escape-namespace-regex
+  xr: xr-escape-namespace-regex.yaml
+  expect:
+    fatal: true
+- name: escape-namespace-nonempty
+  xr: xr-escape-namespace-nonempty.yaml
+  expect:
+    fatal: true
+- name: escape-metric-or
+  xr: bad-escape-metric-or.yaml
+  expect:
+    fatal: true
+- name: escape-label-replace
+  xr: bad-escape-label-replace.yaml
+  expect:
+    fatal: true
+- name: escape-name-label
+  xr: xr-escape-name-label.yaml
+  expect:
+    fatal: true
+- name: narrowing-ok
+  xr: xr-narrowing-ok.yaml

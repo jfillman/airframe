@@ -47,8 +47,9 @@ resources:
       objective: 99.9
       sli:
         events:
-          errorQuery: (sum(rate(http_requests_total{service="checkout-api",code=~"5.."}[{{.window}}]))) or vector(0)
-          totalQuery: sum(rate(http_requests_total{service="checkout-api"}[{{.window}}]))
+          errorQuery: (sum(rate(http_requests_total{namespace="demo-apps",service="checkout-api",code=~"5.."}[{{.window}}])))
+            or vector(0)
+          totalQuery: sum(rate(http_requests_total{namespace="demo-apps",service="checkout-api"}[{{.window}}]))
 xr:
   conditions:
   - message: 'Unready resources: dashboard-configmap, prometheusservicelevel'

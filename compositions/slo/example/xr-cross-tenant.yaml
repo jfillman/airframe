@@ -1,0 +1,16 @@
+apiVersion: catalog.hangar.io/v1alpha1
+kind: SLO
+metadata:
+  name: cross-tenant
+  namespace: app-checkout-prod
+spec:
+  environmentRef:
+    name: checkout-example-dev-prod
+  service: checkout-api
+  objective: 99.9
+  indicator:
+    type: availability
+    metric: http_requests_total
+    # Reads another tenant's namespace. The composition has to confine this to app-checkout-prod.
+    totalFilter: 'namespace="app-other-prod"'
+    errorFilter: 'code=~"5.."'

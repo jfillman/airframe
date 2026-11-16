@@ -1,0 +1,16 @@
+# A metric field carrying a second selector.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: SLO
+metadata:
+  name: escape-metric-or
+  namespace: app-checkout-prod
+spec:
+  environmentRef:
+    name: checkout-example-dev-prod
+  service: checkout-api
+  objective: 99.9
+  indicator:
+    type: availability
+    metric: http_requests_total or up{namespace="app-other-prod"}
+    totalFilter: service="checkout-api"
+    errorFilter: code=~"5.."

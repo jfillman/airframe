@@ -65,15 +65,40 @@
   <<- fail (printf "indicator.type must be availability or latency, got %q" $indicator.type) >>
 <<- end >>
 
+<<- /* TENANT SCOPE. An SLO may only read its own namespace's series: the XR's namespace (an environment namespace, app-NAME-ENV, where the chart puts it and where the tenant's RBAC ends) is forced into every selector below as the first matcher, and the tenant's own text is validated so it can only ever ADD matchers to that one selector. The metric must be a bare metric name. Each filter must be a comma-separated list of `label op "value"` matchers (op is one of =, !=, =~, !~; double-quoted values only) and nothing else, so it cannot close the selector, start a second one, or add an `or` branch, a subquery, label_replace or any other PromQL outside a quoted string: matchers in one selector are ANDed, so extra ones can only narrow. A `namespace` or `__name__` matcher is refused, not merged. Known limits are in docs/admin/known-gaps.md. */ ->>
+<<- if not (regexMatch `^[a-z0-9]([-a-z0-9]*[a-z0-9])?$` $xrNamespace) >>
+  <<- fail (printf "the SLO's namespace %q is not a valid namespace name, so its queries cannot be scoped to it" $xrNamespace) >>
+<<- end >>
+<<- if not (regexMatch `^[a-zA-Z_:][a-zA-Z0-9_:]*$` $indicator.metric) >>
+  <<- fail (printf "indicator.metric must be a bare metric name (letters, digits, _ and :), got %q" $indicator.metric) >>
+<<- end >>
+<<- $matcher := `[a-zA-Z_][a-zA-Z0-9_]*\s*(=~|!~|!=|=)\s*"([^"\\\r\n]|\\.)*"` >>
+<<- $listRe := printf `^\s*%s(\s*,\s*%s)*\s*$` $matcher $matcher >>
+<<- $filters := dict "totalFilter" $indicator.totalFilter >>
+<<- if eq $indicator.type "availability" >>
+  <<- $_ := set $filters "errorFilter" $indicator.errorFilter >>
+<<- end >>
+<<- range $field, $filter := $filters >>
+  <<- if not (regexMatch $listRe $filter) >>
+    <<- fail (printf "indicator.%s must be a comma-separated list of label matchers such as service=\"x\",code=~\"5..\" (double-quoted values, nothing else), got %q" $field $filter) >>
+  <<- end >>
+  <<- range $one := regexFindAll $matcher $filter -1 >>
+    <<- if regexMatch `^(namespace|__name__)\s*(=~|!~|!=|=)` $one >>
+      <<- fail (printf "indicator.%s may not match on namespace or __name__: every query is scoped to this SLO's own namespace, %q, by the composition" $field $xrNamespace) >>
+    <<- end >>
+  <<- end >>
+<<- end >>
+<<- $scope := printf "namespace=%q" $xrNamespace >>
+
 <<- $errorQuery := "" >>
 <<- $totalQuery := "" >>
 <<- if eq $indicator.type "availability" >>
 <<- /* `or vector(0)`: with zero error events (the healthy case) the filtered rate() matches no series at all, so the bare sum() is an EMPTY vector, and Sloth's generated error-ratio (error/total) empty-propagates - every recording rule evaluates ok but produces no data, exactly when nothing is wrong. vector(0) makes "no error series" read as 0 errors. (Latency SLIs don't need it: total minus under-threshold always has a series.) Verified live: bare form returns [], wrapped form returns 0 and the full ratio evaluates to 0. */ ->>
-<<- $errorQuery = printf "(sum(rate(%s{%s,%s}[{{.window}}]))) or vector(0)" $indicator.metric $indicator.totalFilter $indicator.errorFilter >>
-<<- $totalQuery = printf "sum(rate(%s{%s}[{{.window}}]))" $indicator.metric $indicator.totalFilter >>
+<<- $errorQuery = printf "(sum(rate(%s{%s,%s,%s}[{{.window}}]))) or vector(0)" $indicator.metric $scope $indicator.totalFilter $indicator.errorFilter >>
+<<- $totalQuery = printf "sum(rate(%s{%s,%s}[{{.window}}]))" $indicator.metric $scope $indicator.totalFilter >>
 <<- else >>
-<<- $errorQuery = printf "sum(rate(%s_count{%s}[{{.window}}])) - sum(rate(%s_bucket{%s,le=%q}[{{.window}}]))" $indicator.metric $indicator.totalFilter $indicator.metric $indicator.totalFilter $indicator.latencyThreshold >>
-<<- $totalQuery = printf "sum(rate(%s_count{%s}[{{.window}}]))" $indicator.metric $indicator.totalFilter >>
+<<- $errorQuery = printf "sum(rate(%s_count{%s,%s}[{{.window}}])) - sum(rate(%s_bucket{%s,%s,le=%q}[{{.window}}]))" $indicator.metric $scope $indicator.totalFilter $indicator.metric $scope $indicator.totalFilter $indicator.latencyThreshold >>
+<<- $totalQuery = printf "sum(rate(%s_count{%s,%s}[{{.window}}]))" $indicator.metric $scope $indicator.totalFilter >>
 <<- end >>
 
 apiVersion: sloth.slok.dev/v1

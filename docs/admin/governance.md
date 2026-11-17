@@ -45,7 +45,8 @@ bounds, defaults, required fields and CEL cross-field rules (`x-kubernetes-valid
 - `NodeJSApplication.spec.visibility` defaults to `private`; a public repository is an explicit choice.
 - `RabbitMQ` refuses `mode: attach` without `brokerRef` and `vhost`; `AwsEcsTarget` refuses
   `network.mode: existing` without subnet and security-group ids; `SLO` refuses an availability
-  indicator without `errorFilter`. These are CEL rules, and they fail the request with the message
+  indicator without `errorFilter`, a `metric` that is not a bare metric name, and filters that are anything but
+  plain label matchers (its queries are always confined to its own namespace). These are CEL rules and schema patterns, and they fail the request with the message
   written next to the rule.
 - `ApplicationEnvironment.spec.cluster` is checked live against the cluster registry: only a
   registered `type: upper` cluster with `crossplaneReady: "true"` is a valid Flight destination, and a

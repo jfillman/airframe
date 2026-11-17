@@ -1,0 +1,16 @@
+# __name__ would widen the selector to other metrics.
+apiVersion: catalog.hangar.io/v1alpha1
+kind: SLO
+metadata:
+  name: escape-name-label
+  namespace: app-checkout-prod
+spec:
+  environmentRef:
+    name: checkout-example-dev-prod
+  service: checkout-api
+  objective: 99.9
+  indicator:
+    type: availability
+    metric: http_requests_total
+    totalFilter: __name__=~".+"
+    errorFilter: code=~"5.."

@@ -47,7 +47,7 @@ listed in its `xrds/<kind>.meta.yaml` sidecar and in the generated
 | `PostgreSQL` | Component | `environmentRef`\*, `size`, `instances`, `storageSize`, `databaseName` | ComponentReady | CloudNativePG `Cluster` · NetworkPolicy |
 | `RabbitMQ` | Component | `environmentRef`\*, `mode`\* (broker\|attach); broker: `size`, `instances`, `vhosts`; attach: `brokerRef`, `vhost`, `queuePrefix`, `publish`, `consume` | ComponentReady | broker: `RabbitmqCluster`, a `Vhost` per entry, NetworkPolicy; attach: `User`, `Permission`, `Usage` on the broker |
 | `MongoDB` | Component | `environmentRef`\*, `members`, `storageSize`, `mongoVersion`, `databaseName` | ComponentReady | `MongoDBCommunity` replica set and its RBAC |
-| `Dex` | Component | `environmentRef`\*, `mode`\* (server\|attach); server: `size`, `allowedNamespaces`; attach: `serverRef`, `clientId`, `scopes` | ComponentReady | server: the shared Dex server; attach: an OAuth2 client, through `function-dex` |
+| `Dex` | Component | `environmentRef`\*, `mode`\* (server\|attach); server: `size`, `allowedNamespaces`; attach: `serverRef`, `clientId`, `scopes`, `checkRide` | ComponentReady | server: the shared Dex server; attach: an OAuth2 client, through `function-dex` |
 | `SLO` | Observability | `environmentRef`\*, `service`\*, `objective`\*, `indicator`\* | Ready | Sloth `PrometheusServiceLevel` |
 | `RolloutWatch` | Observability | `environmentRef`\*, `appName`\*, `cluster`\*, `env`\*, `notifications.slack` | `rolloutPhase`, `lastDiagnosis*` | A diagnosis Job on `Degraded`, through `function-rollout-watcher` |
 | `AwsLambdaTarget` | Cloud target | `functionName`, `region`, `architecture`, `runtime`, `memorySize`, `timeout`, `functionUrl` | TargetReady; `functionUrl`, `repositoryUrl`, `roleArn`, `cicd` | ECR repository · execution and deploy roles · Lambda function · Function URL |
@@ -108,7 +108,9 @@ the cluster. `Dex` and `RolloutWatch` run their own functions from `functions/`.
 - **Components**: `Redis` composes a `provider-helm` `Release`; `PostgreSQL`, `RabbitMQ` and
   `MongoDB` compose the custom resources of their operators (CloudNativePG, the RabbitMQ cluster
   and topology operators, the MongoDB Community operator); `Dex` renders its server or registers a
-  client through `function-dex`.
+  client through `function-dex`. With `spec.checkRide.namespace` set, an attached client's credentials
+  are also copied by a `provider-kubernetes` `Object` into the app's CI namespace for its check ride
+  ([dex-check-ride-credentials.md](../user/dex-check-ride-credentials.md)).
 - **Cloud**: the Upbound AWS and Azure providers. Every composed IAM role carries the fleet's
   permissions boundary, and AWS deploys assume a role with a ServiceAccount token instead of a
   stored key ([cloud-credentials.md](cloud-credentials.md)).

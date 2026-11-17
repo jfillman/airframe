@@ -14,6 +14,7 @@ nav:
       - 'Quickstart 7: checkin-api through Tower': user/quickstart-checkin-api.md
       - Skyport runbook: user/skyport-runbook.md
       - Skyport demo system: user/skyport-demo.md
+      - Dex credentials for a check ride: user/dex-check-ride-credentials.md
       - Decommissioning an app: user/decommission-app.md
       - Cloud targets (Lambda, ECS, Container Apps): user/cloud-targets.md
       - Cloud dependencies (queues, storage, PostgreSQL): user/cloud-dependencies.md

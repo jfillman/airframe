@@ -71,12 +71,12 @@ class FakeDexServer:
         return f"127.0.0.1:{self.port}"
 
 
-def xr(mode, **spec_extra):
+def xr(mode, namespace="app-x-dev", labels=None, **spec_extra):
     spec = {"mode": mode, "environmentRef": {"name": "env-1"}, **spec_extra}
     return resource.dict_to_struct({
         "apiVersion": "catalog.hangar.io/v1alpha1",
         "kind": "Dex",
-        "metadata": {"name": "my-dex", "namespace": "app-x-dev", "labels": {"hangar.io/app": "x"}},
+        "metadata": {"name": "my-dex", "namespace": namespace, "labels": labels or {"hangar.io/app": "x", "hangar.io/env": "dev"}},
         "spec": spec,
     })
 
@@ -94,17 +94,20 @@ def warnings_of(rsp):
     return [r.message for r in rsp.results if r.severity == fnv1.SEVERITY_WARNING]
 
 
-async def run_attach(server, observed=None, address=None):
+async def run_attach(server, observed=None, address=None, extra=None, namespace="app-x-dev", labels=None, peers=None):
     """One attach reconcile against the fake server (or an explicit address), optionally with an
-    observed oauth-credentials Secret (a dict with a `data` block, see secret_data)."""
+    observed oauth-credentials Secret (a dict with a `data` block, see secret_data) and extra spec fields."""
     resources = {}
     if observed is not None:
         resources["oauth-credentials"] = fnv1.Resource(resource=resource.dict_to_struct(observed))
     req = fnv1.RunFunctionRequest(
         observed=fnv1.State(
-            composite=fnv1.Resource(resource=xr("attach", serverRef={"name": "srv", "namespace": "srv-ns"})),
+            composite=fnv1.Resource(resource=xr(
+                "attach", namespace=namespace, labels=labels, serverRef={"name": "srv", "namespace": "srv-ns"}, **(extra or {}),
+            )),
             resources=resources,
         ),
+        required_resources={"dex-peers": fnv1.Resources(items=[fnv1.Resource(resource=resource.dict_to_struct(p)) for p in peers])} if peers else {},
     )
     target = address or server.address
     orig = fn.dex_grpc_address
@@ -230,6 +233,122 @@ class TestFunctionDex(unittest.IsolatedAsyncioTestCase):
                     {"apiVersion": "v1", "kind": "Secret", "resourceRef": {"name": "my-dex-oauth-credentials"}},
                 )
                 self.assertEqual(usage["metadata"]["namespace"], "app-x-dev")
+
+    # --- check ride credentials (spec.checkRide) ---------------------------------------------------
+    # The XR is my-dex in namespace app-x-dev; airframe-application stamps hangar.io/app=x, hangar.io/env=dev.
+    RIDE = {"checkRide": {"namespace": "app-x-cicd"}}
+
+    @staticmethod
+    def peer(namespace, name, app="x", cicd="app-x-cicd"):
+        return {"metadata": {"namespace": namespace, "name": name, "labels": {"hangar.io/app": app}},
+                "spec": {"mode": "attach", "checkRide": {"namespace": cicd}}}
+
+    async def test_check_ride_off_by_default_composes_nothing(self):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_check_ride_publishes_an_object_that_copies_the_three_keys_into_the_cicd_namespace(self):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE)
+        obj = resource.struct_to_dict(rsp.desired.resources["check-ride-credentials"].resource)
+        self.assertEqual(obj["kind"], "Object")
+        self.assertEqual(obj["apiVersion"], "kubernetes.m.crossplane.io/v1alpha1")
+        self.assertEqual(obj["metadata"]["name"], "my-dex-check-ride-credentials")
+        self.assertEqual(obj["metadata"]["namespace"], "app-x-dev")
+        self.assertEqual(obj["spec"]["managementPolicies"], ["*"])  # deleting the XR deletes the copy
+        manifest = obj["spec"]["forProvider"]["manifest"]
+        self.assertEqual(manifest["kind"], "Secret")
+        self.assertEqual(manifest["metadata"]["name"], "dex-check-ride-credentials")
+        self.assertEqual(manifest["metadata"]["namespace"], "app-x-cicd")
+        self.assertEqual(set(manifest["data"]), {"DEX_TOKEN_URL", "DEX_CLIENT_ID", "DEX_CLIENT_SECRET"})
+        self.assertNotIn("stringData", manifest)
+        # Each key is copied server side from the real credentials Secret; no value is in the manifest.
+        self.assertEqual(set(manifest["data"].values()), {""})
+        refs = {r["toFieldPath"]: r["patchesFrom"] for r in obj["spec"]["references"]}
+        self.assertEqual(set(refs), {"data.DEX_TOKEN_URL", "data.DEX_CLIENT_ID", "data.DEX_CLIENT_SECRET"})
+        for to, key in (("DEX_TOKEN_URL", "token-url"), ("DEX_CLIENT_ID", "client-id"), ("DEX_CLIENT_SECRET", "client-secret")):
+            self.assertEqual(refs[f"data.{to}"], {
+                "apiVersion": "v1", "kind": "Secret", "name": "my-dex-oauth-credentials",
+                "namespace": "app-x-dev", "fieldPath": f"data[{key}]",
+            })
+
+    async def test_check_ride_survives_a_dex_outage_when_credentials_are_kept(self):
+        observed = {"apiVersion": "v1", "kind": "Secret", "metadata": {"name": "my-dex-oauth-credentials"},
+                    **secret_data({"client-id": "my-dex", "client-secret": "s3cret"})}
+        rsp = await run_attach(None, observed=observed, address="127.0.0.1:1", extra=self.RIDE)
+        self.assertIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_check_ride_not_declared_before_any_credentials_exist(self):
+        rsp = await run_attach(None, address="127.0.0.1:1", extra=self.RIDE)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+
+    async def assert_refused(self, label, **kw):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, **kw)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources, label)
+        self.assertTrue(any("Check ride credentials not published" in w for w in warnings_of(rsp)), (label, warnings_of(rsp)))
+        self.assertEqual(rsp.conditions[0].reason, "DexAttachReady")  # the OAuth client itself is unaffected
+
+    async def test_check_ride_refuses_another_apps_namespace(self):
+        await self.assert_refused("another app", extra={"checkRide": {"namespace": "app-y-cicd"}})
+        await self.assert_refused("not a ci namespace", extra={"checkRide": {"namespace": "kube-system"}})
+        await self.assert_refused("an env namespace", extra={"checkRide": {"namespace": "app-x-dev"}})
+
+    async def test_check_ride_hyphenated_app_names_are_not_ambiguous(self):
+        # App foo-bar (namespace app-foo-bar-dev) aiming at app foo's CI namespace: the old prefix test passed this.
+        await self.assert_refused(
+            "foo-bar aims at foo", namespace="app-foo-bar-dev",
+            labels={"hangar.io/app": "foo-bar", "hangar.io/env": "dev"}, extra={"checkRide": {"namespace": "app-foo-cicd"}},
+        )
+        # ... even when the tenant also forges environmentRef to fit.
+        await self.assert_refused(
+            "foo-bar aims at foo, environmentRef forged", namespace="app-foo-bar-dev",
+            labels={"hangar.io/app": "foo-bar", "hangar.io/env": "dev"},
+            extra={"checkRide": {"namespace": "app-foo-cicd"}, "environmentRef": {"name": "foo-x-bar-dev"}},
+        )
+        # App foo (namespace app-foo-dev) aiming at foo-bar.
+        await self.assert_refused(
+            "foo aims at foo-bar", namespace="app-foo-dev",
+            labels={"hangar.io/app": "foo", "hangar.io/env": "dev"}, extra={"checkRide": {"namespace": "app-foo-bar-cicd"}},
+        )
+        # The legitimate cases publish into exactly their own app's namespace.
+        for ns, app, env, cicd in (("app-foo-bar-dev", "foo-bar", "dev", "app-foo-bar-cicd"), ("app-foo-bar-dev", "foo", "bar-dev", "app-foo-cicd")):
+            async with FakeDexServer() as server:
+                rsp = await run_attach(server, namespace=ns, labels={"hangar.io/app": app, "hangar.io/env": env}, extra={"checkRide": {"namespace": cicd}})
+            obj = resource.struct_to_dict(rsp.desired.resources["check-ride-credentials"].resource)
+            self.assertEqual(obj["spec"]["forProvider"]["manifest"]["metadata"]["namespace"], cicd)
+
+    async def test_check_ride_refuses_an_xr_without_the_platform_labels(self):
+        await self.assert_refused("no labels", labels={"hangar.io/app": "x"}, extra=self.RIDE)
+        await self.assert_refused("label disagrees with namespace", labels={"hangar.io/app": "x", "hangar.io/env": "qa"}, extra=self.RIDE)
+
+    async def test_check_ride_requires_its_peers_and_yields_to_a_lower_one(self):
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE)
+        sel = rsp.requirements.resources["dex-peers"]
+        self.assertEqual((sel.kind, dict(sel.match_labels.labels)), ("Dex", {"hangar.io/app": "x"}))
+        # A peer in app-x-qa also publishing to app-x-cicd: app-x-dev < app-x-qa, so this XR still publishes...
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE, peers=[self.peer("app-x-qa", "my-dex")])
+        self.assertIn("check-ride-credentials", rsp.desired.resources)
+        # ... and from qa's side (lower peer in app-x-dev), qa publishes nothing and warns.
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE, namespace="app-x-qa", labels={"hangar.io/app": "x", "hangar.io/env": "qa"},
+                                   peers=[self.peer("app-x-dev", "my-dex")])
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
+        self.assertTrue(any("app-x-dev/my-dex also sets checkRide" in w for w in warnings_of(rsp)), warnings_of(rsp))
+        # A peer without checkRide, or aimed elsewhere, is no rival.
+        async with FakeDexServer() as server:
+            rsp = await run_attach(server, extra=self.RIDE, namespace="app-x-qa", labels={"hangar.io/app": "x", "hangar.io/env": "qa"},
+                                   peers=[{"metadata": {"namespace": "app-x-dev", "name": "a", "labels": {"hangar.io/app": "x"}}, "spec": {"mode": "attach"}},
+                                          self.peer("app-x-dev", "b", cicd="app-y-cicd")])
+        self.assertIn("check-ride-credentials", rsp.desired.resources)
+
+    async def test_server_mode_never_composes_check_ride(self):
+        req = fnv1.RunFunctionRequest(observed=fnv1.State(composite=fnv1.Resource(resource=xr("server", **self.RIDE))))
+        rsp = await fn.FunctionRunner().RunFunction(req, None)
+        self.assertNotIn("check-ride-credentials", rsp.desired.resources)
 
     async def test_attach_declares_no_usage_before_any_credentials_exist(self):
         # Server down on the very first reconcile: no Secret, so nothing to protect and nothing for `by` to name.

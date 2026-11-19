@@ -232,4 +232,19 @@ spec:
                     Tower's Config tab. Leave it off if the app has no config
                     files. Written to tenants/<appName>/<env>/identity.yaml,
                     where the tenant-onboarding ApplicationSet reads it.
+                clearanceGate:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Ask for this environment's Application to be gated. On,
+                    the tenant-onboarding ApplicationSet marks the
+                    environment's Application with the opt-in annotation the
+                    cluster's gate agent looks for and lets that agent
+                    switch the Application's source. Off (the default), the
+                    environment is not marked and nothing about it changes.
+                    This only requests the gate: a cluster whose gate agent
+                    or opt-in is not turned on ignores it, and a platform
+                    rule may protect an environment whatever this says.
+                    Written to tenants/<appName>/<env>/identity.yaml, where
+                    the tenant-onboarding ApplicationSet reads it.
           required: ["spec"]

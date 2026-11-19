@@ -73,6 +73,13 @@ cases:
     present:
     - values-yaml
     - configmap-kustomization
+- name: clearance-gate
+  xr: xr-staging-clearance-gate.yaml
+  required: *id001
+  expect:
+    conditions: *id003
+    present:
+    - tenant-identity-yaml
 - name: configmap-generator-gate-fail
   xr: xr-staging-configmap.yaml
   expect:

@@ -52,6 +52,7 @@
   <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
 <<- end >>
 <<- $configMapGenerator := $spec.configMapGenerator | default false >>
+<<- $clearanceGate := $spec.clearanceGate | default false >>
 <<- $chart := $spec.chart | default dict >>
 <<- $allExtra := .extraResources | default dict >>
 <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>

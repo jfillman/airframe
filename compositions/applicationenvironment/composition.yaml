@@ -211,6 +211,7 @@ spec:
               <<- $gitopsRepo = printf "gitops-infra-%s" $appName >>
             <<- end >>
             <<- $configMapGenerator := $spec.configMapGenerator | default false >>
+            <<- $clearanceGate := $spec.clearanceGate | default false >>
             <<- $chart := $spec.chart | default dict >>
             <<- $allExtra := .extraResources | default dict >>
             <<- $entry := index $allExtra "cluster-registry-entry" | default dict >>
@@ -653,6 +654,9 @@ spec:
             # env that hasn't opted in, matching the ApplicationSet's own `hasKey` gate (absent
             # key, not false value, is what "not opted in" means there).
             #
+            # clearanceGate (W-43): only emitted when true, same as configMapGenerator - absent, not false, means "not asked", so an
+            # identity.yaml that has not opted in is byte-for-byte what it was. The ApplicationSet reads it with `dig`.
+            #
             # crossplane.io/external-name added, format "<repo>:<file>:" - same cluster-rebuild fix
             # as this composition's own cluster-identity-yaml.yaml (see that file's header): avoids
             # an unnecessary re-Create/re-commit of this platform-owned, self-healing file every
@@ -701,6 +705,9 @@ spec:
                   <<- end >>
                   <<- if $configMapGenerator >>
                   configMapGenerator: true
+                  <<- end >>
+                  <<- if $clearanceGate >>
+                  clearanceGate: true
                   <<- end >>
                   <<- if $chart >>
                   chart:

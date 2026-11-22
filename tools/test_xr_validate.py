@@ -52,6 +52,8 @@ def mutations():
     out.append(("unknown key, no close match", d, "AF-SCHEMA-001", "no such field"))
     d = copy.deepcopy(GOOD); d["spec"]["configMapGenerator"] = "yes"
     out.append(("wrong type", d, "AF-SCHEMA-002", "xrds/applicationenvironment.yaml"))
+    d = copy.deepcopy(GOOD); d["spec"]["clearanceGate"] = "enabled"
+    out.append(("clearanceGate is a boolean", d, "AF-SCHEMA-002", "xrds/applicationenvironment.yaml"))
     d = copy.deepcopy(GOOD); d["apiVersion"] = "catalog.idp.io/v1alpha1"
     out.append(("retired group", d, "AF-XR-001", "renamed to catalog.hangar.io"))
     d = copy.deepcopy(GOOD); d["kind"] = "ApplicationEnviroment"
